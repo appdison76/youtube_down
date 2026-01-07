@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>유튜브 다운로더</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎬 유튜브 다운로더</h1>
+        </header>
+
+        <div class="main-content">
+            <!-- 검색 섹션 -->
+            <div class="search-section">
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="유튜브 영상 제목, 링크, 또는 내용을 검색하세요...">
+                    <button id="searchBtn">검색</button>
+                </div>
+            </div>
+
+            <!-- 탭 메뉴 -->
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="search">검색 결과</button>
+                <button class="tab-btn" data-tab="favorites">찜하기</button>
+            </div>
+
+            <!-- 검색 결과 탭 -->
+            <div id="searchTab" class="tab-content active">
+                <div id="searchResults" class="video-grid"></div>
+            </div>
+
+            <!-- 찜하기 탭 -->
+            <div id="favoritesTab" class="tab-content">
+                <div class="favorites-header">
+                    <div class="folder-section">
+                        <h3>폴더</h3>
+                        <button id="createFolderBtn" class="btn-primary">+ 새 폴더</button>
+                        <div id="folderList" class="folder-list"></div>
+                    </div>
+                </div>
+                <div id="favoritesResults" class="video-grid"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 영상 상세 모달 -->
+    <div id="videoModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div id="modalVideoInfo"></div>
+            <div class="modal-actions">
+                <h3>다운로드 선택</h3>
+                <button class="download-btn" data-type="video">📹 영상 다운로드</button>
+                <button class="download-btn" data-type="audio">🎵 음악 다운로드</button>
+                <button class="download-btn" data-type="subtitle">📝 자막 다운로드</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 폴더 생성 모달 -->
+    <div id="folderModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>새 폴더 만들기</h2>
+            <input type="text" id="folderNameInput" placeholder="폴더 이름">
+            <button id="confirmFolderBtn" class="btn-primary">생성</button>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
+
+

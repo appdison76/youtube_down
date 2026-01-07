@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>유튜브 다운로더 - 앱 설치</title>
+    <meta name="description" content="유튜브 영상을 쉽게 다운로드하고 관리하세요. 무료 앱을 다운로드하세요.">
+    
+    <!-- Google AdSense -->
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-YOUR_ADSENSE_ID"
+     crossorigin="anonymous"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 40px 30px;
+        }
+
+        .app-icon {
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 30px;
+            border-radius: 25px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 60px;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+        }
+
+        .download-section {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .download-btn {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 18px 40px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-size: 18px;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.5);
+        }
+
+        .download-btn:active {
+            transform: translateY(0);
+        }
+
+        .features {
+            margin: 40px 0;
+        }
+
+        .features h2 {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .feature-icon {
+            font-size: 24px;
+            margin-right: 15px;
+        }
+
+        .feature-text {
+            flex: 1;
+        }
+
+        .feature-text h3 {
+            font-size: 1.1em;
+            margin-bottom: 5px;
+            color: #333;
+        }
+
+        .feature-text p {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .install-guide {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 12px;
+            margin: 30px 0;
+        }
+
+        .install-guide h3 {
+            font-size: 1.2em;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .install-steps {
+            list-style: none;
+            counter-reset: step-counter;
+        }
+
+        .install-steps li {
+            counter-increment: step-counter;
+            margin-bottom: 15px;
+            padding-left: 40px;
+            position: relative;
+        }
+
+        .install-steps li::before {
+            content: counter(step-counter);
+            position: absolute;
+            left: 0;
+            top: 0;
+            background: #667eea;
+            color: white;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .ads-section {
+            margin: 30px 0;
+            text-align: center;
+        }
+
+        .ads-section h3 {
+            font-size: 1em;
+            color: #999;
+            margin-bottom: 10px;
+        }
+
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            color: #856404;
+        }
+
+        .warning strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #999;
+            font-size: 0.9em;
+        }
+
+        @media (max-width: 600px) {
+            .header h1 {
+                font-size: 1.5em;
+            }
+
+            .content {
+                padding: 30px 20px;
+            }
+
+            .download-btn {
+                padding: 15px 30px;
+                font-size: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎬 유튜브 다운로더</h1>
+            <p>영상을 쉽게 다운로드하고 관리하세요</p>
+        </div>
+
+        <div class="content">
+            <div class="app-icon">📱</div>
+
+            <div class="download-section">
+                <a href="YOUR_APK_DOWNLOAD_URL" class="download-btn" id="downloadBtn">
+                    📥 앱 다운로드 (APK)
+                </a>
+                <p style="margin-top: 15px; color: #666; font-size: 0.9em;">
+                    버전 1.0.0 | 크기: 약 50MB
+                </p>
+            </div>
+
+            <div class="warning">
+                <strong>⚠️ 설치 안내</strong>
+                안드로이드에서 "알 수 없는 출처" 설치를 허용해야 합니다.
+                설정 → 보안 → 알 수 없는 출처 허용
+            </div>
+
+            <div class="features">
+                <h2>주요 기능</h2>
+                <div class="feature-item">
+                    <div class="feature-icon">🔍</div>
+                    <div class="feature-text">
+                        <h3>유튜브 검색</h3>
+                        <p>제목, 링크로 영상을 쉽게 검색</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">📥</div>
+                    <div class="feature-text">
+                        <h3>다운로드</h3>
+                        <p>영상, 음악, 자막 다운로드 지원</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">⭐</div>
+                    <div class="feature-text">
+                        <h3>찜하기</h3>
+                        <p>원하는 영상을 폴더별로 관리</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="install-guide">
+                <h3>📱 설치 방법</h3>
+                <ol class="install-steps">
+                    <li>위의 "앱 다운로드" 버튼을 클릭하세요</li>
+                    <li>다운로드가 완료되면 APK 파일을 열어주세요</li>
+                    <li>설정에서 "알 수 없는 출처" 설치를 허용하세요</li>
+                    <li>설치를 진행하고 앱을 실행하세요</li>
+                </ol>
+            </div>
+
+            <!-- Google AdSense 광고 -->
+            <div class="ads-section">
+                <h3>광고</h3>
+                <ins class="adsbygoogle"
+                     style="display:block"
+                     data-ad-client="ca-pub-YOUR_ADSENSE_ID"
+                     data-ad-slot="YOUR_AD_SLOT_ID"
+                     data-ad-format="auto"
+                     data-full-width-responsive="true"></ins>
+                <script>
+                     (adsbygoogle = window.adsbygoogle || []).push({});
+                </script>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>© 2024 유튜브 다운로더. All rights reserved.</p>
+            <p style="margin-top: 10px;">
+                <a href="#" style="color: #667eea; text-decoration: none;">개인정보처리방침</a> | 
+                <a href="#" style="color: #667eea; text-decoration: none;">이용약관</a>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // 다운로드 버튼 클릭 추적 (선택사항)
+        document.getElementById('downloadBtn').addEventListener('click', function() {
+            // Google Analytics 이벤트 추적 등 추가 가능
+            console.log('Download button clicked');
+        });
+    </script>
+</body>
+</html>
+
+
