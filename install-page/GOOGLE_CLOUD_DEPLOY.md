@@ -136,3 +136,4 @@ gsutil iam ch allUsers:objectViewer gs://youtube-downloader-install
 **결론: Google Cloud Storage는 좋은 선택입니다! 무료 할당량으로 시작 가능합니다.**
 
 
+
