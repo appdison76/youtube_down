@@ -1,0 +1,12 @@
+{
+  "platforms": ["android"],
+  "ios": {
+    "modules": []
+  },
+  "android": {
+    "modules": [
+      "com.appdison76.mediastore.MediaStoreModule"
+    ]
+  }
+}
+

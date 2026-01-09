@@ -1,0 +1,16 @@
+-- Merging decision tree log ---
+manifest
+ADDED from C:\projects\youtube_down\app\packages\expo-media-store-module\android\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest6129260528378746251.xml:2:13-83
+INJECTED from C:\projects\youtube_down\app\packages\expo-media-store-module\android\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest6129260528378746251.xml:2:13-83
+	package
+		INJECTED from C:\projects\youtube_down\app\packages\expo-media-store-module\android\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest6129260528378746251.xml
+	xmlns:android
+		ADDED from C:\projects\youtube_down\app\packages\expo-media-store-module\android\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest6129260528378746251.xml:2:23-81
+uses-sdk
+INJECTED from C:\projects\youtube_down\app\packages\expo-media-store-module\android\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest6129260528378746251.xml reason: use-sdk injection requested
+INJECTED from C:\projects\youtube_down\app\packages\expo-media-store-module\android\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest6129260528378746251.xml
+INJECTED from C:\projects\youtube_down\app\packages\expo-media-store-module\android\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest6129260528378746251.xml
+	android:targetSdkVersion
+		INJECTED from C:\projects\youtube_down\app\packages\expo-media-store-module\android\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest6129260528378746251.xml
+	android:minSdkVersion
+		INJECTED from C:\projects\youtube_down\app\packages\expo-media-store-module\android\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest6129260528378746251.xml

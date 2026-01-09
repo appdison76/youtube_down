@@ -1,255 +1,145 @@
 import * as SQLite from 'expo-sqlite';
 
-const db = SQLite.openDatabase('youtube_downloader.db');
+let db = null;
+let initPromise = null;
+let isInitialized = false;
 
-export const initDatabase = () => {
-  return new Promise((resolve, reject) => {
-    db.transaction((tx) => {
-      // 폴더 테이블
-      tx.executeSql(
-        `CREATE TABLE IF NOT EXISTS folders (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )`,
-        [],
-        () => {
-          // 기본 폴더 생성
-          tx.executeSql(
-            `SELECT id FROM folders WHERE name = '기본 찜하기'`,
-            [],
-            (_, { rows }) => {
-              if (rows.length === 0) {
-                tx.executeSql(
-                  `INSERT INTO folders (name) VALUES ('기본 찜하기')`,
-                  [],
-                  () => resolve(),
-                  (_, error) => reject(error)
-                );
-              } else {
-                resolve();
-              }
-            },
-            (_, error) => reject(error)
-          );
-        },
-        (_, error) => reject(error)
-      );
-
-      // 찜하기 테이블
-      tx.executeSql(
-        `CREATE TABLE IF NOT EXISTS favorites (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          video_id TEXT NOT NULL,
-          title TEXT NOT NULL,
-          thumbnail TEXT,
-          duration TEXT,
-          folder_id INTEGER,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (folder_id) REFERENCES folders(id)
-        )`,
-        [],
-        () => resolve(),
-        (_, error) => reject(error)
-      );
-    });
-  });
-};
-
-// 폴더 관련
-export const getFolders = () => {
-  return new Promise((resolve, reject) => {
-    db.transaction((tx) => {
-      tx.executeSql(
-        `SELECT f.id, f.name, f.created_at, 
-         COUNT(fav.id) as count
-         FROM folders f
-         LEFT JOIN favorites fav ON f.id = fav.folder_id
-         GROUP BY f.id, f.name, f.created_at
-         ORDER BY f.created_at DESC`,
-        [],
-        (_, { rows }) => {
-          resolve(rows._array);
-        },
-        (_, error) => reject(error)
-      );
-    });
-  });
-};
-
-export const createFolder = (name) => {
-  return new Promise((resolve, reject) => {
-    db.transaction((tx) => {
-      tx.executeSql(
-        `INSERT INTO folders (name) VALUES (?)`,
-        [name],
-        (_, { insertId }) => resolve(insertId),
-        (_, error) => reject(error)
-      );
-    });
-  });
-};
-
-export const deleteFolder = (folderId) => {
-  return new Promise((resolve, reject) => {
-    db.transaction((tx) => {
-      // 기본 폴더 ID 가져오기
-      tx.executeSql(
-        `SELECT id FROM folders WHERE name = '기본 찜하기'`,
-        [],
-        (_, { rows }) => {
-          const defaultFolderId = rows._array[0].id;
-          
-          // 폴더의 영상들을 기본 폴더로 이동
-          tx.executeSql(
-            `UPDATE favorites SET folder_id = ? WHERE folder_id = ?`,
-            [defaultFolderId, folderId],
-            () => {
-              // 폴더 삭제
-              tx.executeSql(
-                `DELETE FROM folders WHERE id = ? AND name != '기본 찜하기'`,
-                [folderId],
-                (_, { rowsAffected }) => {
-                  if (rowsAffected > 0) {
-                    resolve();
-                  } else {
-                    reject(new Error('기본 폴더는 삭제할 수 없습니다'));
-                  }
-                },
-                (_, error) => reject(error)
-              );
-            },
-            (_, error) => reject(error)
-          );
-        },
-        (_, error) => reject(error)
-      );
-    });
-  });
-};
-
-// 찜하기 관련
-export const getFavorites = (folderId = null) => {
-  return new Promise((resolve, reject) => {
-    db.transaction((tx) => {
-      const query = folderId
-        ? `SELECT f.*, fo.name as folder_name 
-           FROM favorites f
-           LEFT JOIN folders fo ON f.folder_id = fo.id
-           WHERE f.folder_id = ?
-           ORDER BY f.created_at DESC`
-        : `SELECT f.*, fo.name as folder_name 
-           FROM favorites f
-           LEFT JOIN folders fo ON f.folder_id = fo.id
-           ORDER BY f.created_at DESC`;
-      
-      const params = folderId ? [folderId] : [];
-      
-      tx.executeSql(
-        query,
-        params,
-        (_, { rows }) => resolve(rows._array),
-        (_, error) => reject(error)
-      );
-    });
-  });
-};
-
-export const addFavorite = (videoId, title, thumbnail, duration, folderId = null) => {
-  return new Promise((resolve, reject) => {
-    db.transaction((tx) => {
-      // 중복 확인
-      tx.executeSql(
-        `SELECT id FROM favorites WHERE video_id = ?`,
-        [videoId],
-        (_, { rows }) => {
-          if (rows.length > 0) {
-            reject(new Error('이미 찜한 영상입니다'));
-            return;
-          }
-
-          // 기본 폴더 ID 가져오기
-          if (!folderId) {
-            tx.executeSql(
-              `SELECT id FROM folders WHERE name = '기본 찜하기'`,
-              [],
-              (_, { rows }) => {
-                const defaultFolderId = rows._array[0].id;
-                insertFavorite(tx, videoId, title, thumbnail, duration, defaultFolderId, resolve, reject);
-              },
-              (_, error) => reject(error)
-            );
-          } else {
-            insertFavorite(tx, videoId, title, thumbnail, duration, folderId, resolve, reject);
-          }
-        },
-        (_, error) => reject(error)
-      );
-    });
-  });
-};
-
-const insertFavorite = (tx, videoId, title, thumbnail, duration, folderId, resolve, reject) => {
-  tx.executeSql(
-    `INSERT INTO favorites (video_id, title, thumbnail, duration, folder_id)
-     VALUES (?, ?, ?, ?, ?)`,
-    [videoId, title, thumbnail || '', duration || '', folderId],
-    (_, { insertId }) => resolve(insertId),
-    (_, error) => reject(error)
-  );
-};
-
-export const deleteFavorite = (favoriteId) => {
-  return new Promise((resolve, reject) => {
-    db.transaction((tx) => {
-      tx.executeSql(
-        `DELETE FROM favorites WHERE id = ?`,
-        [favoriteId],
-        (_, { rowsAffected }) => {
-          if (rowsAffected > 0) {
-            resolve();
-          } else {
-            reject(new Error('찜하기를 찾을 수 없습니다'));
-          }
-        },
-        (_, error) => reject(error)
-      );
-    });
-  });
-};
-
-export const moveFavorite = (favoriteId, folderId) => {
-  return new Promise((resolve, reject) => {
-    db.transaction((tx) => {
-      if (!folderId) {
-        // 기본 폴더로 이동
-        tx.executeSql(
-          `SELECT id FROM folders WHERE name = '기본 찜하기'`,
-          [],
-          (_, { rows }) => {
-            const defaultFolderId = rows._array[0].id;
-            updateFavoriteFolder(tx, favoriteId, defaultFolderId, resolve, reject);
-          },
-          (_, error) => reject(error)
-        );
-      } else {
-        updateFavoriteFolder(tx, favoriteId, folderId, resolve, reject);
+// 데이터베이스 초기화 및 열기
+const getDatabase = async () => {
+  // 이미 초기화된 경우 바로 반환
+  if (db && isInitialized) {
+    return db;
+  }
+  
+  // 초기화 중이면 기다림
+  if (initPromise) {
+    await initPromise;
+    return db;
+  }
+  
+  // 초기화 시작
+  initPromise = (async () => {
+    try {
+      if (!db) {
+        db = await SQLite.openDatabaseAsync('youtube_downloader.db');
       }
-    });
-  });
+      // 테이블 생성 확인
+      if (!isInitialized) {
+        await db.execAsync(`
+          CREATE TABLE IF NOT EXISTS favorites (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            video_id TEXT UNIQUE NOT NULL,
+            title TEXT NOT NULL,
+            url TEXT NOT NULL,
+            thumbnail TEXT,
+            author TEXT,
+            author_url TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+        `);
+        isInitialized = true;
+        console.log('[Database] Database initialized');
+      }
+    } catch (error) {
+      console.error('[Database] Error initializing database:', error);
+      initPromise = null;
+      throw error;
+    }
+  })();
+  
+  await initPromise;
+  return db;
 };
 
-const updateFavoriteFolder = (tx, favoriteId, folderId, resolve, reject) => {
-  tx.executeSql(
-    `UPDATE favorites SET folder_id = ? WHERE id = ?`,
-    [folderId, favoriteId],
-    () => resolve(),
-    (_, error) => reject(error)
-  );
+// 데이터베이스 초기화
+export const initDatabase = async () => {
+  try {
+    await getDatabase(); // getDatabase가 초기화를 처리함
+    console.log('[Database] Database initialized');
+  } catch (error) {
+    console.error('[Database] Error initializing database:', error);
+    throw error;
+  }
 };
 
+// 즐겨찾기 추가
+export const addFavorite = async (video) => {
+  try {
+    const database = await getDatabase(); // 초기화 보장
+    if (!database) {
+      throw new Error('Database not initialized');
+    }
+    await database.runAsync(
+      `INSERT OR REPLACE INTO favorites (video_id, title, url, thumbnail, author, author_url)
+       VALUES (?, ?, ?, ?, ?, ?);`,
+      [
+        video.id,
+        video.title,
+        video.url,
+        video.thumbnail || '',
+        video.author || '',
+        video.authorUrl || '',
+      ]
+    );
+    console.log('[Database] Favorite added:', video.id);
+  } catch (error) {
+    console.error('[Database] Error adding favorite:', error);
+    throw error;
+  }
+};
 
+// 즐겨찾기 삭제
+export const removeFavorite = async (videoId) => {
+  try {
+    const database = await getDatabase(); // 초기화 보장
+    if (!database) {
+      throw new Error('Database not initialized');
+    }
+    await database.runAsync(
+      `DELETE FROM favorites WHERE video_id = ?;`,
+      [videoId]
+    );
+    console.log('[Database] Favorite removed:', videoId);
+  } catch (error) {
+    console.error('[Database] Error removing favorite:', error);
+    throw error;
+  }
+};
 
+// 즐겨찾기 목록 조회
+export const getFavorites = async () => {
+  try {
+    const database = await getDatabase(); // 초기화 보장
+    if (!database) {
+      throw new Error('Database not initialized');
+    }
+    const result = await database.getAllAsync(
+      `SELECT * FROM favorites ORDER BY created_at DESC;`
+    );
+    console.log('[Database] Favorites retrieved:', result.length);
+    return result;
+  } catch (error) {
+    console.error('[Database] Error getting favorites:', error);
+    throw error;
+  }
+};
 
-
-
+// 즐겨찾기 여부 확인
+export const isFavorite = async (videoId) => {
+  try {
+    const database = await getDatabase(); // 초기화 보장
+    if (!database) {
+      console.warn('[Database] Database not initialized, returning false');
+      return false;
+    }
+    const result = await database.getFirstAsync(
+      `SELECT COUNT(*) as count FROM favorites WHERE video_id = ?;`,
+      [videoId]
+    );
+    return result && result.count > 0;
+  } catch (error) {
+    console.error('[Database] Error checking favorite:', error);
+    // 오류 발생 시 false 반환 (앱이 계속 작동하도록)
+    return false;
+  }
+};
