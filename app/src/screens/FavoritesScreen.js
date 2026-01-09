@@ -102,7 +102,39 @@ export default function FavoritesScreen({ navigation }) {
     }
   };
 
+  // 데이터 배열에 광고 삽입 (3개마다)
+  const getDataWithAds = () => {
+    if (favorites.length === 0) {
+      return [];
+    }
+    
+    const result = [];
+    // 첫 번째 항목 추가
+    result.push(favorites[0]);
+    
+    // 첫 번째 항목 다음에 광고 추가 (하단에 표시되도록)
+    if (favorites.length > 0) {
+      result.push({ type: 'ad', id: 'ad-bottom' });
+    }
+    
+    // 나머지 항목들을 3개마다 광고 삽입
+    for (let i = 1; i < favorites.length; i++) {
+      result.push(favorites[i]);
+      // 3개마다 광고 삽입 (인덱스 1, 4, 7, ... 이후)
+      if ((i - 1) % 3 === 2) {
+        result.push({ type: 'ad', id: `ad-${i}` });
+      }
+    }
+    
+    return result;
+  };
+
   const renderFavoriteItem = ({ item }) => {
+    // 광고 아이템인 경우
+    if (item.type === 'ad') {
+      return <AdBanner style={{ marginVertical: 10 }} />;
+    }
+    
     return (
       <TouchableOpacity 
         style={styles.favoriteItem}
@@ -161,9 +193,9 @@ export default function FavoritesScreen({ navigation }) {
         </View>
       ) : (
         <FlatList
-          data={favorites}
+          data={getDataWithAds()}
           renderItem={renderFavoriteItem}
-          keyExtractor={(item) => item.video_id}
+          keyExtractor={(item, index) => item.type === 'ad' ? item.id : (item.video_id || `favorite-${index}`)}
           ListEmptyComponent={
             <View style={styles.centerContainer}>
               <Ionicons name="star-outline" size={64} color="#ddd" />
@@ -172,7 +204,6 @@ export default function FavoritesScreen({ navigation }) {
             </View>
           }
           contentContainerStyle={favorites.length === 0 ? styles.listContentEmpty : styles.listContent}
-          ListFooterComponent={favorites.length > 0 ? <AdBanner style={{ marginTop: 20 }} /> : null}
         />
       )}
     </View>

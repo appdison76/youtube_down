@@ -713,11 +713,11 @@ export default function SearchScreen({ navigation, route }) {
   };
 
   // 다운로드한 파일 항목 렌더링
-  const renderDownloadedFileItem = ({ item }) => {
+  const renderDownloadedFileItem = ({ item, index }) => {
     const fileSizeMB = (item.size / (1024 * 1024)).toFixed(2);
     
     return (
-      <View style={styles.downloadedFileItem}>
+      <View style={[styles.downloadedFileItem, index === 0 && styles.downloadedFileItemFirst]}>
         <View style={styles.downloadedFileInfo}>
           <Ionicons 
             name={item.isVideo ? "videocam" : "musical-notes"} 
@@ -758,6 +758,11 @@ export default function SearchScreen({ navigation, route }) {
     );
   };
 
+  // 검색 결과 항목 제거
+  const handleRemoveResult = (item) => {
+    setResults(prevResults => prevResults.filter(result => result.id !== item.id));
+  };
+
   const renderVideoItem = ({ item }) => {
     const isDownloadingVideo = downloading[item.id]?.type === 'video';
     const isDownloadingAudio = downloading[item.id]?.type === 'audio';
@@ -778,6 +783,15 @@ export default function SearchScreen({ navigation, route }) {
           />
         )}
         <View style={styles.videoContent}>
+          <TouchableOpacity
+            style={styles.removeResultButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleRemoveResult(item);
+            }}
+          >
+            <Ionicons name="close-circle" size={24} color="#999" />
+          </TouchableOpacity>
           <Text style={styles.videoTitle} numberOfLines={2}>
             {item.title || 'Video'}
           </Text>
@@ -909,6 +923,21 @@ export default function SearchScreen({ navigation, route }) {
         </TouchableOpacity>
       </View>
 
+      {/* 다운로드한 파일 섹션 - 항상 고정 위치 */}
+      {downloadedFiles.length > 0 && (
+        <View style={styles.downloadedFilesSection}>
+          <Text style={styles.downloadedFilesTitle}>다운로드한 파일</Text>
+          <FlatList
+            data={downloadedFiles}
+            renderItem={renderDownloadedFileItem}
+            keyExtractor={(item, index) => item.fileUri || index.toString()}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.downloadedFilesList}
+          />
+        </View>
+      )}
+
       {loading ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#FF0000" />
@@ -919,21 +948,6 @@ export default function SearchScreen({ navigation, route }) {
           data={results}
           renderItem={renderVideoItem}
           keyExtractor={(item, index) => item.id || index.toString()}
-          ListHeaderComponent={
-            downloadedFiles.length > 0 ? (
-              <View style={styles.downloadedFilesSection}>
-                <Text style={styles.downloadedFilesTitle}>다운로드한 파일</Text>
-                <FlatList
-                  data={downloadedFiles}
-                  renderItem={renderDownloadedFileItem}
-                  keyExtractor={(item, index) => item.fileUri || index.toString()}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.downloadedFilesList}
-                />
-              </View>
-            ) : null
-          }
           ListEmptyComponent={
             <View style={styles.centerContainer}>
               <Text style={styles.emptyIcon}>📺</Text>
@@ -1097,6 +1111,14 @@ const styles = StyleSheet.create({
   },
   videoContent: {
     padding: 16,
+    position: 'relative',
+  },
+  removeResultButton: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    zIndex: 10,
+    padding: 4,
   },
   videoTitle: {
     fontSize: 16,
@@ -1104,6 +1126,7 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 16,
     lineHeight: 22,
+    paddingRight: 32,
   },
   buttonContainer: {
     flexDirection: 'row',
@@ -1159,34 +1182,44 @@ const styles = StyleSheet.create({
   },
   downloadedFilesSection: {
     paddingVertical: 16,
-    paddingHorizontal: 16,
-    backgroundColor: '#f5f5f5',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    paddingTop: 16,
+    paddingBottom: 16,
+    paddingLeft: 0,
+    paddingRight: 0,
+    backgroundColor: '#fff',
+    marginBottom: 0,
   },
   downloadedFilesTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
     marginBottom: 12,
+    paddingHorizontal: 16,
   },
   downloadedFilesList: {
+    paddingLeft: 16,
     paddingRight: 16,
+  },
+  downloadedFileItemFirst: {
+    marginLeft: 0,
   },
   downloadedFileItem: {
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: 12,
+    marginLeft: 0,
     marginRight: 12,
     width: 280,
+    borderWidth: 1,
+    borderColor: '#e8e8e8',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 3,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
   },
   downloadedFileInfo: {
     flexDirection: 'row',

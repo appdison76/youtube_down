@@ -138,8 +138,40 @@ export default function DownloadsScreen({ navigation }) {
     }
   };
 
+  // 데이터 배열에 광고 삽입 (3개마다)
+  const getDataWithAds = () => {
+    if (filteredFiles.length === 0) {
+      return [];
+    }
+    
+    const result = [];
+    // 첫 번째 항목 추가
+    result.push(filteredFiles[0]);
+    
+    // 첫 번째 항목 다음에 광고 추가 (하단에 표시되도록)
+    if (filteredFiles.length > 0) {
+      result.push({ type: 'ad', id: 'ad-bottom' });
+    }
+    
+    // 나머지 항목들을 3개마다 광고 삽입
+    for (let i = 1; i < filteredFiles.length; i++) {
+      result.push(filteredFiles[i]);
+      // 3개마다 광고 삽입 (인덱스 1, 4, 7, ... 이후)
+      if ((i - 1) % 3 === 2) {
+        result.push({ type: 'ad', id: `ad-${i}` });
+      }
+    }
+    
+    return result;
+  };
+
   // 다운로드한 파일 항목 렌더링
   const renderFileItem = ({ item }) => {
+    // 광고 아이템인 경우
+    if (item.type === 'ad') {
+      return <AdBanner style={{ marginVertical: 10 }} />;
+    }
+    
     const fileSizeMB = (item.size / (1024 * 1024)).toFixed(2);
     
     return (
@@ -234,9 +266,9 @@ export default function DownloadsScreen({ navigation }) {
         </View>
       ) : (
         <FlatList
-          data={filteredFiles}
+          data={getDataWithAds()}
           renderItem={renderFileItem}
-          keyExtractor={(item, index) => item.fileUri || `file-${index}`}
+          keyExtractor={(item, index) => item.type === 'ad' ? item.id : (item.fileUri || `file-${index}`)}
           ListEmptyComponent={
             <View style={styles.centerContainer}>
               <Ionicons name="folder-outline" size={64} color="#ddd" />
@@ -249,7 +281,6 @@ export default function DownloadsScreen({ navigation }) {
             </View>
           }
           contentContainerStyle={filteredFiles.length === 0 ? styles.listContentEmpty : styles.listContent}
-          ListFooterComponent={filteredFiles.length > 0 ? <AdBanner style={{ marginTop: 20 }} /> : null}
         />
       )}
     </View>

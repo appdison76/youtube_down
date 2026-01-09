@@ -3,6 +3,30 @@ import { Platform, Linking, NativeEventEmitter, NativeModules, AppState } from '
 import AppNavigator from './src/navigation/AppNavigator';
 import { initDatabase } from './src/services/database';
 
+// YouTube URL인지 확인하는 함수
+const isValidYouTubeUrl = (url) => {
+  if (!url) return false;
+  // 개발 서버 URL 무시
+  if (url.includes('127.0.0.1') || url.includes('localhost') || url.includes(':8082')) {
+    return false;
+  }
+  // exp://, exp+app:// 스킴은 처리하되, 내부 URL 파라미터 확인
+  if (url.startsWith('exp://') || url.startsWith('exp+app://')) {
+    try {
+      const urlObj = new URL(url);
+      const urlParam = urlObj.searchParams.get('url');
+      if (urlParam) {
+        return urlParam.includes('youtube.com') || urlParam.includes('youtu.be');
+      }
+    } catch (e) {
+      // URL 파싱 실패 시 무시
+    }
+    return false;
+  }
+  // YouTube URL 확인
+  return url.includes('youtube.com') || url.includes('youtu.be');
+};
+
 export default function App() {
   const [initialUrl, setInitialUrl] = useState(null);
 
@@ -21,7 +45,18 @@ export default function App() {
         .then((url) => {
           console.log(`[App] [Attempt ${attempt}] Initial URL:`, url);
           if (url) {
-            setInitialUrl(url);
+            // YouTube URL인지 확인
+            if (isValidYouTubeUrl(url)) {
+              console.log('[App] Valid YouTube URL found:', url);
+              setInitialUrl(url);
+            } else {
+              console.log('[App] Ignoring non-YouTube URL:', url);
+              // YouTube URL이 아니면 무시하고 재시도하지 않음
+              if (attempt === 0) {
+                // 첫 시도에서만 로그 출력
+                console.log('[App] No valid YouTube URL found, skipping...');
+              }
+            }
           } else if (attempt < 10) {
             // 최대 10번까지 재시도 (공유하기로 받은 경우 MainActivity 처리 시간 필요)
             setTimeout(() => {
@@ -48,11 +83,16 @@ export default function App() {
     const subscription = Linking.addEventListener('url', ({ url }) => {
       if (url) {
         console.log('[App] Received URL from event listener:', url);
-        // 이전 URL을 초기화한 후 새 URL 설정 (강제 업데이트)
-        setInitialUrl(null);
-        setTimeout(() => {
-          setInitialUrl(`${url}?t=${Date.now()}`);
-        }, 100);
+        // YouTube URL인지 확인
+        if (isValidYouTubeUrl(url)) {
+          // 이전 URL을 초기화한 후 새 URL 설정 (강제 업데이트)
+          setInitialUrl(null);
+          setTimeout(() => {
+            setInitialUrl(`${url}?t=${Date.now()}`);
+          }, 100);
+        } else {
+          console.log('[App] Ignoring non-YouTube URL from event listener:', url);
+        }
       }
     });
 
@@ -83,8 +123,8 @@ export default function App() {
         setTimeout(() => {
           Linking.getInitialURL()
             .then((url) => {
-              if (url && url !== lastProcessedUrl) {
-                console.log('[App] Found new URL when app became active:', url);
+              if (url && url !== lastProcessedUrl && isValidYouTubeUrl(url)) {
+                console.log('[App] Found new YouTube URL when app became active:', url);
                 lastProcessedUrl = url;
                 setInitialUrl(null);
                 setTimeout(() => {
@@ -92,6 +132,8 @@ export default function App() {
                 }, 100);
               } else if (url === lastProcessedUrl) {
                 console.log('[App] Same URL as before, ignoring (likely returning from external app)');
+              } else if (url && !isValidYouTubeUrl(url)) {
+                console.log('[App] Ignoring non-YouTube URL when app became active:', url);
               }
             })
             .catch((error) => {
