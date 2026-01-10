@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Platform, Linking, NativeEventEmitter, NativeModules, AppState } from 'react-native';
+import { Platform, Linking, NativeEventEmitter, NativeModules, AppState, Alert } from 'react-native';
 import AppNavigator from './src/navigation/AppNavigator';
 import { initDatabase } from './src/services/database';
+import Constants from 'expo-constants';
 
 // YouTube URL인지 확인하는 함수
 const isValidYouTubeUrl = (url) => {
@@ -29,12 +30,95 @@ const isValidYouTubeUrl = (url) => {
 
 export default function App() {
   const [initialUrl, setInitialUrl] = useState(null);
+  const [shouldRedirectToInstall, setShouldRedirectToInstall] = useState(false);
 
   // 데이터베이스 초기화
   useEffect(() => {
     initDatabase().catch(error => {
       console.error('[App] Database initialization error:', error);
     });
+  }, []);
+
+  // ✅ 강제 업데이트 체크
+  useEffect(() => {
+    const checkVersion = async () => {
+      try {
+        const VERSION_URL = 'https://appdison76.github.io/youtube_down/install-page/version.json';
+        const currentVersion = Constants.expoConfig?.version || '1.0.4';
+        
+        console.log('[App] Checking version update...');
+        console.log('[App] Current app version:', currentVersion);
+        
+        const response = await fetch(VERSION_URL, {
+          method: 'GET',
+          headers: {
+            'Cache-Control': 'no-cache',
+          },
+        });
+
+        if (!response.ok) {
+          console.warn('[App] Failed to fetch version info, skipping update check');
+          return;
+        }
+
+        const versionInfo = await response.json();
+        console.log('[App] Server version info:', versionInfo);
+
+        if (versionInfo.minVersion && versionInfo.updateUrl) {
+          // 버전 비교 함수
+          const compareVersions = (v1, v2) => {
+            const parts1 = v1.split('.').map(Number);
+            const parts2 = v2.split('.').map(Number);
+            for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+              const part1 = parts1[i] || 0;
+              const part2 = parts2[i] || 0;
+              if (part1 < part2) return -1;
+              if (part1 > part2) return 1;
+            }
+            return 0;
+          };
+
+          // 현재 버전이 minVersion보다 낮으면 강제 업데이트
+          if (compareVersions(currentVersion, versionInfo.minVersion) < 0) {
+            console.log('[App] ⚠️ Update required! Current:', currentVersion, 'Min:', versionInfo.minVersion);
+            
+            Alert.alert(
+              '업데이트 필요',
+              versionInfo.message || '새로운 버전이 있습니다. 업데이트가 필요합니다.',
+              [
+                {
+                  text: '업데이트',
+                  onPress: () => {
+                    const updateUrl = versionInfo.updateUrl || 'https://appdison76.github.io/youtube_down/install-page/';
+                    Linking.openURL(updateUrl).catch(err => {
+                      console.error('[App] Failed to open update URL:', err);
+                    });
+                  },
+                },
+              ],
+              { cancelable: false }
+            );
+            
+            // 자동으로 설치 페이지로 리다이렉트
+            setTimeout(() => {
+              const updateUrl = versionInfo.updateUrl || 'https://appdison76.github.io/youtube_down/install-page/';
+              Linking.openURL(updateUrl).catch(err => {
+                console.error('[App] Failed to open update URL:', err);
+              });
+            }, 1000);
+            
+            setShouldRedirectToInstall(true);
+          } else {
+            console.log('[App] ✅ Version is up to date');
+          }
+        }
+      } catch (error) {
+        console.error('[App] Error checking version:', error);
+        // 버전 체크 실패는 앱 실행을 막지 않음
+      }
+    };
+
+    checkVersion();
   }, []);
 
   useEffect(() => {
@@ -151,6 +235,11 @@ export default function App() {
       appStateSubscription.remove();
     };
   }, []);
+
+  // 강제 업데이트가 필요한 경우 빈 화면 표시 (리다이렉트 중)
+  if (shouldRedirectToInstall) {
+    return null;
+  }
 
   return <AppNavigator initialUrl={initialUrl} />;
 }
