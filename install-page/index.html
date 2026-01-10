@@ -56,12 +56,19 @@
             height: 120px;
             margin: 0 auto 30px;
             border-radius: 25px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: white;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 60px;
             box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+            overflow: hidden;
+        }
+
+        .app-icon img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            padding: 10px;
         }
 
         .download-section {
@@ -248,10 +255,12 @@
         </div>
 
         <div class="content">
-            <div class="app-icon">📱</div>
+            <div class="app-icon">
+                <img src="./logo.png" alt="MeTube 로고" />
+            </div>
 
             <div class="download-section">
-                <a href="https://github.com/appdison76/youtube_down/releases/download/v1.0.1/app-release.apk" 
+                <a href="https://github.com/appdison76/youtube_down/releases/download/1.0.2/app-release.apk" 
                    class="download-btn" 
                    id="downloadBtn" 
                    download="youtube-downloader.apk" 
@@ -259,7 +268,7 @@
                     📥 앱 다운로드 (APK)
                 </a>
                 <p style="margin-top: 15px; color: #666; font-size: 0.9em;">
-                    버전 1.0.1 | 크기: 약 113MB
+                    버전 1.0.2 | 크기: 약 113MB
                 </p>
                 <p style="margin-top: 10px; color: #ff6b6b; font-size: 0.85em;">
                     ⚠️ 파일이 크므로 WiFi 환경에서 다운로드하세요
@@ -268,13 +277,45 @@
 
 
             <div class="warning">
-                <strong>⚠️ 추가 설치 안내</strong>
-                <ul style="margin-top: 10px; padding-left: 20px;">
-                    <li>안드로이드에서 "알 수 없는 출처" 설치를 허용해야 합니다</li>
-                    <li>설정 → 보안 → 알 수 없는 출처 허용</li>
-                    <li>파일이 크므로 WiFi 환경에서 다운로드하세요</li>
-                    <li>다운로드가 완전히 끝날 때까지 기다려주세요</li>
-                </ul>
+                <strong>⚠️ 설치 권한 설정 안내</strong>
+                <p style="margin-top: 10px; margin-bottom: 15px;">
+                    APK 설치를 위해서는 먼저 설치 권한을 허용해야 합니다. 폰 제조사와 안드로이드 버전에 따라 설정 경로가 다를 수 있습니다.
+                </p>
+                
+                <div style="margin-top: 15px;">
+                    <strong style="display: block; margin-bottom: 10px;">📱 방법 1: 자동 설정 (권장)</strong>
+                    <ul style="margin-top: 5px; padding-left: 20px; margin-bottom: 15px;">
+                        <li>APK 파일을 다운로드 후 열어보세요</li>
+                        <li>"이 앱을 설치할 수 없음" 메시지가 나타나면</li>
+                        <li>메시지의 <strong>"설정"</strong> 또는 <strong>"권한 허용"</strong> 버튼을 클릭하세요</li>
+                        <li>해당 앱(Chrome 또는 파일 관리자)에 대해 <strong>"이 앱 설치 허용"</strong>을 켜주세요</li>
+                    </ul>
+                </div>
+
+                <div style="margin-top: 15px;">
+                    <strong style="display: block; margin-bottom: 10px;">⚙️ 방법 2: 수동 설정</strong>
+                    <ul style="margin-top: 5px; padding-left: 20px; margin-bottom: 10px;">
+                        <li><strong>최신 안드로이드 (14+):</strong><br>
+                            설정 → 보안 및 개인정보 보호 → 보안 위험 자동 차단 해제</li>
+                        <li><strong>안드로이드 8.0~13:</strong><br>
+                            설정 → 앱 → Chrome(또는 사용한 브라우저) → 이 앱 설치 허용</li>
+                        <li><strong>삼성 갤럭시:</strong><br>
+                            설정 → 바이오메트릭 및 보안 → 알 수 없는 앱 설치 → Chrome 선택 → 허용</li>
+                        <li><strong>구글 픽셀:</strong><br>
+                            설정 → 보안 → 알 수 없는 앱 설치 → Chrome 선택 → 허용</li>
+                        <li><strong>샤오미:</strong><br>
+                            설정 → 앱 → 권한 → 알 수 없는 소스 설치 → Chrome 허용</li>
+                        <li><strong>LG:</strong><br>
+                            설정 → 보안 → 알 수 없는 소스 설치 허용</li>
+                    </ul>
+                </div>
+
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #ffc107;">
+                    <ul style="margin-top: 5px; padding-left: 20px;">
+                        <li>파일이 크므로 <strong>WiFi 환경에서 다운로드</strong>하세요</li>
+                        <li>다운로드가 <strong>완전히 끝날 때까지</strong> 기다려주세요</li>
+                    </ul>
+                </div>
             </div>
 
             <div class="features">
@@ -308,9 +349,13 @@
                     <li>위의 "앱 다운로드" 버튼을 클릭하세요</li>
                     <li>다운로드가 시작됩니다 (약 113MB, WiFi 환경 권장)</li>
                     <li>다운로드가 완료되면 APK 파일을 열어주세요</li>
-                    <li>설정에서 "알 수 없는 출처" 설치를 허용하세요</li>
-                    <li>설치를 진행하고 앱을 실행하세요</li>
+                    <li>차단 메시지가 나타나면 "설정" 버튼을 눌러 설치 권한을 허용하세요</li>
+                    <li>권한 허용 후 다시 APK를 열어 설치를 진행하세요</li>
+                    <li>설치가 완료되면 앱을 실행하세요</li>
                 </ol>
+                <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
+                    💡 <strong>팁:</strong> 위의 "설치 권한 설정 안내"에서 폰 제조사별 상세 설정 방법을 확인할 수 있습니다.
+                </p>
             </div>
 
             <!-- 쿠팡 다이나믹 배너 -->
