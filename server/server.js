@@ -220,17 +220,19 @@ app.get('/api/download/audio', async (req, res) => {
     res.setHeader('Transfer-Encoding', 'chunked');
 
     // yt-dlp를 사용하여 오디오 다운로드 및 스트리밍
-    // 로컬 서버와 동일하게 작동하도록 단순한 포맷 선택
-    // bestaudio 사용 (어떤 오디오 포맷이든 허용)
+    // 더 유연한 포맷 선택: bestaudio 형식 우선 시도, 여러 오디오 포맷 옵션 제공
+    // bestaudio 형식으로 시작하되, 없으면 다른 오디오 포맷 시도, 그래도 없으면 best로 폴백
+    // 비디오 다운로드와 동일하게 player_client=android 사용 (일관성 유지)
     const ytdlpProcess = spawn('python3', [
       '-m', 'yt_dlp',
-      '-f', 'bestaudio',
+      '-f', 'bestaudio/best',
       '--no-warnings',
       '--progress',
       '--extractor-args', 'youtube:player_client=android',
       '--retries', '3',
       '--fragment-retries', '3',
       '--user-agent', 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36',
+      '--no-playlist',
       '-o', '-',
       url
     ], {
