@@ -77,7 +77,7 @@ app.get('/api/download/video', async (req, res) => {
     // stdout으로 출력할 때는 합치기가 어려우므로, 이미 합쳐진 비디오를 우선 선택
     const ytdlpProcess = spawn('python3', [
       '-m', 'yt_dlp',
-      '-f', 'best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best',
+      '-f', 'best/bestvideo+bestaudio',
       '--merge-output-format', 'mp4',
       '--no-warnings',
       '--progress',
@@ -221,9 +221,10 @@ app.get('/api/download/audio', async (req, res) => {
 
     // yt-dlp를 사용하여 오디오 다운로드 및 스트리밍
     // spawn을 사용하여 더 세밀한 제어 가능
+    // 포맷 선택: bestaudio만 사용 (확장자 제약 없음)
     const ytdlpProcess = spawn('python3', [
       '-m', 'yt_dlp',
-      '-f', 'bestaudio[ext=m4a]/bestaudio',
+      '-f', 'bestaudio',
       '--no-warnings',
       '--progress',
       '--extractor-args', 'youtube:player_client=android',
