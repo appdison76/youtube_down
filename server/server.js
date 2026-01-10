@@ -40,11 +40,20 @@ app.post('/api/video-info', async (req, res) => {
     const { stdout } = await execAsync(`python3 -m yt_dlp --dump-json --no-warnings "${url}"`);
     const info = JSON.parse(stdout);
     
+    // 파일 크기 정보 추출 (filesize, filesize_approx, filesize_estimate 순으로 시도)
+    const filesize = info.filesize || info.filesize_approx || info.filesize_estimate || null;
+    
+    console.log('[Server] Video info - filesize:', filesize, 'bytes');
+    if (filesize) {
+      console.log('[Server] Video info - filesize (MB):', (filesize / (1024 * 1024)).toFixed(2));
+    }
+    
     res.json({
       title: info.title,
       author: info.uploader || info.channel || '',
       thumbnail: info.thumbnail || '',
       duration: info.duration || 0,
+      filesize: filesize, // 예상 파일 크기 (바이트 단위)
       formats: [] // yt-dlp는 다른 방식으로 포맷을 제공
     });
   } catch (error) {

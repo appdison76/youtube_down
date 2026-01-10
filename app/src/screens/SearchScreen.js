@@ -19,7 +19,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import AdBanner from '../components/AdBanner';
 import { addFavorite, removeFavorite, isFavorite, initDatabase } from '../services/database';
-import { downloadVideo, downloadAudio, shareDownloadedFile, saveFileToDevice, getFileInfo, sanitizeFileName, getDownloadedFiles, cleanupIncompleteFiles } from '../services/downloadService';
+import { downloadVideo, downloadAudio, shareDownloadedFile, saveFileToDevice, getFileInfo, sanitizeFileName, getDownloadedFiles, cleanupIncompleteFiles, getVideoInfo } from '../services/downloadService';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as FileSystem from 'expo-file-system/legacy';
 import MediaStoreModule from '../modules/MediaStoreModule';
@@ -107,6 +107,109 @@ export default function SearchScreen({ navigation, route }) {
   );
   
   // 앱 시작/컴포넌트 마운트 시 다운로드 상태 초기화 및 불완전한 파일 정리
+  // 백그라운드에서 완료된 다운로드 확인 함수
+  const checkCompletedDownloads = async () => {
+    console.log('[SearchScreen] Checking for completed downloads in background...');
+    
+    // 현재 다운로드 중인 항목들 가져오기
+    setDownloading(prev => {
+      const currentDownloading = { ...prev };
+      const videoIds = Object.keys(currentDownloading);
+      
+      if (videoIds.length === 0) {
+        return prev; // 다운로드 중인 항목이 없으면 업데이트하지 않음
+      }
+      
+      // 각 비디오에 대해 비동기로 확인
+      videoIds.forEach(async (videoId) => {
+        const downloadInfo = currentDownloading[videoId];
+        const item = results.find(r => r.id === videoId);
+        
+        if (!item) {
+          // 결과에 없는 항목은 제거
+          setDownloading(current => {
+            const newState = { ...current };
+            delete newState[videoId];
+            return newState;
+          });
+          return;
+        }
+        
+        try {
+          // 파일 URI 생성
+          const sanitizedTitle = sanitizeFileName(item.title || (downloadInfo.type === 'video' ? 'video' : 'audio'), 195);
+          const fileExtension = downloadInfo.type === 'video' ? '.mp4' : '.m4a';
+          const fileName = `${sanitizedTitle}${fileExtension}`;
+          const fileUri = `${FileSystem.documentDirectory}downloads/${fileName}`;
+          
+          // 파일 존재 확인
+          const fileInfo = await FileSystem.getInfoAsync(fileUri);
+          
+          if (fileInfo.exists && fileInfo.size > (downloadInfo.type === 'video' ? 1024 * 1024 : 100 * 1024)) {
+            // 예상 크기와 비교하여 완전성 확인
+            try {
+              const videoInfo = await getVideoInfo(item.url);
+              const expectedSize = videoInfo.filesize || null;
+              
+              let isComplete = false;
+              if (expectedSize && expectedSize > 0) {
+                const sizeRatio = fileInfo.size / expectedSize;
+                
+                // 예상 크기의 90% 이상이고 110% 이하면 완전한 파일로 간주
+                if (sizeRatio >= 0.9 && sizeRatio <= 1.1) {
+                  console.log('[SearchScreen] ✅ Download completed in background for videoId:', videoId);
+                  isComplete = true;
+                }
+              } else {
+                // 예상 크기를 얻지 못한 경우: 파일이 있으면 완전한 것으로 간주
+                console.log('[SearchScreen] ✅ Download may be complete (size check only) for videoId:', videoId);
+                isComplete = true;
+              }
+              
+              if (isComplete) {
+                // 완전한 파일이 있으면 다운로드 성공으로 표시 (progress 1.0)
+                setDownloading(current => ({
+                  ...current,
+                  [videoId]: { ...downloadInfo, progress: 1.0 }
+                }));
+                return;
+              }
+            } catch (infoError) {
+              console.warn('[SearchScreen] Could not verify file size for videoId:', videoId, infoError);
+              // 예상 크기를 얻지 못한 경우: 파일이 있으면 완전한 것으로 간주
+              if (fileInfo.size > (downloadInfo.type === 'video' ? 1024 * 1024 : 100 * 1024)) {
+                console.log('[SearchScreen] ✅ Download may be complete (size check only) for videoId:', videoId);
+                setDownloading(current => ({
+                  ...current,
+                  [videoId]: { ...downloadInfo, progress: 1.0 }
+                }));
+                return;
+              }
+            }
+          }
+          
+          // 완전한 파일이 없으면 상태 초기화 (재다운로드 가능)
+          console.log('[SearchScreen] Download not completed for videoId:', videoId, '- clearing state');
+          setDownloading(current => {
+            const newState = { ...current };
+            delete newState[videoId];
+            return newState;
+          });
+        } catch (error) {
+          console.error('[SearchScreen] Error checking download status for videoId:', videoId, error);
+          // 에러 발생 시 상태 초기화 (안전을 위해)
+          setDownloading(current => {
+            const newState = { ...current };
+            delete newState[videoId];
+            return newState;
+          });
+        }
+      });
+      
+      return prev; // 즉시 반환 (비동기 작업은 별도로 처리)
+    });
+  };
+
   useEffect(() => {
     // 컴포넌트가 마운트될 때 다운로드 상태 초기화
     setDownloading({});
@@ -116,13 +219,13 @@ export default function SearchScreen({ navigation, route }) {
       console.error('[SearchScreen] Error cleaning up incomplete files:', error);
     });
     
-    // 앱이 백그라운드에서 포그라운드로 돌아올 때도 상태 초기화
+    // 앱이 백그라운드에서 포그라운드로 돌아올 때 다운로드 상태 확인
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active') {
-        // 앱이 활성화될 때 다운로드 상태 확인 및 초기화
-        // 다운로드 중이던 항목은 이미 실패했거나 중단되었을 가능성이 높음
-        console.log('[SearchScreen] App became active, clearing download state');
-        setDownloading({});
+        console.log('[SearchScreen] App became active, checking download status...');
+        
+        // ✅ 백그라운드에서 완료된 다운로드 확인
+        checkCompletedDownloads();
         
         // 앱이 활성화될 때 불완전한 파일 정리 (주기적으로 정리)
         cleanupIncompleteFiles().catch(error => {
@@ -134,7 +237,7 @@ export default function SearchScreen({ navigation, route }) {
     return () => {
       subscription?.remove();
     };
-  }, []);
+  }, [results]); // results를 dependency에 추가하여 최신 결과 참조
 
   // Deep Linking으로 받은 URL 처리 - 자동으로 링크 입력 및 가져오기 실행
   const processSharedUrl = useCallback((urlParam, timestamp, forceUpdate, forceReload) => {
