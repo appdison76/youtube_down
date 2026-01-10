@@ -62,6 +62,9 @@ export const getVideoInfo = async (videoUrl) => {
 export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount = 0) => {
   const MAX_RETRIES = 3; // 최대 3번 재시도
   const RETRY_DELAY = 2000; // 재시도 전 2초 대기
+  let currentFileUri = null; // 현재 다운로드 중인 파일 URI 저장 (정리용)
+  let progressInterval = null; // 진행률 업데이트 interval (catch/finally에서 접근 가능하도록 함수 상단에 선언)
+  let lastProgress = 0; // 마지막 진행률
   
   try {
     await ensureDownloadDir();
@@ -73,6 +76,7 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
     const baseFileName = sanitizeFileName(videoTitle || 'video', 195);
     const fileName = `${baseFileName}.mp4`;
     const fileUri = `${DOWNLOAD_DIR}${fileName}`;
+    currentFileUri = fileUri; // 파일 URI 저장 (정리용)
     
     console.log('[DownloadService] Generated file name:', fileName);
     console.log('[DownloadService] Base file name:', baseFileName);
@@ -125,8 +129,7 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
     
     // FileSystem.createDownloadResumable 사용
     // YouTube 스트림은 Content-Length를 제공하지 않으므로 정확한 진행률 계산 불가
-    let lastProgress = 0;
-    let progressInterval = null;
+    lastProgress = 0;
     
     // 다운로드 시작 시 최소 진행률 표시
     if (onProgress) {
@@ -260,15 +263,51 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
       }
       
       console.log('[DownloadService] Video downloaded:', result.uri, 'Size:', (fileInfo.size / (1024 * 1024)).toFixed(2), 'MB');
+      
+      // 다운로드 성공 시 currentFileUri를 null로 설정 (정리하지 않도록)
+      currentFileUri = null;
+      
       if (onProgress) {
         onProgress(1.0); // 완료
       }
       return result.uri;
     } else {
+      // 다운로드가 완료되지 않은 경우 불완전한 파일 삭제
+      if (currentFileUri) {
+        try {
+          const fileInfo = await FileSystem.getInfoAsync(currentFileUri);
+          if (fileInfo.exists) {
+            console.log('[DownloadService] Deleting incomplete file (download not completed):', currentFileUri);
+            await FileSystem.deleteAsync(currentFileUri, { idempotent: true });
+          }
+        } catch (deleteError) {
+          console.warn('[DownloadService] Could not delete incomplete file:', deleteError);
+        }
+      }
       throw new Error('다운로드가 완료되지 않았습니다.');
     }
   } catch (error) {
     console.error('[DownloadService] Error downloading video:', error);
+    
+    // 에러 발생 시 interval 정리 (이중 보장)
+    if (progressInterval) {
+      clearInterval(progressInterval);
+      progressInterval = null;
+    }
+    
+    // 에러 발생 시 불완전한 파일 삭제 (재시도하기 전에)
+    if (currentFileUri) {
+      try {
+        const fileInfo = await FileSystem.getInfoAsync(currentFileUri);
+        if (fileInfo.exists) {
+          console.log('[DownloadService] Deleting incomplete file due to error:', currentFileUri);
+          await FileSystem.deleteAsync(currentFileUri, { idempotent: true });
+          console.log('[DownloadService] Incomplete file deleted successfully');
+        }
+      } catch (deleteError) {
+        console.warn('[DownloadService] Could not delete incomplete file:', deleteError);
+      }
+    }
     
     // 네트워크 오류나 연결 끊김 오류인 경우 재시도
     const isRetryableError = 
@@ -285,12 +324,24 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
       // 재시도 전 대기
       await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
       
-      // 재시도 (진행률은 그대로 유지)
+      // 재시도 (진행률은 그대로 유지, currentFileUri는 null로 초기화)
+      currentFileUri = null;
       return downloadVideo(videoUrl, videoTitle, onProgress, retryCount + 1);
     }
     
     // 재시도 불가능하거나 최대 재시도 횟수 초과
     throw error;
+  } finally {
+    // finally 블록에서 interval 정리 보장
+    if (progressInterval) {
+      clearInterval(progressInterval);
+      progressInterval = null;
+    }
+    
+    // finally 블록에서도 불완전한 파일 정리 시도 (에러가 발생했을 가능성)
+    // 단, 성공한 경우에는 currentFileUri가 유효한 파일 URI이므로 삭제하지 않음
+    // 하지만 여기서는 파일이 성공적으로 다운로드되었는지 확인할 수 없으므로
+    // catch 블록에서만 삭제하도록 함 (성공한 경우 currentFileUri를 null로 설정할 수 없음)
   }
 };
 
@@ -298,6 +349,9 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
 export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount = 0) => {
   const MAX_RETRIES = 3; // 최대 3번 재시도
   const RETRY_DELAY = 2000; // 재시도 전 2초 대기
+  let currentFileUri = null; // 현재 다운로드 중인 파일 URI 저장 (정리용)
+  let progressInterval = null; // 진행률 업데이트 interval (catch/finally에서 접근 가능하도록 함수 상단에 선언)
+  let lastProgress = 0; // 마지막 진행률
   
   try {
     await ensureDownloadDir();
@@ -309,6 +363,7 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
     const baseFileName = sanitizeFileName(videoTitle || 'audio', 195);
     const fileName = `${baseFileName}.m4a`;
     const fileUri = `${DOWNLOAD_DIR}${fileName}`;
+    currentFileUri = fileUri; // 파일 URI 저장 (정리용)
     
     console.log('[DownloadService] Generated file name:', fileName);
     console.log('[DownloadService] Base file name:', baseFileName);
@@ -360,8 +415,7 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
     console.log('[DownloadService] Saving to:', fileUri);
     
     // FileSystem.createDownloadResumable 사용
-    let lastProgress = 0;
-    let progressInterval = null;
+    lastProgress = 0;
     
     // 다운로드 시작 시 최소 진행률 표시
     if (onProgress) {
@@ -494,15 +548,51 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
       }
       
       console.log('[DownloadService] Audio downloaded:', result.uri, 'Size:', (fileInfo.size / (1024 * 1024)).toFixed(2), 'MB');
+      
+      // 다운로드 성공 시 currentFileUri를 null로 설정 (정리하지 않도록)
+      currentFileUri = null;
+      
       if (onProgress) {
         onProgress(1.0); // 완료
       }
       return result.uri;
     } else {
+      // 다운로드가 완료되지 않은 경우 불완전한 파일 삭제
+      if (currentFileUri) {
+        try {
+          const fileInfo = await FileSystem.getInfoAsync(currentFileUri);
+          if (fileInfo.exists) {
+            console.log('[DownloadService] Deleting incomplete file (download not completed):', currentFileUri);
+            await FileSystem.deleteAsync(currentFileUri, { idempotent: true });
+          }
+        } catch (deleteError) {
+          console.warn('[DownloadService] Could not delete incomplete file:', deleteError);
+        }
+      }
       throw new Error('다운로드가 완료되지 않았습니다.');
     }
   } catch (error) {
     console.error('[DownloadService] Error downloading audio:', error);
+    
+    // 에러 발생 시 interval 정리 (이중 보장)
+    if (progressInterval) {
+      clearInterval(progressInterval);
+      progressInterval = null;
+    }
+    
+    // 에러 발생 시 불완전한 파일 삭제 (재시도하기 전에)
+    if (currentFileUri) {
+      try {
+        const fileInfo = await FileSystem.getInfoAsync(currentFileUri);
+        if (fileInfo.exists) {
+          console.log('[DownloadService] Deleting incomplete file due to error:', currentFileUri);
+          await FileSystem.deleteAsync(currentFileUri, { idempotent: true });
+          console.log('[DownloadService] Incomplete file deleted successfully');
+        }
+      } catch (deleteError) {
+        console.warn('[DownloadService] Could not delete incomplete file:', deleteError);
+      }
+    }
     
     // 네트워크 오류나 연결 끊김 오류인 경우 재시도
     const isRetryableError = 
@@ -519,12 +609,22 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
       // 재시도 전 대기
       await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
       
-      // 재시도 (진행률은 그대로 유지)
+      // 재시도 (진행률은 그대로 유지, currentFileUri는 null로 초기화)
+      currentFileUri = null;
       return downloadAudio(videoUrl, videoTitle, onProgress, retryCount + 1);
     }
     
     // 재시도 불가능하거나 최대 재시도 횟수 초과
     throw error;
+  } finally {
+    // finally 블록에서 interval 정리 보장
+    if (progressInterval) {
+      clearInterval(progressInterval);
+      progressInterval = null;
+    }
+    
+    // finally 블록에서도 불완전한 파일 정리 시도 (에러가 발생했을 가능성)
+    // 단, 성공한 경우에는 currentFileUri가 null이므로 삭제하지 않음
   }
 };
 
@@ -1001,6 +1101,46 @@ export const clearAllDownloadedFiles = async () => {
   } catch (error) {
     console.error('[DownloadService] Error clearing files:', error);
     throw error;
+  }
+};
+
+// 불완전한 파일 정리 (크기가 기준치 이하인 파일 삭제)
+export const cleanupIncompleteFiles = async () => {
+  try {
+    await ensureDownloadDir();
+    const files = await getAllFilesInStorage();
+    let deletedCount = 0;
+    
+    console.log('[DownloadService] Cleaning up incomplete files...');
+    
+    for (const file of files) {
+      try {
+        // 비디오 파일: 1MB 미만은 불완전한 파일로 간주
+        // 오디오 파일: 100KB 미만은 불완전한 파일로 간주
+        const isVideo = file.fileName.endsWith('.mp4') || file.fileName.endsWith('.mov') || file.fileName.endsWith('.avi');
+        const isAudio = file.fileName.endsWith('.m4a') || file.fileName.endsWith('.mp3');
+        const minSize = isVideo ? 1024 * 1024 : isAudio ? 100 * 1024 : 1024 * 1024; // 기본값 1MB
+        
+        if (file.size < minSize) {
+          console.log('[DownloadService] Deleting incomplete file:', file.fileName, `(${(file.size / 1024).toFixed(2)} KB)`);
+          await FileSystem.deleteAsync(file.fileUri, { idempotent: true });
+          deletedCount++;
+        }
+      } catch (error) {
+        console.warn('[DownloadService] Could not delete incomplete file:', file.fileName, error);
+      }
+    }
+    
+    if (deletedCount > 0) {
+      console.log('[DownloadService] Cleaned up', deletedCount, 'incomplete files');
+    } else {
+      console.log('[DownloadService] No incomplete files found');
+    }
+    
+    return deletedCount;
+  } catch (error) {
+    console.error('[DownloadService] Error cleaning up incomplete files:', error);
+    return 0;
   }
 };
 

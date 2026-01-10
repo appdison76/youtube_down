@@ -19,7 +19,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import AdBanner from '../components/AdBanner';
 import { addFavorite, removeFavorite, isFavorite, initDatabase } from '../services/database';
-import { downloadVideo, downloadAudio, shareDownloadedFile, saveFileToDevice, getFileInfo, sanitizeFileName, getDownloadedFiles } from '../services/downloadService';
+import { downloadVideo, downloadAudio, shareDownloadedFile, saveFileToDevice, getFileInfo, sanitizeFileName, getDownloadedFiles, cleanupIncompleteFiles } from '../services/downloadService';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as FileSystem from 'expo-file-system/legacy';
 import MediaStoreModule from '../modules/MediaStoreModule';
@@ -97,12 +97,44 @@ export default function SearchScreen({ navigation, route }) {
     }
   }, []);
 
-  // 화면 포커스 시 다운로드한 파일 목록 로드
+  // 화면 포커스 시 다운로드한 파일 목록 로드 및 다운로드 상태 초기화
   useFocusEffect(
     useCallback(() => {
       loadDownloadedFiles();
+      // 화면에 다시 들어올 때 다운로드 상태 초기화 (이전에 실패한 다운로드 상태 제거)
+      setDownloading({});
     }, [loadDownloadedFiles])
   );
+  
+  // 앱 시작/컴포넌트 마운트 시 다운로드 상태 초기화 및 불완전한 파일 정리
+  useEffect(() => {
+    // 컴포넌트가 마운트될 때 다운로드 상태 초기화
+    setDownloading({});
+    
+    // 앱 시작 시 불완전한 파일 정리 (한 번만 실행)
+    cleanupIncompleteFiles().catch(error => {
+      console.error('[SearchScreen] Error cleaning up incomplete files:', error);
+    });
+    
+    // 앱이 백그라운드에서 포그라운드로 돌아올 때도 상태 초기화
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        // 앱이 활성화될 때 다운로드 상태 확인 및 초기화
+        // 다운로드 중이던 항목은 이미 실패했거나 중단되었을 가능성이 높음
+        console.log('[SearchScreen] App became active, clearing download state');
+        setDownloading({});
+        
+        // 앱이 활성화될 때 불완전한 파일 정리 (주기적으로 정리)
+        cleanupIncompleteFiles().catch(error => {
+          console.error('[SearchScreen] Error cleaning up incomplete files:', error);
+        });
+      }
+    });
+    
+    return () => {
+      subscription?.remove();
+    };
+  }, []);
 
   // Deep Linking으로 받은 URL 처리 - 자동으로 링크 입력 및 가져오기 실행
   const processSharedUrl = useCallback((urlParam, timestamp, forceUpdate, forceReload) => {
@@ -398,6 +430,30 @@ export default function SearchScreen({ navigation, route }) {
       return;
     }
 
+    // 이미 다운로드 중인 경우 취소 확인
+    if (downloading[item.id]) {
+      Alert.alert(
+        '다운로드 중',
+        '이미 다운로드가 진행 중입니다. 취소하시겠습니까?',
+        [
+          { text: '아니오', style: 'cancel' },
+          {
+            text: '취소',
+            style: 'destructive',
+            onPress: () => {
+              // 다운로드 상태 초기화 (실제 취소는 서비스 레벨에서 처리 어려움)
+              setDownloading(prev => {
+                const newState = { ...prev };
+                delete newState[item.id];
+                return newState;
+              });
+            }
+          }
+        ]
+      );
+      return;
+    }
+
     try {
       setDownloading(prev => ({ ...prev, [item.id]: { type: 'video', progress: 0 } }));
       
@@ -407,14 +463,26 @@ export default function SearchScreen({ navigation, route }) {
         item.url,
         item.title,
         (progress) => {
-          setDownloading(prev => ({
-            ...prev,
-            [item.id]: { type: 'video', progress }
-          }));
+          // 다운로드 중인지 확인 (취소되었을 수 있음)
+          setDownloading(prev => {
+            if (!prev[item.id]) {
+              // 이미 취소되었으면 업데이트하지 않음
+              return prev;
+            }
+            return {
+              ...prev,
+              [item.id]: { type: 'video', progress }
+            };
+          });
         }
       );
       
+      // 다운로드가 완료되었는지 확인 (취소되지 않았는지)
       setDownloading(prev => {
+        if (!prev[item.id]) {
+          // 이미 취소되었으면 상태 업데이트하지 않음
+          return prev;
+        }
         const newState = { ...prev };
         delete newState[item.id];
         return newState;
@@ -453,12 +521,21 @@ export default function SearchScreen({ navigation, route }) {
       );
     } catch (error) {
       console.error('[SearchScreen] Error downloading video:', error);
+      // 에러 발생 시 무조건 상태 초기화
       setDownloading(prev => {
         const newState = { ...prev };
         delete newState[item.id];
         return newState;
       });
       Alert.alert('오류', error.message || '영상 다운로드 중 오류가 발생했습니다.');
+    } finally {
+      // finally 블록에서 상태 초기화 보장 (에러가 발생해도 실행)
+      // 이미 catch에서 처리했지만 이중 보장
+      setDownloading(prev => {
+        const newState = { ...prev };
+        delete newState[item.id];
+        return newState;
+      });
     }
 
     // 아래 코드는 백엔드 서버가 준비되면 활성화
@@ -514,6 +591,30 @@ export default function SearchScreen({ navigation, route }) {
       return;
     }
 
+    // 이미 다운로드 중인 경우 취소 확인
+    if (downloading[item.id]) {
+      Alert.alert(
+        '다운로드 중',
+        '이미 다운로드가 진행 중입니다. 취소하시겠습니까?',
+        [
+          { text: '아니오', style: 'cancel' },
+          {
+            text: '취소',
+            style: 'destructive',
+            onPress: () => {
+              // 다운로드 상태 초기화 (실제 취소는 서비스 레벨에서 처리 어려움)
+              setDownloading(prev => {
+                const newState = { ...prev };
+                delete newState[item.id];
+                return newState;
+              });
+            }
+          }
+        ]
+      );
+      return;
+    }
+
     try {
       setDownloading(prev => ({ ...prev, [item.id]: { type: 'audio', progress: 0 } }));
       
@@ -523,14 +624,26 @@ export default function SearchScreen({ navigation, route }) {
         item.url,
         item.title,
         (progress) => {
-          setDownloading(prev => ({
-            ...prev,
-            [item.id]: { type: 'audio', progress }
-          }));
+          // 다운로드 중인지 확인 (취소되었을 수 있음)
+          setDownloading(prev => {
+            if (!prev[item.id]) {
+              // 이미 취소되었으면 업데이트하지 않음
+              return prev;
+            }
+            return {
+              ...prev,
+              [item.id]: { type: 'audio', progress }
+            };
+          });
         }
       );
       
+      // 다운로드가 완료되었는지 확인 (취소되지 않았는지)
       setDownloading(prev => {
+        if (!prev[item.id]) {
+          // 이미 취소되었으면 상태 업데이트하지 않음
+          return prev;
+        }
         const newState = { ...prev };
         delete newState[item.id];
         return newState;
@@ -569,12 +682,21 @@ export default function SearchScreen({ navigation, route }) {
       );
     } catch (error) {
       console.error('[SearchScreen] Error downloading audio:', error);
+      // 에러 발생 시 무조건 상태 초기화
       setDownloading(prev => {
         const newState = { ...prev };
         delete newState[item.id];
         return newState;
       });
       Alert.alert('오류', error.message || '음악 다운로드 중 오류가 발생했습니다.');
+    } finally {
+      // finally 블록에서 상태 초기화 보장 (에러가 발생해도 실행)
+      // 이미 catch에서 처리했지만 이중 보장
+      setDownloading(prev => {
+        const newState = { ...prev };
+        delete newState[item.id];
+        return newState;
+      });
     }
 
     // 아래 코드는 백엔드 서버가 준비되면 활성화
