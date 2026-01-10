@@ -127,12 +127,12 @@ export default function SearchScreen({ navigation, route }) {
     }
   }, []);
 
-  // 화면 포커스 시 다운로드한 파일 목록 로드 및 다운로드 상태 초기화
+  // 화면 포커스 시 다운로드한 파일 목록 로드 (다운로드 상태는 유지)
   useFocusEffect(
     useCallback(() => {
       loadDownloadedFiles();
-      // 화면에 다시 들어올 때 다운로드 상태 초기화 (이전에 실패한 다운로드 상태 제거)
-      setDownloading({});
+      // ✅ 다운로드 상태 초기화 제거 - 다른 탭으로 이동했다가 돌아와도 진행 상황 유지
+      // 다른 앱으로 나갔다가 돌아올 때는 AppState의 'active' 이벤트에서만 초기화
     }, [loadDownloadedFiles])
   );
   
