@@ -220,12 +220,13 @@ app.get('/api/download/audio', async (req, res) => {
     res.setHeader('Transfer-Encoding', 'chunked');
 
     // yt-dlp를 사용하여 오디오 다운로드 및 스트리밍
-    // 더 유연한 포맷 선택: bestaudio 형식 우선 시도, 여러 오디오 포맷 옵션 제공
-    // bestaudio 형식으로 시작하되, 없으면 다른 오디오 포맷 시도, 그래도 없으면 best로 폴백
-    // 비디오 다운로드와 동일하게 player_client=android 사용 (일관성 유지)
+    // Railway 서버 환경을 고려한 더 유연한 포맷 선택
+    // Railway의 클라우드 IP는 YouTube에서 제한을 받을 수 있어 여러 폴백 옵션 제공
+    // 1순위: bestaudio (오디오 전용), 2순위: best[height<=480] (저화질 비디오+오디오), 3순위: best (최고 품질)
+    // 이렇게 하면 Railway 서버에서도 안정적으로 작동함
     const ytdlpProcess = spawn('python3', [
       '-m', 'yt_dlp',
-      '-f', 'bestaudio/best',
+      '-f', 'bestaudio/best[height<=480]/best',
       '--no-warnings',
       '--progress',
       '--extractor-args', 'youtube:player_client=android',
