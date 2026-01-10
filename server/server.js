@@ -221,10 +221,11 @@ app.get('/api/download/audio', async (req, res) => {
 
     // yt-dlp를 사용하여 오디오 다운로드 및 스트리밍
     // spawn을 사용하여 더 세밀한 제어 가능
-    // 포맷 선택: bestaudio만 사용 (확장자 제약 없음)
+    // 포맷 선택: 오디오 스트림만 선택 (여러 옵션 시도)
+    // YouTube 포맷 ID 참고: 140(m4a), 141(m4a), 251(webm), 171(webm)
     const ytdlpProcess = spawn('python3', [
       '-m', 'yt_dlp',
-      '-f', 'bestaudio',
+      '-f', '140/141/251/171/bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
       '--no-warnings',
       '--progress',
       '--extractor-args', 'youtube:player_client=android',
