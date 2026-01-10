@@ -1,0 +1,7 @@
+{
+  "apiBaseUrl": "https://youtubedown-production.up.railway.app",
+  "version": "1.0.1",
+  "updatedAt": "2026-01-10T00:00:00Z",
+  "description": "서버 주소 설정 파일. 이 파일을 수정하면 앱 재설치 없이 서버 주소를 변경할 수 있습니다."
+}
+
