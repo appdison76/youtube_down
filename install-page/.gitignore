@@ -2,6 +2,11 @@
 .env
 *.log
 
+# APK 파일 (GitHub Releases 사용)
+*.apk
+app.apk
+
+
 
 
 
