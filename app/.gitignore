@@ -11,6 +11,12 @@ npm-debug.*
 *.orig.*
 web-build/
 
+# Build folders (경로 길이 문제 방지)
+**/build/
+**/.transforms/
+app/packages/**/android/build/
+app/packages/**/build/
+
 # macOS
 .DS_Store
 

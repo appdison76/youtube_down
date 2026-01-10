@@ -170,3 +170,4 @@ https://drive.google.com/file/d/1b7NPh_HjyJb9Ihy5V3LRrus7MaEMNuJc/view?usp=shari
 - 500MB 이상: Google Drive의 다운로드 제한이 있을 수 있음
 - 현재 APK 크기: 약 113MB → 문제 없음 ✅
 
+
