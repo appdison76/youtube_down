@@ -876,12 +876,24 @@ export default function SearchScreen({ navigation, route }) {
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         {/* 상단 헤더 */}
         <View style={styles.header}>
-          <View style={styles.logoContainer}>
-            <View style={styles.logo}>
-              <Ionicons name="play" size={20} color="#fff" />
-              <Ionicons name="arrow-down" size={12} color="#fff" style={styles.downloadIcon} />
-            </View>
-          </View>
+          <TouchableOpacity 
+            style={styles.logoContainer}
+            onPress={() => {
+              // 이미 다운로드 화면에 있으므로 스크롤을 맨 위로 이동하거나 새로고침
+              setQuery('');
+              setResults([]);
+              if (textInputRef.current) {
+                textInputRef.current.focus();
+              }
+            }}
+            activeOpacity={0.7}
+          >
+            <Image 
+              source={require('../../assets/icon.png')} 
+              style={styles.logoImage}
+              resizeMode="cover"
+            />
+          </TouchableOpacity>
           <Text style={styles.headerTitle}>유튜브 다운로더</Text>
         </View>
       </SafeAreaView>
@@ -984,24 +996,31 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     marginRight: 12,
-  },
-  logo: {
-    width: 32,
-    height: 32,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 6,
+    width: 52,
+    height: 52,
+    overflow: 'hidden',
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
-  downloadIcon: {
-    position: 'absolute',
-    bottom: 2,
-    right: 2,
+  logoImage: {
+    width: 68,
+    height: 68,
   },
   headerTitle: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 19,
     fontWeight: 'bold',
   },
   searchSection: {

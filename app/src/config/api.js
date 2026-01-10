@@ -11,9 +11,8 @@ const DEFAULT_CONFIG = {
   // 현재 IP: 172.30.1.11
   DEVELOPMENT: 'http://172.30.1.11:3000',
   
-  // 프로덕션 환경: 배포된 서버 URL (Railway, Render 등)
-  // 현재는 로컬 서버를 사용 (서버 배포 후 실제 URL로 변경 필요)
-  PRODUCTION: 'http://172.30.1.11:3000',
+  // 프로덕션 환경: 배포된 서버 URL (Railway)
+  PRODUCTION: 'https://youtubedown-production.up.railway.app',
 };
 
 // 외부 설정을 로드하는 함수 (캐싱 포함)
@@ -50,19 +49,25 @@ const loadConfig = async () => {
       const config = await response.json();
       
       if (config && config.apiBaseUrl) {
-        console.log('[API Config] Config loaded successfully:', config.apiBaseUrl);
+        console.log('[API Config] ✅ Config loaded successfully from', CONFIG_URL);
+        console.log('[API Config] ✅ API Base URL:', config.apiBaseUrl);
         cachedConfig = config;
         return config;
       } else {
+        console.error('[API Config] ❌ Invalid config format: apiBaseUrl not found in', config);
         throw new Error('Invalid config format: apiBaseUrl not found');
       }
     } catch (error) {
-      console.warn('[API Config] Failed to load external config:', error.message);
+      console.warn('[API Config] ❌ Failed to load external config from', CONFIG_URL);
+      console.warn('[API Config] Error details:', error.message);
       console.warn('[API Config] Using default config');
+      console.warn('[API Config] __DEV__ mode:', __DEV__);
       
       // 실패 시 기본값 사용
+      const fallbackUrl = __DEV__ ? DEFAULT_CONFIG.DEVELOPMENT : DEFAULT_CONFIG.PRODUCTION;
+      console.warn('[API Config] Fallback URL:', fallbackUrl);
       return {
-        apiBaseUrl: __DEV__ ? DEFAULT_CONFIG.DEVELOPMENT : DEFAULT_CONFIG.PRODUCTION,
+        apiBaseUrl: fallbackUrl,
         source: 'default',
       };
     }
@@ -74,38 +79,37 @@ const loadConfig = async () => {
 
 // API_BASE_URL을 동적으로 가져오는 함수
 export const getApiBaseUrl = async () => {
-  // 개발 환경에서는 항상 기본값 사용 (로컬 서버)
-  if (__DEV__) {
-    return DEFAULT_CONFIG.DEVELOPMENT;
-  }
-
-  // 프로덕션 환경에서는 외부 설정 로드
+  // 모든 환경에서 외부 설정 로드 시도 (개발 빌드에서도 Railway 서버 사용 가능)
   try {
+    console.log('[API Config] Loading external config (mode:', __DEV__ ? 'DEV' : 'PROD', ')...');
     const config = await loadConfig();
-    return config.apiBaseUrl || DEFAULT_CONFIG.PRODUCTION;
+    const apiUrl = config.apiBaseUrl || (__DEV__ ? DEFAULT_CONFIG.DEVELOPMENT : DEFAULT_CONFIG.PRODUCTION);
+    console.log('[API Config] ✅ Using API URL:', apiUrl, 'Source:', config.source || 'external');
+    return apiUrl;
   } catch (error) {
-    console.error('[API Config] Error getting API base URL:', error);
-    return DEFAULT_CONFIG.PRODUCTION;
+    console.error('[API Config] ❌ Error getting API base URL:', error);
+    // 실패 시 환경에 따라 기본값 사용
+    const fallbackUrl = __DEV__ ? DEFAULT_CONFIG.DEVELOPMENT : DEFAULT_CONFIG.PRODUCTION;
+    console.log('[API Config] Falling back to default URL:', fallbackUrl);
+    return fallbackUrl;
   }
 };
 
 // 동기 버전 (초기값으로 사용, 이후 getApiBaseUrl로 업데이트)
-// 초기 로드 시 기본값 사용, 이후 외부 설정 로드 후 업데이트
-let apiBaseUrlSync = __DEV__ 
-  ? DEFAULT_CONFIG.DEVELOPMENT 
-  : DEFAULT_CONFIG.PRODUCTION;
+// 초기값은 프로덕션 서버로 설정 (외부 config 로드 시 업데이트됨)
+let apiBaseUrlSync = DEFAULT_CONFIG.PRODUCTION;
 
-// 앱 시작 시 외부 설정 로드
-if (!__DEV__) {
-  loadConfig().then(config => {
-    if (config && config.apiBaseUrl) {
-      apiBaseUrlSync = config.apiBaseUrl;
-      console.log('[API Config] API base URL updated to:', apiBaseUrlSync);
-    }
-  }).catch(error => {
-    console.error('[API Config] Failed to load config on startup:', error);
-  });
-}
+// 앱 시작 시 외부 설정 로드 (개발/프로덕션 모두)
+loadConfig().then(config => {
+  if (config && config.apiBaseUrl) {
+    apiBaseUrlSync = config.apiBaseUrl;
+    console.log('[API Config] API base URL updated to:', apiBaseUrlSync);
+  }
+}).catch(error => {
+  console.error('[API Config] Failed to load config on startup:', error);
+  // 실패 시 환경에 따라 기본값 사용
+  apiBaseUrlSync = __DEV__ ? DEFAULT_CONFIG.DEVELOPMENT : DEFAULT_CONFIG.PRODUCTION;
+});
 
 // 동기 버전 export (기존 코드 호환성)
 export const API_BASE_URL = apiBaseUrlSync;
