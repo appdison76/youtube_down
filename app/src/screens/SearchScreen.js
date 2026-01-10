@@ -14,6 +14,7 @@ import {
   Alert,
   AppState,
   Modal,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -35,6 +36,7 @@ export default function SearchScreen({ navigation, route }) {
   const [customAlert, setCustomAlert] = useState({ visible: false, title: '', message: '', subMessage: '', onConfirm: null });
   const textInputRef = useRef(null);
   const lastProcessedUrl = useRef(null);
+  const pulseAnim = useRef(new Animated.Value(1)).current; // YouTube 아이콘 펄스 애니메이션
   
   // ✅ 커스텀 Alert 함수 (빨간 글씨 안내 메시지 포함)
   const showDownloadAlert = (hasExistingFile, isVideo = true) => {
@@ -166,6 +168,70 @@ export default function SearchScreen({ navigation, route }) {
       subscription?.remove();
     };
   }, []); // ✅ results dependency 제거 (불필요)
+
+  // YouTube 아이콘 펄스 애니메이션 (결과가 없을 때만)
+  useEffect(() => {
+    if (results.length === 0 && !loading) {
+      const pulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.08,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      pulse.start();
+      return () => pulse.stop();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [results.length, loading, pulseAnim]);
+
+  // YouTube 앱 열기
+  const openYouTubeApp = useCallback(async () => {
+    try {
+      if (Platform.OS === 'ios') {
+        // iOS: YouTube 앱 열기 시도
+        const youtubeUrl = 'youtube://';
+        const canOpen = await Linking.canOpenURL(youtubeUrl);
+        if (canOpen) {
+          await Linking.openURL(youtubeUrl);
+        } else {
+          // YouTube 앱이 없으면 웹 브라우저로 YouTube 열기
+          await Linking.openURL('https://www.youtube.com');
+        }
+      } else {
+        // Android: Intent를 사용하여 YouTube 앱 열기
+        const intentUrl = 'intent://www.youtube.com/#Intent;scheme=https;package=com.google.android.youtube;end';
+        try {
+          await Linking.openURL(intentUrl);
+        } catch (intentError) {
+          // Intent 실패 시 일반 YouTube URL 시도
+          const youtubeUrl = 'https://www.youtube.com';
+          const canOpen = await Linking.canOpenURL(youtubeUrl);
+          if (canOpen) {
+            await Linking.openURL(youtubeUrl);
+          } else {
+            Alert.alert('오류', 'YouTube를 열 수 없습니다.');
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[SearchScreen] Error opening YouTube app:', error);
+      // 실패 시 웹 브라우저로 YouTube 열기
+      try {
+        await Linking.openURL('https://www.youtube.com');
+      } catch (webError) {
+        Alert.alert('오류', 'YouTube를 열 수 없습니다.');
+      }
+    }
+  }, []);
 
   // Deep Linking으로 받은 URL 처리 - 자동으로 링크 입력 및 가져오기 실행
   const processSharedUrl = useCallback((urlParam, timestamp, forceUpdate, forceReload) => {
@@ -1296,10 +1362,23 @@ export default function SearchScreen({ navigation, route }) {
           keyExtractor={(item, index) => item.id || index.toString()}
           ListEmptyComponent={
             <View style={styles.centerContainer}>
-              <Text style={styles.emptyIcon}>📺</Text>
-              <Text style={styles.emptyText}>YouTube URL을 입력하세요</Text>
+              <TouchableOpacity 
+                onPress={openYouTubeApp}
+                activeOpacity={0.7}
+              >
+                <Animated.View 
+                  style={[
+                    styles.youtubeIconButton,
+                    { transform: [{ scale: pulseAnim }] }
+                  ]}
+                >
+                  <Text style={styles.emptyIcon}>📺</Text>
+                  <Text style={styles.iconHintText}>탭하여 YouTube 열기</Text>
+                </Animated.View>
+              </TouchableOpacity>
+              <Text style={styles.emptyText}>YouTube 앱에서 공유하기를 사용하세요</Text>
               <Text style={styles.emptySubText}>
-                또는 YouTube 앱에서 공유하기를{'\n'}사용하세요
+                또는 YouTube URL을 복사해서{'\n'}입력하세요
               </Text>
             </View>
           }
@@ -1428,6 +1507,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 40,
+    paddingVertical: 40,
   },
   loadingText: {
     marginTop: 16,
@@ -1435,21 +1515,55 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   emptyIcon: {
-    fontSize: 64,
-    marginBottom: 16,
+    fontSize: 72,
+    marginBottom: 0,
+    textAlign: 'center',
+  },
+  youtubeIconButton: {
+    padding: 24,
+    borderRadius: 28,
+    backgroundColor: '#fff',
+    marginBottom: 20,
+    borderWidth: 3,
+    borderColor: '#FF0000',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#FF0000',
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 10,
+    minWidth: 160,
+    maxWidth: 200,
+  },
+  iconHintText: {
+    fontSize: 13,
+    color: '#FF0000',
+    fontWeight: '700',
+    marginTop: 10,
+    textAlign: 'center',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
   },
   emptyText: {
     fontSize: 18,
     fontWeight: '600',
     color: '#333',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
+    marginTop: 8,
+    lineHeight: 24,
   },
   emptySubText: {
-    color: '#999',
+    color: '#666',
     fontSize: 14,
     textAlign: 'center',
     paddingHorizontal: 40,
+    lineHeight: 20,
+    fontWeight: '400',
   },
   highlightedText: {
     color: '#FF0000',
