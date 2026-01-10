@@ -1,14 +1,17 @@
-# Node.js와 Python을 모두 포함하는 베이스 이미지
-FROM node:18-bullseye
+# Python 3.11을 베이스로 사용하고 Node.js 설치
+FROM python:3.11-slim
 
-# Python 및 pip 설치
+# Node.js 18 설치
 RUN apt-get update && \
-    apt-get install -y python3 python3-pip && \
+    apt-get install -y curl && \
+    curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    apt-get install -y nodejs && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# yt-dlp 설치
-RUN pip3 install --no-cache-dir yt-dlp
+# yt-dlp 최신 버전 설치 및 업데이트
+RUN pip3 install --no-cache-dir --upgrade pip && \
+    pip3 install --no-cache-dir --upgrade yt-dlp
 
 # 작업 디렉토리 설정
 WORKDIR /app

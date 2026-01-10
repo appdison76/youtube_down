@@ -81,6 +81,10 @@ app.get('/api/download/video', async (req, res) => {
       '--merge-output-format', 'mp4',
       '--no-warnings',
       '--progress',
+      '--extractor-args', 'youtube:player_client=android',
+      '--retries', '3',
+      '--fragment-retries', '3',
+      '--user-agent', 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36',
       '-o', '-',
       url
     ], {
@@ -222,6 +226,10 @@ app.get('/api/download/audio', async (req, res) => {
       '-f', 'bestaudio[ext=m4a]/bestaudio',
       '--no-warnings',
       '--progress',
+      '--extractor-args', 'youtube:player_client=android',
+      '--retries', '3',
+      '--fragment-retries', '3',
+      '--user-agent', 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36',
       '-o', '-',
       url
     ], {
