@@ -321,17 +321,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
-    elevation: 8,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   logoImage: {
     width: 68,
