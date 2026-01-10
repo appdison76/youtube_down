@@ -924,6 +924,54 @@ export default function SearchScreen({ navigation, route }) {
   // 다운로드한 파일 재저장
   const handleResaveFile = async (file) => {
     try {
+      // ✅ 파일이 실제로 존재하는지 먼저 확인
+      const fileInfo = await FileSystem.getInfoAsync(file.fileUri);
+      
+      if (!fileInfo.exists || !fileInfo.size || fileInfo.size === 0) {
+        // 파일이 존재하지 않으면 여러 경로 시도
+        let found = false;
+        let foundUri = file.fileUri;
+        
+        // 1. file:// 프로토콜 제거/추가 시도
+        if (file.fileUri.startsWith('file://')) {
+          const withoutProtocol = file.fileUri.replace('file://', '');
+          const altInfo = await FileSystem.getInfoAsync(withoutProtocol);
+          if (altInfo.exists && altInfo.size > 0) {
+            found = true;
+            foundUri = withoutProtocol;
+          }
+        } else {
+          const withProtocol = `file://${file.fileUri}`;
+          const altInfo = await FileSystem.getInfoAsync(withProtocol);
+          if (altInfo.exists && altInfo.size > 0) {
+            found = true;
+            foundUri = withProtocol;
+          }
+        }
+        
+        // 2. 파일명으로 경로 재구성 시도
+        if (!found && file.fileName) {
+          const reconstructedUri = `${FileSystem.documentDirectory}downloads/${file.fileName}`;
+          const reconInfo = await FileSystem.getInfoAsync(reconstructedUri);
+          if (reconInfo.exists && reconInfo.size > 0) {
+            found = true;
+            foundUri = reconstructedUri;
+          }
+        }
+        
+        if (!found) {
+          Alert.alert(
+            '파일을 찾을 수 없음',
+            '파일이 존재하지 않거나 손상되었습니다.\n\n"다시다운" 버튼을 눌러 파일을 다시 다운로드해주세요.',
+            [{ text: '확인' }]
+          );
+          return;
+        }
+        
+        // 찾은 URI로 업데이트
+        file.fileUri = foundUri;
+      }
+      
       await saveFileToDevice(file.fileUri, file.fileName, file.isVideo);
       Alert.alert(
         '알림',

@@ -682,24 +682,104 @@ export const saveFileToDevice = async (fileUri, fileName, isVideo = true) => {
   try {
     console.log('[DownloadService] Saving file to device:', fileUri, fileName, 'isVideo:', isVideo);
     
-    // 파일이 실제로 존재하는지 확인
+    // ✅ 공유하기와 동일한 방식으로 파일 찾기 (여러 경로 시도)
     console.log('[DownloadService] Checking file existence:', fileUri);
     let fileInfo = await FileSystem.getInfoAsync(fileUri);
     
-    // 파일이 없으면 URL 디코딩된 경로로도 확인 시도
     if (!fileInfo.exists) {
+      // 1. URL 디코딩 시도
       try {
         const decodedUri = decodeURIComponent(fileUri);
         if (decodedUri !== fileUri) {
           console.log('[DownloadService] Trying decoded URI:', decodedUri);
           fileInfo = await FileSystem.getInfoAsync(decodedUri);
           if (fileInfo.exists) {
-            // 디코딩된 URI로 파일을 찾았으면 fileUri 업데이트
             fileUri = decodedUri;
+            console.log('[DownloadService] ✅ File found with decoded URI');
           }
         }
       } catch (e) {
-        console.warn('[DownloadService] Could not decode URI for file check:', e);
+        console.warn('[DownloadService] Could not decode URI:', e);
+      }
+      
+      // 2. file:// 프로토콜 제거 후 시도
+      if (!fileInfo.exists && fileUri.startsWith('file://')) {
+        const withoutProtocol = fileUri.replace('file://', '');
+        console.log('[DownloadService] Trying URI without file:// protocol:', withoutProtocol);
+        fileInfo = await FileSystem.getInfoAsync(withoutProtocol);
+        if (fileInfo.exists) {
+          fileUri = withoutProtocol;
+          console.log('[DownloadService] ✅ File found without file:// protocol');
+        }
+      }
+      
+      // 3. file:// 프로토콜 추가 후 시도
+      if (!fileInfo.exists && !fileUri.startsWith('file://')) {
+        const withProtocol = `file://${fileUri}`;
+        console.log('[DownloadService] Trying URI with file:// protocol:', withProtocol);
+        fileInfo = await FileSystem.getInfoAsync(withProtocol);
+        if (fileInfo.exists) {
+          fileUri = withProtocol;
+          console.log('[DownloadService] ✅ File found with file:// protocol');
+        }
+      }
+      
+      // 4. 파일명으로 경로 재구성 시도 (DOWNLOAD_DIR 사용)
+      if (!fileInfo.exists && fileName) {
+        const reconstructedUri = `${DOWNLOAD_DIR}${fileName}`;
+        if (reconstructedUri !== fileUri && !reconstructedUri.includes(fileUri) && !fileUri.includes(reconstructedUri)) {
+          console.log('[DownloadService] Trying reconstructed URI from fileName:', reconstructedUri);
+          fileInfo = await FileSystem.getInfoAsync(reconstructedUri);
+          if (fileInfo.exists) {
+            fileUri = reconstructedUri;
+            console.log('[DownloadService] ✅ File found with reconstructed URI');
+          }
+        }
+      }
+      
+      // 5. URI에서 파일명 추출하여 재구성 시도 (실제 파일명과 다를 수 있음)
+      if (!fileInfo.exists && fileUri.includes('/')) {
+        const uriParts = fileUri.split('/');
+        const uriFileName = uriParts[uriParts.length - 1];
+        if (uriFileName && uriFileName.includes('.') && uriFileName !== fileName) {
+          // URL 디코딩된 파일명도 시도
+          let decodedFileName = uriFileName;
+          try {
+            decodedFileName = decodeURIComponent(uriFileName);
+          } catch (e) {
+            // 디코딩 실패해도 원본 사용
+          }
+          
+          const altUri = `${DOWNLOAD_DIR}${decodedFileName}`;
+          if (altUri !== fileUri && altUri !== `${DOWNLOAD_DIR}${fileName}`) {
+            console.log('[DownloadService] Trying alternative URI from path:', altUri);
+            fileInfo = await FileSystem.getInfoAsync(altUri);
+            if (fileInfo.exists) {
+              fileUri = altUri;
+              fileName = decodedFileName; // 파일명도 업데이트
+              console.log('[DownloadService] ✅ File found with alternative URI from path');
+            }
+          }
+        }
+      }
+      
+      // 6. file:// 프로토콜을 제거한 상태로 재구성 시도
+      if (!fileInfo.exists && fileName) {
+        let cleanUri = fileUri;
+        if (cleanUri.startsWith('file://')) {
+          cleanUri = cleanUri.replace('file://', '');
+        }
+        const cleanFileName = fileName;
+        const cleanReconstructedUri = `${DOWNLOAD_DIR}${cleanFileName}`;
+        
+        if (cleanReconstructedUri !== cleanUri) {
+          console.log('[DownloadService] Trying clean reconstructed URI:', cleanReconstructedUri);
+          fileInfo = await FileSystem.getInfoAsync(cleanReconstructedUri);
+          if (fileInfo.exists) {
+            fileUri = cleanReconstructedUri;
+            console.log('[DownloadService] ✅ File found with clean reconstructed URI');
+          }
+        }
       }
     }
     
@@ -707,12 +787,13 @@ export const saveFileToDevice = async (fileUri, fileName, isVideo = true) => {
       exists: fileInfo.exists,
       size: fileInfo.size,
       uri: fileInfo.uri,
-      isDirectory: fileInfo.isDirectory
+      isDirectory: fileInfo.isDirectory,
+      finalUri: fileUri
     });
     
     if (!fileInfo.exists) {
-      console.error('[DownloadService] ❌ File does not exist!');
-      console.error('[DownloadService] File URI:', fileUri);
+      console.error('[DownloadService] ❌ File does not exist after all attempts!');
+      console.error('[DownloadService] Tried URI:', fileUri);
       console.error('[DownloadService] File name:', fileName);
       throw new Error(`Source file does not exist: ${fileUri}\n\n파일이 삭제되었거나 다운로드가 완료되지 않았을 수 있습니다.\n공유하기 버튼을 사용하여 수동으로 저장해주세요.`);
     }
@@ -771,16 +852,49 @@ export const saveFileToDevice = async (fileUri, fileName, isVideo = true) => {
         try {
           console.log('[DownloadService] ========== Calling native MediaStoreModule.saveToMediaStore ==========');
           
-          // 파일 URI 정규화 (file:// 프로토콜 제거, URL 인코딩 디코딩)
-          let normalizedFileUri = fileUri;
+          // ✅ 위에서 찾은 실제 fileUri를 기반으로 정규화
+          // FileSystem.getInfoAsync가 반환한 실제 URI를 우선 사용 (가장 정확함)
+          let normalizedFileUri = fileInfo.uri || fileUri;
+          
+          // file:// 프로토콜 제거 (네이티브 모듈은 절대 경로를 원함)
           if (normalizedFileUri.startsWith('file://')) {
             normalizedFileUri = normalizedFileUri.replace('file://', '');
           }
-          // URL 인코딩된 문자 디코딩
+          
+          // ✅ 파일명에 특수문자가 포함된 경우를 대비하여 경로 재구성 시도
+          // fileInfo.uri가 실제 파일 경로와 다를 수 있으므로, fileUri도 확인
+          if (fileInfo.uri !== fileUri) {
+            console.log('[DownloadService] fileInfo.uri differs from fileUri, using fileInfo.uri:', fileInfo.uri);
+          }
+          
+          // URL 인코딩된 문자 디코딩 시도 (파일명에 특수문자가 있을 수 있음)
+          // 하지만 이미 파일을 찾았으므로, 정규화된 경로는 그대로 사용
+          // decodeURIComponent는 파일명이 URL 인코딩되어 있는 경우에만 필요
           try {
-            normalizedFileUri = decodeURIComponent(normalizedFileUri);
+            // 경로의 마지막 부분(파일명)만 디코딩 시도 (이미 정상 경로일 수 있음)
+            const pathParts = normalizedFileUri.split('/');
+            const fileNamePart = pathParts[pathParts.length - 1];
+            
+            // 파일명이 URL 인코딩되어 있는지 확인 (%가 포함되어 있는지)
+            if (fileNamePart.includes('%')) {
+              try {
+                const decodedFileNamePart = decodeURIComponent(fileNamePart);
+                if (decodedFileNamePart !== fileNamePart) {
+                  pathParts[pathParts.length - 1] = decodedFileNamePart;
+                  const decodedPath = pathParts.join('/');
+                  // 디코딩된 경로로 파일 존재 확인
+                  const decodedFileInfo = await FileSystem.getInfoAsync(decodedPath);
+                  if (decodedFileInfo.exists) {
+                    normalizedFileUri = decodedPath;
+                    console.log('[DownloadService] Using decoded file path:', decodedFileNamePart);
+                  }
+                }
+              } catch (e) {
+                console.warn('[DownloadService] Could not decode file name, using original:', e);
+              }
+            }
           } catch (e) {
-            console.warn('[DownloadService] Could not decode URI, using original:', e);
+            console.warn('[DownloadService] Could not process URI, using original:', e);
           }
           
           // 파일명 디코딩 (URL 인코딩된 경우)
@@ -792,20 +906,8 @@ export const saveFileToDevice = async (fileUri, fileName, isVideo = true) => {
             decodedFileName = fileName;
           }
           
-          // 파일이 여전히 존재하는지 다시 확인 (원본 URI와 정규화된 URI 모두 확인)
-          let finalFileInfo = await FileSystem.getInfoAsync(fileUri);
-          if (!finalFileInfo.exists) {
-            // 정규화된 URI로도 확인 시도
-            try {
-              finalFileInfo = await FileSystem.getInfoAsync(normalizedFileUri);
-            } catch (e) {
-              console.warn('[DownloadService] Could not check normalized URI:', e);
-            }
-          }
-          
-          if (!finalFileInfo.exists) {
-            throw new Error(`파일이 존재하지 않습니다: ${fileUri}`);
-          }
+          // 파일 정보는 이미 위에서 확인했으므로 그대로 사용
+          const finalFileInfo = fileInfo;
           
           console.log('[DownloadService] Normalized file URI:', normalizedFileUri);
           console.log('[DownloadService] Original file URI:', fileUri);
