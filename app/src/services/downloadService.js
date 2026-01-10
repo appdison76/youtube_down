@@ -2,7 +2,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { Platform, Alert, NativeModules } from 'react-native';
 import * as Sharing from 'expo-sharing';
 import * as MediaLibrary from 'expo-media-library';
-import { API_BASE_URL } from '../config/api';
+import { API_BASE_URL, getApiBaseUrl } from '../config/api';
 import MediaStoreModule from '../modules/MediaStoreModule';
 
 // 디버깅: 모든 네이티브 모듈 목록 출력
@@ -33,7 +33,11 @@ export const getVideoInfo = async (videoUrl) => {
   try {
     console.log('[DownloadService] Getting video info for:', videoUrl);
     
-    const response = await fetch(`${API_BASE_URL}/api/video-info`, {
+    // 동적으로 API URL 가져오기 (외부 config.json에서)
+    const apiBaseUrl = await getApiBaseUrl();
+    console.log('[DownloadService] Using API base URL:', apiBaseUrl);
+    
+    const response = await fetch(`${apiBaseUrl}/api/video-info`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -54,29 +58,67 @@ export const getVideoInfo = async (videoUrl) => {
   }
 };
 
-// 영상 다운로드
-export const downloadVideo = async (videoUrl, videoTitle, onProgress) => {
+// 영상 다운로드 (재시도 로직 포함)
+export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount = 0) => {
+  const MAX_RETRIES = 3; // 최대 3번 재시도
+  const RETRY_DELAY = 2000; // 재시도 전 2초 대기
+  
   try {
     await ensureDownloadDir();
     
-    console.log('[DownloadService] Starting video download:', videoUrl);
+    console.log('[DownloadService] Starting video download:', videoUrl, `(attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
+    console.log('[DownloadService] Original video title:', videoTitle);
     
-    const fileName = `${sanitizeFileName(videoTitle || 'video')}.mp4`;
+    // 파일명 생성: 확장자(.mp4) 공간을 고려하여 195자로 제한
+    const baseFileName = sanitizeFileName(videoTitle || 'video', 195);
+    const fileName = `${baseFileName}.mp4`;
     const fileUri = `${DOWNLOAD_DIR}${fileName}`;
     
+    console.log('[DownloadService] Generated file name:', fileName);
+    console.log('[DownloadService] Base file name:', baseFileName);
+    console.log('[DownloadService] File URI:', fileUri);
+    
     // 이미 다운로드된 파일이 있는지 확인 (내부 저장소만)
+    // 파일이 있어도 크기가 너무 작으면(1MB 미만) 불완전한 다운로드로 간주하고 다시 다운로드
     const fileInfo = await FileSystem.getInfoAsync(fileUri);
-    if (fileInfo.exists && fileInfo.size > 0) {
+    if (fileInfo.exists && fileInfo.size > 1024 * 1024) { // 1MB 이상만 유효한 파일로 간주
       console.log('[DownloadService] File already exists in internal storage, skipping download:', fileUri);
       console.log('[DownloadService] Existing file size:', (fileInfo.size / (1024 * 1024)).toFixed(2), 'MB');
-      if (onProgress) {
-        onProgress(1.0); // 100% 완료로 표시
+      
+      // 파일이 실제로 읽을 수 있는지 확인
+      try {
+        const verifyInfo = await FileSystem.getInfoAsync(fileUri);
+        if (verifyInfo.exists && verifyInfo.size > 1024 * 1024) {
+          if (onProgress) {
+            onProgress(1.0); // 100% 완료로 표시
+          }
+          return fileUri;
+        }
+      } catch (verifyError) {
+        console.warn('[DownloadService] File exists but cannot be verified, re-downloading:', verifyError);
+        // 파일이 있지만 확인할 수 없으면 삭제하고 다시 다운로드
+        try {
+          await FileSystem.deleteAsync(fileUri, { idempotent: true });
+        } catch (deleteError) {
+          console.warn('[DownloadService] Could not delete existing file:', deleteError);
+        }
       }
-      return fileUri;
+    } else if (fileInfo.exists && fileInfo.size <= 1024 * 1024) {
+      // 파일이 있지만 크기가 너무 작으면 불완전한 다운로드로 간주하고 삭제
+      console.log('[DownloadService] File exists but size is too small, deleting and re-downloading:', fileInfo.size, 'bytes');
+      try {
+        await FileSystem.deleteAsync(fileUri, { idempotent: true });
+      } catch (deleteError) {
+        console.warn('[DownloadService] Could not delete incomplete file:', deleteError);
+      }
     }
     
+    // 동적으로 API URL 가져오기 (외부 config.json에서)
+    const apiBaseUrl = await getApiBaseUrl();
+    console.log('[DownloadService] Using API base URL for video download:', apiBaseUrl);
+    
     // 백엔드 서버에서 직접 다운로드
-    const downloadUrl = `${API_BASE_URL}/api/download/video?url=${encodeURIComponent(videoUrl)}&quality=highestvideo`;
+    const downloadUrl = `${apiBaseUrl}/api/download/video?url=${encodeURIComponent(videoUrl)}&quality=highestvideo`;
     
     console.log('[DownloadService] Downloading from:', downloadUrl);
     console.log('[DownloadService] Saving to:', fileUri);
@@ -126,18 +168,48 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress) => {
         } else {
           // Content-Length가 없으면 다운로드된 바이트 수로 추정 진행률 계산
           const downloadedMB = downloadProgress.totalBytesWritten / (1024 * 1024);
-          // 다운로드된 크기에 따라 추정 진행률 (대략적인 추정)
-          // 평균 영상 크기를 100MB로 가정하고, 최대 99%까지 표시 (실제로는 알 수 없음)
-          const estimatedProgress = Math.min(0.99, downloadedMB / 100);
           
-          if (onProgress && estimatedProgress > lastProgress) {
+          // 다운로드 속도 기반으로 추정 진행률 계산
+          // 초기에는 작게 시작하고, 다운로드가 진행될수록 점진적으로 증가
+          // 100MB 기준으로 시작하되, 실제 다운로드된 크기에 따라 동적으로 조정
+          let estimatedProgress;
+          
+          if (downloadedMB < 10) {
+            // 초기 10MB까지는 선형적으로 증가 (0% ~ 10%)
+            estimatedProgress = downloadedMB / 10 * 0.1;
+          } else if (downloadedMB < 50) {
+            // 10MB ~ 50MB: 10% ~ 50%
+            estimatedProgress = 0.1 + (downloadedMB - 10) / 40 * 0.4;
+          } else if (downloadedMB < 100) {
+            // 50MB ~ 100MB: 50% ~ 80%
+            estimatedProgress = 0.5 + (downloadedMB - 50) / 50 * 0.3;
+          } else if (downloadedMB < 200) {
+            // 100MB ~ 200MB: 80% ~ 95%
+            estimatedProgress = 0.8 + (downloadedMB - 100) / 100 * 0.15;
+          } else {
+            // 200MB 이상: 95% ~ 99% (계속 증가하지만 완료는 아님)
+            estimatedProgress = Math.min(0.99, 0.95 + (downloadedMB - 200) / 500 * 0.04);
+          }
+          
+          // 다운로드가 진행 중이면 진행률 업데이트 (항상 증가하도록)
+          if (onProgress && downloadedMB > 0) {
             // interval 정리하고 실제 진행률 사용
             if (progressInterval) {
               clearInterval(progressInterval);
               progressInterval = null;
             }
-            onProgress(estimatedProgress);
-            lastProgress = estimatedProgress;
+            
+            // 다운로드된 바이트가 증가하면 진행률도 증가
+            if (estimatedProgress > lastProgress) {
+              onProgress(estimatedProgress);
+              lastProgress = estimatedProgress;
+            } else if (downloadedMB > 0 && lastProgress < 0.99) {
+              // 다운로드는 진행 중이지만 추정 진행률이 증가하지 않는 경우
+              // 최소한 0.1%씩은 증가시켜서 사용자에게 진행 중임을 알림
+              const minProgress = Math.min(0.99, lastProgress + 0.001);
+              onProgress(minProgress);
+              lastProgress = minProgress;
+            }
           }
           
           console.log('[DownloadService] Downloaded:', downloadedMB.toFixed(2), 'MB, estimated progress:', (estimatedProgress * 100).toFixed(1) + '%');
@@ -160,14 +232,31 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress) => {
     }
     
     if (result && result.uri) {
-      // 다운로드된 파일 확인
-      const fileInfo = await FileSystem.getInfoAsync(result.uri);
+      // 다운로드된 파일 확인 (다운로드 직후 즉시 확인)
+      let fileInfo = await FileSystem.getInfoAsync(result.uri);
+      
+      // 파일이 없거나 크기가 너무 작으면 오류
       if (!fileInfo.exists) {
-        throw new Error('다운로드된 파일을 찾을 수 없습니다.');
+        throw new Error('다운로드된 파일을 찾을 수 없습니다. 다운로드를 다시 시도해주세요.');
       }
       
-      if (!fileInfo.size || fileInfo.size === 0) {
-        throw new Error('다운로드된 파일의 크기가 0입니다. 다운로드를 다시 시도해주세요.');
+      if (!fileInfo.size || fileInfo.size < 1024 * 1024) { // 1MB 미만이면 오류
+        console.error('[DownloadService] Downloaded file size is too small:', fileInfo.size, 'bytes');
+        // 불완전한 파일 삭제
+        try {
+          await FileSystem.deleteAsync(result.uri, { idempotent: true });
+        } catch (deleteError) {
+          console.warn('[DownloadService] Could not delete incomplete file:', deleteError);
+        }
+        throw new Error('다운로드된 파일의 크기가 너무 작습니다. 다운로드를 다시 시도해주세요.');
+      }
+      
+      // 파일이 실제로 읽을 수 있는지 재확인 (다른 앱으로 갔다가 돌아온 경우 대비)
+      await new Promise(resolve => setTimeout(resolve, 100)); // 100ms 대기
+      fileInfo = await FileSystem.getInfoAsync(result.uri);
+      
+      if (!fileInfo.exists || fileInfo.size < 1024 * 1024) {
+        throw new Error('다운로드된 파일을 확인할 수 없습니다. 다운로드를 다시 시도해주세요.');
       }
       
       console.log('[DownloadService] Video downloaded:', result.uri, 'Size:', (fileInfo.size / (1024 * 1024)).toFixed(2), 'MB');
@@ -180,33 +269,92 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress) => {
     }
   } catch (error) {
     console.error('[DownloadService] Error downloading video:', error);
+    
+    // 네트워크 오류나 연결 끊김 오류인 경우 재시도
+    const isRetryableError = 
+      error.message?.includes('connection') ||
+      error.message?.includes('abort') ||
+      error.message?.includes('network') ||
+      error.message?.includes('timeout') ||
+      error.message?.includes('ECONNRESET') ||
+      error.message?.includes('Software caused connection abort');
+    
+    if (isRetryableError && retryCount < MAX_RETRIES) {
+      console.log(`[DownloadService] Retryable error detected, retrying in ${RETRY_DELAY}ms... (${retryCount + 1}/${MAX_RETRIES})`);
+      
+      // 재시도 전 대기
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      
+      // 재시도 (진행률은 그대로 유지)
+      return downloadVideo(videoUrl, videoTitle, onProgress, retryCount + 1);
+    }
+    
+    // 재시도 불가능하거나 최대 재시도 횟수 초과
     throw error;
   }
 };
 
-// 음악 다운로드 (오디오만)
-export const downloadAudio = async (videoUrl, videoTitle, onProgress) => {
+// 음악 다운로드 (오디오만, 재시도 로직 포함)
+export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount = 0) => {
+  const MAX_RETRIES = 3; // 최대 3번 재시도
+  const RETRY_DELAY = 2000; // 재시도 전 2초 대기
+  
   try {
     await ensureDownloadDir();
     
-    console.log('[DownloadService] Starting audio download:', videoUrl);
+    console.log('[DownloadService] Starting audio download:', videoUrl, `(attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
+    console.log('[DownloadService] Original audio title:', videoTitle);
     
-    const fileName = `${sanitizeFileName(videoTitle || 'audio')}.m4a`;
+    // 파일명 생성: 확장자(.m4a) 공간을 고려하여 195자로 제한
+    const baseFileName = sanitizeFileName(videoTitle || 'audio', 195);
+    const fileName = `${baseFileName}.m4a`;
     const fileUri = `${DOWNLOAD_DIR}${fileName}`;
     
+    console.log('[DownloadService] Generated file name:', fileName);
+    console.log('[DownloadService] Base file name:', baseFileName);
+    console.log('[DownloadService] File URI:', fileUri);
+    
     // 이미 다운로드된 파일이 있는지 확인 (내부 저장소만)
+    // 파일이 있어도 크기가 너무 작으면(100KB 미만) 불완전한 다운로드로 간주하고 다시 다운로드
     const fileInfo = await FileSystem.getInfoAsync(fileUri);
-    if (fileInfo.exists && fileInfo.size > 0) {
+    if (fileInfo.exists && fileInfo.size > 100 * 1024) { // 100KB 이상만 유효한 파일로 간주
       console.log('[DownloadService] File already exists, skipping download:', fileUri);
       console.log('[DownloadService] Existing file size:', (fileInfo.size / (1024 * 1024)).toFixed(2), 'MB');
-      if (onProgress) {
-        onProgress(1.0); // 100% 완료로 표시
+      
+      // 파일이 실제로 읽을 수 있는지 확인
+      try {
+        const verifyInfo = await FileSystem.getInfoAsync(fileUri);
+        if (verifyInfo.exists && verifyInfo.size > 100 * 1024) {
+          if (onProgress) {
+            onProgress(1.0); // 100% 완료로 표시
+          }
+          return fileUri;
+        }
+      } catch (verifyError) {
+        console.warn('[DownloadService] File exists but cannot be verified, re-downloading:', verifyError);
+        // 파일이 있지만 확인할 수 없으면 삭제하고 다시 다운로드
+        try {
+          await FileSystem.deleteAsync(fileUri, { idempotent: true });
+        } catch (deleteError) {
+          console.warn('[DownloadService] Could not delete existing file:', deleteError);
+        }
       }
-      return fileUri;
+    } else if (fileInfo.exists && fileInfo.size <= 100 * 1024) {
+      // 파일이 있지만 크기가 너무 작으면 불완전한 다운로드로 간주하고 삭제
+      console.log('[DownloadService] File exists but size is too small, deleting and re-downloading:', fileInfo.size, 'bytes');
+      try {
+        await FileSystem.deleteAsync(fileUri, { idempotent: true });
+      } catch (deleteError) {
+        console.warn('[DownloadService] Could not delete incomplete file:', deleteError);
+      }
     }
     
+    // 동적으로 API URL 가져오기 (외부 config.json에서)
+    const apiBaseUrl = await getApiBaseUrl();
+    console.log('[DownloadService] Using API base URL for audio download:', apiBaseUrl);
+    
     // 백엔드 서버에서 직접 다운로드
-    const downloadUrl = `${API_BASE_URL}/api/download/audio?url=${encodeURIComponent(videoUrl)}&quality=highestaudio`;
+    const downloadUrl = `${apiBaseUrl}/api/download/audio?url=${encodeURIComponent(videoUrl)}&quality=highestaudio`;
     
     console.log('[DownloadService] Downloading from:', downloadUrl);
     console.log('[DownloadService] Saving to:', fileUri);
@@ -255,18 +403,47 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress) => {
         } else {
           // Content-Length가 없으면 다운로드된 바이트 수로 추정 진행률 계산
           const downloadedMB = downloadProgress.totalBytesWritten / (1024 * 1024);
-          // 다운로드된 크기에 따라 추정 진행률 (대략적인 추정)
-          // 평균 오디오 크기를 10MB로 가정하고, 최대 99%까지 표시 (실제로는 알 수 없음)
-          const estimatedProgress = Math.min(0.99, downloadedMB / 10);
           
-          if (onProgress && estimatedProgress > lastProgress) {
+          // 다운로드 속도 기반으로 추정 진행률 계산
+          // 오디오는 일반적으로 영상보다 작으므로 더 빠르게 진행률 증가
+          let estimatedProgress;
+          
+          if (downloadedMB < 2) {
+            // 초기 2MB까지는 선형적으로 증가 (0% ~ 20%)
+            estimatedProgress = downloadedMB / 2 * 0.2;
+          } else if (downloadedMB < 5) {
+            // 2MB ~ 5MB: 20% ~ 50%
+            estimatedProgress = 0.2 + (downloadedMB - 2) / 3 * 0.3;
+          } else if (downloadedMB < 10) {
+            // 5MB ~ 10MB: 50% ~ 80%
+            estimatedProgress = 0.5 + (downloadedMB - 5) / 5 * 0.3;
+          } else if (downloadedMB < 20) {
+            // 10MB ~ 20MB: 80% ~ 95%
+            estimatedProgress = 0.8 + (downloadedMB - 10) / 10 * 0.15;
+          } else {
+            // 20MB 이상: 95% ~ 99% (계속 증가하지만 완료는 아님)
+            estimatedProgress = Math.min(0.99, 0.95 + (downloadedMB - 20) / 100 * 0.04);
+          }
+          
+          // 다운로드가 진행 중이면 진행률 업데이트 (항상 증가하도록)
+          if (onProgress && downloadedMB > 0) {
             // interval 정리하고 실제 진행률 사용
             if (progressInterval) {
               clearInterval(progressInterval);
               progressInterval = null;
             }
-            onProgress(estimatedProgress);
-            lastProgress = estimatedProgress;
+            
+            // 다운로드된 바이트가 증가하면 진행률도 증가
+            if (estimatedProgress > lastProgress) {
+              onProgress(estimatedProgress);
+              lastProgress = estimatedProgress;
+            } else if (downloadedMB > 0 && lastProgress < 0.99) {
+              // 다운로드는 진행 중이지만 추정 진행률이 증가하지 않는 경우
+              // 최소한 0.1%씩은 증가시켜서 사용자에게 진행 중임을 알림
+              const minProgress = Math.min(0.99, lastProgress + 0.001);
+              onProgress(minProgress);
+              lastProgress = minProgress;
+            }
           }
           
           console.log('[DownloadService] Downloaded:', downloadedMB.toFixed(2), 'MB, estimated progress:', (estimatedProgress * 100).toFixed(1) + '%');
@@ -289,14 +466,31 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress) => {
     }
     
     if (result && result.uri) {
-      // 다운로드된 파일 확인
-      const fileInfo = await FileSystem.getInfoAsync(result.uri);
+      // 다운로드된 파일 확인 (다운로드 직후 즉시 확인)
+      let fileInfo = await FileSystem.getInfoAsync(result.uri);
+      
+      // 파일이 없거나 크기가 너무 작으면 오류
       if (!fileInfo.exists) {
-        throw new Error('다운로드된 파일을 찾을 수 없습니다.');
+        throw new Error('다운로드된 파일을 찾을 수 없습니다. 다운로드를 다시 시도해주세요.');
       }
       
-      if (!fileInfo.size || fileInfo.size === 0) {
-        throw new Error('다운로드된 파일의 크기가 0입니다. 다운로드를 다시 시도해주세요.');
+      if (!fileInfo.size || fileInfo.size < 100 * 1024) { // 100KB 미만이면 오류
+        console.error('[DownloadService] Downloaded file size is too small:', fileInfo.size, 'bytes');
+        // 불완전한 파일 삭제
+        try {
+          await FileSystem.deleteAsync(result.uri, { idempotent: true });
+        } catch (deleteError) {
+          console.warn('[DownloadService] Could not delete incomplete file:', deleteError);
+        }
+        throw new Error('다운로드된 파일의 크기가 너무 작습니다. 다운로드를 다시 시도해주세요.');
+      }
+      
+      // 파일이 실제로 읽을 수 있는지 재확인 (다른 앱으로 갔다가 돌아온 경우 대비)
+      await new Promise(resolve => setTimeout(resolve, 100)); // 100ms 대기
+      fileInfo = await FileSystem.getInfoAsync(result.uri);
+      
+      if (!fileInfo.exists || fileInfo.size < 100 * 1024) {
+        throw new Error('다운로드된 파일을 확인할 수 없습니다. 다운로드를 다시 시도해주세요.');
       }
       
       console.log('[DownloadService] Audio downloaded:', result.uri, 'Size:', (fileInfo.size / (1024 * 1024)).toFixed(2), 'MB');
@@ -309,16 +503,68 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress) => {
     }
   } catch (error) {
     console.error('[DownloadService] Error downloading audio:', error);
+    
+    // 네트워크 오류나 연결 끊김 오류인 경우 재시도
+    const isRetryableError = 
+      error.message?.includes('connection') ||
+      error.message?.includes('abort') ||
+      error.message?.includes('network') ||
+      error.message?.includes('timeout') ||
+      error.message?.includes('ECONNRESET') ||
+      error.message?.includes('Software caused connection abort');
+    
+    if (isRetryableError && retryCount < MAX_RETRIES) {
+      console.log(`[DownloadService] Retryable error detected, retrying in ${RETRY_DELAY}ms... (${retryCount + 1}/${MAX_RETRIES})`);
+      
+      // 재시도 전 대기
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      
+      // 재시도 (진행률은 그대로 유지)
+      return downloadAudio(videoUrl, videoTitle, onProgress, retryCount + 1);
+    }
+    
+    // 재시도 불가능하거나 최대 재시도 횟수 초과
     throw error;
   }
 };
 
-// 파일명에서 특수문자 제거
-export const sanitizeFileName = (fileName) => {
-  return fileName
-    .replace(/[<>:"/\\|?*]/g, '_')
-    .replace(/\s+/g, '_')
-    .substring(0, 100); // 파일명 길이 제한
+// YouTube 제목을 파일명으로 안전하게 변환
+// 간단하게: 특수문자와 공백을 언더스코어로 바꾸기
+export const sanitizeFileName = (fileName, maxLength = 200) => {
+  if (!fileName || fileName.trim().length === 0) {
+    return 'file';
+  }
+  
+  // 1. 이모지 제거 (파일명에 사용할 수 없음)
+  let sanitized = fileName
+    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')  // 이모지 제거
+    .trim();
+  
+  // 2. 파일 시스템에서 허용하지 않는 특수문자를 언더스코어로 변경
+  // < > : " / \ | ? * # 는 파일명에 사용할 수 없음
+  // [ ] 는 일부 파일 시스템에서 문제가 될 수 있지만, 기존 파일명 형식을 유지하기 위해 유지
+  sanitized = sanitized
+    .replace(/[<>:"/\\|?*#]/g, '_')  // 기본 특수문자와 #를 언더스코어로 변경
+    .replace(/\s+/g, '_')            // 공백을 언더스코어로 변경
+    .replace(/_+/g, '_')              // 연속된 언더스코어를 하나로 통합
+    .replace(/^_+|_+$/g, '');        // 앞뒤 언더스코어 제거
+  
+  // 3. 빈 문자열이면 기본값 사용
+  if (sanitized.length === 0) {
+    sanitized = 'file';
+  }
+  
+  // 4. 파일명 길이 제한
+  if (sanitized.length > maxLength) {
+    sanitized = sanitized.substring(0, maxLength);
+  }
+  
+  // 5. 파일명이 너무 짧거나 특수문자만 있으면 기본값 사용
+  if (sanitized.length < 2 || sanitized.match(/^[_\-\.]+$/)) {
+    sanitized = 'file';
+  }
+  
+  return sanitized;
 };
 
 // 다운로드한 파일을 기기 저장소에 저장 (갤러리/미디어 라이브러리)
@@ -329,7 +575,25 @@ export const saveFileToDevice = async (fileUri, fileName, isVideo = true) => {
     
     // 파일이 실제로 존재하는지 확인
     console.log('[DownloadService] Checking file existence:', fileUri);
-    const fileInfo = await FileSystem.getInfoAsync(fileUri);
+    let fileInfo = await FileSystem.getInfoAsync(fileUri);
+    
+    // 파일이 없으면 URL 디코딩된 경로로도 확인 시도
+    if (!fileInfo.exists) {
+      try {
+        const decodedUri = decodeURIComponent(fileUri);
+        if (decodedUri !== fileUri) {
+          console.log('[DownloadService] Trying decoded URI:', decodedUri);
+          fileInfo = await FileSystem.getInfoAsync(decodedUri);
+          if (fileInfo.exists) {
+            // 디코딩된 URI로 파일을 찾았으면 fileUri 업데이트
+            fileUri = decodedUri;
+          }
+        }
+      } catch (e) {
+        console.warn('[DownloadService] Could not decode URI for file check:', e);
+      }
+    }
+    
     console.log('[DownloadService] File info:', {
       exists: fileInfo.exists,
       size: fileInfo.size,
@@ -340,7 +604,8 @@ export const saveFileToDevice = async (fileUri, fileName, isVideo = true) => {
     if (!fileInfo.exists) {
       console.error('[DownloadService] ❌ File does not exist!');
       console.error('[DownloadService] File URI:', fileUri);
-      throw new Error(`다운로드된 파일을 찾을 수 없습니다: ${fileUri}\n\n다운로드를 다시 시도해주세요.`);
+      console.error('[DownloadService] File name:', fileName);
+      throw new Error(`Source file does not exist: ${fileUri}\n\n파일이 삭제되었거나 다운로드가 완료되지 않았을 수 있습니다.\n공유하기 버튼을 사용하여 수동으로 저장해주세요.`);
     }
     
     if (!fileInfo.size || fileInfo.size === 0) {
@@ -410,10 +675,25 @@ export const saveFileToDevice = async (fileUri, fileName, isVideo = true) => {
           }
           
           // 파일명 디코딩 (URL 인코딩된 경우)
-          const decodedFileName = decodeURIComponent(fileName);
+          let decodedFileName = fileName;
+          try {
+            decodedFileName = decodeURIComponent(fileName);
+          } catch (e) {
+            console.warn('[DownloadService] Could not decode file name, using original:', e);
+            decodedFileName = fileName;
+          }
           
-          // 파일이 여전히 존재하는지 다시 확인
-          const finalFileInfo = await FileSystem.getInfoAsync(fileUri);
+          // 파일이 여전히 존재하는지 다시 확인 (원본 URI와 정규화된 URI 모두 확인)
+          let finalFileInfo = await FileSystem.getInfoAsync(fileUri);
+          if (!finalFileInfo.exists) {
+            // 정규화된 URI로도 확인 시도
+            try {
+              finalFileInfo = await FileSystem.getInfoAsync(normalizedFileUri);
+            } catch (e) {
+              console.warn('[DownloadService] Could not check normalized URI:', e);
+            }
+          }
+          
           if (!finalFileInfo.exists) {
             throw new Error(`파일이 존재하지 않습니다: ${fileUri}`);
           }
@@ -500,23 +780,128 @@ export const shareDownloadedFile = async (fileUri, fileName, isVideo = true) => 
   try {
     const isAvailable = await Sharing.isAvailableAsync();
     if (isAvailable) {
-      // 파일 확장자로 MIME 타입 결정
-      const fileExtension = fileName?.split('.').pop()?.toLowerCase();
-      let mimeType = 'application/octet-stream';
-      
-      if (isVideo || fileExtension === 'mp4' || fileExtension === 'mov' || fileExtension === 'avi') {
-        mimeType = fileExtension === 'mp4' ? 'video/mp4' : 
-                   fileExtension === 'mov' ? 'video/quicktime' : 
-                   fileExtension === 'avi' ? 'video/x-msvideo' : 'video/mp4';
-      } else if (fileExtension === 'm4a' || fileExtension === 'mp3' || fileExtension === 'aac' || fileExtension === 'wav') {
-        mimeType = fileExtension === 'm4a' ? 'audio/mp4' : 
-                   fileExtension === 'mp3' ? 'audio/mpeg' : 
-                   fileExtension === 'aac' ? 'audio/aac' : 
-                   fileExtension === 'wav' ? 'audio/wav' : 'audio/mpeg';
+      // 파일이 실제로 존재하는지 먼저 확인
+      let fileInfo = await FileSystem.getInfoAsync(fileUri);
+      if (!fileInfo.exists) {
+        // 디코딩된 URI로도 확인 시도
+        try {
+          const decodedUri = decodeURIComponent(fileUri);
+          const decodedFileInfo = await FileSystem.getInfoAsync(decodedUri);
+          if (decodedFileInfo.exists) {
+            fileUri = decodedUri;
+            fileInfo = decodedFileInfo;
+            console.log('[DownloadService] Using decoded URI:', fileUri);
+          }
+        } catch (e) {
+          console.warn('[DownloadService] Could not decode URI:', e);
+        }
       }
       
-      console.log('[DownloadService] Sharing file with MIME type:', mimeType, 'fileName:', fileName);
+      // URI에서 실제 파일명 추출 (가장 정확한 방법)
+      let actualFileName = fileName;
+      try {
+        const uriParts = fileUri.split('/');
+        let uriFileName = uriParts[uriParts.length - 1];
+        
+        // URL 디코딩 시도
+        try {
+          uriFileName = decodeURIComponent(uriFileName);
+        } catch (e) {
+          // 디코딩 실패해도 원본 사용
+        }
+        
+        console.log('[DownloadService] Filename from URI (raw):', uriFileName);
+        console.log('[DownloadService] Filename from param:', fileName);
+        
+        // URI에서 추출한 파일명이 유효하면 우선 사용
+        if (uriFileName && uriFileName.includes('.')) {
+          // 파일명이 유효한지 확인 (특수문자만 있거나 너무 짧으면 무시)
+          if (uriFileName.length > 3 && 
+              uriFileName !== '[' && 
+              !uriFileName.match(/^[_\-\.\[\]]+$/)) {
+            actualFileName = uriFileName;
+            console.log('[DownloadService] Using valid filename from URI:', actualFileName);
+          } else {
+            console.warn('[DownloadService] Filename from URI is invalid:', uriFileName);
+          }
+        }
+        
+        // 파라미터로 받은 파일명이 유효하지 않으면 URI에서 추출한 것 사용
+        if (!actualFileName || 
+            actualFileName.length < 3 || 
+            actualFileName === '[' || 
+            actualFileName.match(/^[_\-\.\[\]]+$/)) {
+          if (uriFileName && uriFileName.includes('.')) {
+            actualFileName = uriFileName;
+            console.log('[DownloadService] Using filename from URI (fallback):', actualFileName);
+          } else {
+            // 최후의 수단: 기본 파일명 사용
+            actualFileName = isVideo ? 'video.mp4' : 'audio.m4a';
+            console.warn('[DownloadService] Using default filename:', actualFileName);
+          }
+        }
+      } catch (e) {
+        console.warn('[DownloadService] Could not extract filename from URI:', e);
+        // 기본 파일명 사용
+        if (!actualFileName || actualFileName.length < 3) {
+          actualFileName = isVideo ? 'video.mp4' : 'audio.m4a';
+        }
+      }
+      
+      // 확장자가 없는 경우 추가
+      if (!actualFileName.includes('.')) {
+        actualFileName = isVideo ? `${actualFileName}.mp4` : `${actualFileName}.m4a`;
+        console.log('[DownloadService] Added extension to filename:', actualFileName);
+      }
+      
+      // 최종 파일명 검증 및 정리
+      if (actualFileName === '[' || actualFileName.match(/^[_\-\.\[\]]+$/)) {
+        console.error('[DownloadService] Filename is still invalid, using default');
+        actualFileName = isVideo ? 'video.mp4' : 'audio.m4a';
+      }
+      
+      // 파일 확장자로 MIME 타입 결정 (더 정확하게)
+      const fileExtension = actualFileName?.split('.').pop()?.toLowerCase();
+      let mimeType = 'application/octet-stream';
+      
+      // 확장자를 우선적으로 확인하여 MIME 타입 결정
+      // 확장자가 명확하면 확장자 기준, 아니면 isVideo 파라미터 사용
+      if (fileExtension === 'mp4') {
+        // .mp4는 비디오 파일이므로 video/mp4
+        mimeType = 'video/mp4';
+      } else if (fileExtension === 'm4a') {
+        // .m4a는 오디오 파일이므로 audio/mp4
+        mimeType = 'audio/mp4';
+      } else if (fileExtension === 'mov') {
+        mimeType = 'video/quicktime';
+      } else if (fileExtension === 'avi') {
+        mimeType = 'video/x-msvideo';
+      } else if (fileExtension === 'mp3') {
+        mimeType = 'audio/mpeg';
+      } else if (fileExtension === 'aac') {
+        mimeType = 'audio/aac';
+      } else if (fileExtension === 'wav') {
+        mimeType = 'audio/wav';
+      } else {
+        // 확장자가 없거나 알 수 없으면 isVideo 파라미터 사용
+        mimeType = isVideo ? 'video/mp4' : 'audio/mp4';
+        console.warn('[DownloadService] Unknown extension, using isVideo parameter:', isVideo);
+      }
+      
+      console.log('[DownloadService] Sharing file with MIME type:', mimeType, 'fileName:', actualFileName);
+      console.log('[DownloadService] Original fileName param:', fileName);
       console.log('[DownloadService] Source file URI:', fileUri);
+      console.log('[DownloadService] isVideo parameter:', isVideo);
+      console.log('[DownloadService] File extension:', fileExtension);
+      
+      // 파일 크기 확인 (로깅만)
+      const fileSizeMB = fileInfo.size ? (fileInfo.size / (1024 * 1024)).toFixed(2) : 0;
+      console.log('[DownloadService] File size:', fileSizeMB, 'MB');
+      console.log('[DownloadService] File type:', isVideo ? 'video' : 'audio');
+      console.log('[DownloadService] MIME type:', mimeType);
+      
+      // 카카오톡은 300MB까지 파일 공유를 지원하지만, 다른 앱으로 공유할 수 있으므로
+      // 경고 없이 공유 시도 (사용자가 원하는 앱을 선택할 수 있도록)
       
       // Android에서 "내 폰에 저장" 옵션이 나타나도록 하려면
       // 파일을 먼저 expo-media-library로 외부 저장소에 저장한 후 공유해야 합니다
@@ -538,7 +923,84 @@ export const shareDownloadedFile = async (fileUri, fileName, isVideo = true) => 
     }
   } catch (error) {
     console.error('[DownloadService] Error sharing file:', error);
-    Alert.alert('오류', '파일 공유 중 오류가 발생했습니다.');
+    console.error('[DownloadService] Error details:', {
+      message: error.message,
+      code: error.code,
+      fileName: fileName,
+      fileUri: fileUri,
+      isVideo: isVideo
+    });
+    Alert.alert('오류', `파일 공유 중 오류가 발생했습니다.\n\n${error.message || '알 수 없는 오류'}`);
+  }
+};
+
+// 내부 저장소의 모든 파일 목록 가져오기 (디버깅/정리용)
+export const getAllFilesInStorage = async () => {
+  try {
+    await ensureDownloadDir();
+    const dirInfo = await FileSystem.getInfoAsync(DOWNLOAD_DIR);
+    
+    if (!dirInfo.exists) {
+      return [];
+    }
+    
+    const files = await FileSystem.readDirectoryAsync(DOWNLOAD_DIR);
+    const fileList = [];
+    
+    for (const fileName of files) {
+      const fileUri = `${DOWNLOAD_DIR}${fileName}`;
+      const fileInfo = await FileSystem.getInfoAsync(fileUri);
+      
+      if (fileInfo.exists && !fileInfo.isDirectory) {
+        fileList.push({
+          fileName,
+          fileUri,
+          size: fileInfo.size,
+          modificationTime: fileInfo.modificationTime || Date.now(),
+        });
+      }
+    }
+    
+    return fileList;
+  } catch (error) {
+    console.error('[DownloadService] Error getting all files:', error);
+    return [];
+  }
+};
+
+// 특정 파일 삭제 (파일명으로)
+export const deleteFileByName = async (fileName) => {
+  try {
+    const fileUri = `${DOWNLOAD_DIR}${fileName}`;
+    await FileSystem.deleteAsync(fileUri, { idempotent: true });
+    console.log('[DownloadService] File deleted:', fileName);
+    return true;
+  } catch (error) {
+    console.error('[DownloadService] Error deleting file:', error);
+    return false;
+  }
+};
+
+// 내부 저장소의 모든 파일 삭제 (정리용)
+export const clearAllDownloadedFiles = async () => {
+  try {
+    const files = await getAllFilesInStorage();
+    let deletedCount = 0;
+    
+    for (const file of files) {
+      try {
+        await FileSystem.deleteAsync(file.fileUri, { idempotent: true });
+        deletedCount++;
+      } catch (error) {
+        console.warn('[DownloadService] Could not delete file:', file.fileName, error);
+      }
+    }
+    
+    console.log('[DownloadService] Deleted', deletedCount, 'files');
+    return deletedCount;
+  } catch (error) {
+    console.error('[DownloadService] Error clearing files:', error);
+    throw error;
   }
 };
 
@@ -562,16 +1024,77 @@ export const getDownloadedFiles = async () => {
       const fileInfo = await FileSystem.getInfoAsync(fileUri);
       
       if (fileInfo.exists && !fileInfo.isDirectory && fileInfo.size > 0) {
+        // 파일 확장자 추출 (더 정확한 방법)
+        // 마지막 점 이후를 확장자로 추출 (파일명에 점이 여러 개 있을 수 있음)
+        const lastDotIndex = fileName.lastIndexOf('.');
+        let extension = '';
+        let baseFileName = fileName;
+        
+        if (lastDotIndex > 0 && lastDotIndex < fileName.length - 1) {
+          extension = fileName.substring(lastDotIndex + 1).toLowerCase();
+          baseFileName = fileName.substring(0, lastDotIndex);
+        }
+        
+        const isVideo = extension === 'mp4' || extension === 'mov' || extension === 'avi' || extension === 'mkv';
+        const isAudio = extension === 'm4a' || extension === 'mp3' || extension === 'aac' || extension === 'wav';
+        
         // 파일명에서 제목 추출 (확장자 제거)
-        const title = fileName.replace(/\.(mp4|m4a|mp3)$/i, '');
-        const isVideo = fileName.toLowerCase().endsWith('.mp4');
+        // 기존 파일명에 `[`나 특수문자가 포함되어 있어도 제목으로 표시
+        let title = baseFileName;
+        
+        // 제목이 비어있거나 너무 짧으면 파일명 그대로 사용
+        if (!title || title.length < 1) {
+          title = fileName;
+        }
+        
+        // 제목이 너무 짧거나 특수문자만 있으면 기본값 사용
+        // `[` 하나만 있거나 특수문자만 있는 경우 처리
+        if (title.length < 2 || title.match(/^[_\-\.\[\]]+$/) || title === '[') {
+          console.warn('[DownloadService] Title is too short or only special chars, using default:', title);
+          title = extension === 'mp4' ? 'Video' : extension === 'm4a' ? 'Audio' : 'File';
+        } else {
+          // 언더스코어를 공백으로 변환하여 가독성 향상
+          // 기존 파일명에 `[`가 포함되어 있으면 언더스코어로 변환된 상태이므로 그대로 표시
+          title = title.replace(/_/g, ' ');
+          
+          // 제목이 여전히 비어있거나 너무 짧으면 기본값 사용
+          if (!title || title.trim().length < 1) {
+            console.warn('[DownloadService] Title is empty after processing, using default');
+            title = extension === 'mp4' ? 'Video' : extension === 'm4a' ? 'Audio' : 'File';
+          }
+        }
+        
+        // 파일명이 `[`로 시작하거나 특수문자가 많아도 파일은 표시되어야 하므로
+        // 제목이 비어있지 않으면 그대로 사용
+        
+        // 디버깅 로그
+        console.log('[DownloadService] File processing:', {
+          fileName: fileName,
+          baseFileName: baseFileName,
+          extension: extension,
+          extractedTitle: title,
+          isVideo: isVideo,
+          isAudio: isAudio
+        });
+        
+        // 파일 타입 판단: 확장자가 명확하지 않으면 크기로 추정
+        // 영상은 일반적으로 음악보다 큼 (100MB 이상이면 영상일 가능성 높음)
+        let finalIsVideo = isVideo;
+        if (!isVideo && !isAudio) {
+          // 확장자가 없거나 알 수 없는 경우 크기로 추정
+          finalIsVideo = fileInfo.size > 100 * 1024 * 1024; // 100MB 이상이면 영상으로 간주
+        } else if (isVideo) {
+          finalIsVideo = true;
+        } else {
+          finalIsVideo = false;
+        }
         
         fileList.push({
           fileName,
           fileUri,
           title,
           size: fileInfo.size,
-          isVideo,
+          isVideo: finalIsVideo,
           modifiedTime: fileInfo.modificationTime || Date.now(),
         });
       }
