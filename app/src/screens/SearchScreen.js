@@ -13,6 +13,7 @@ import {
   Linking,
   Alert,
   AppState,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -31,8 +32,35 @@ export default function SearchScreen({ navigation, route }) {
   const [favorites, setFavorites] = useState(new Set()); // 즐겨찾기 ID Set
   const [downloading, setDownloading] = useState({}); // 다운로드 중인 항목 { videoId: { type: 'video'|'audio', progress: 0-1 } }
   const [downloadedFiles, setDownloadedFiles] = useState([]); // 다운로드한 파일 목록
+  const [customAlert, setCustomAlert] = useState({ visible: false, title: '', message: '', subMessage: '', onConfirm: null });
   const textInputRef = useRef(null);
   const lastProcessedUrl = useRef(null);
+  
+  // ✅ 커스텀 Alert 함수 (빨간 글씨 안내 메시지 포함)
+  const showDownloadAlert = (hasExistingFile, isVideo = true) => {
+    if (hasExistingFile) {
+      // 커스텀 모달로 표시
+      setCustomAlert({
+        visible: true,
+        title: '알림',
+        message: isVideo 
+          ? '영상 다운로드를 시작합니다. 다운로드가 완료되면 알림이 표시됩니다.'
+          : '음악 다운로드를 시작합니다. 다운로드가 완료되면 알림이 표시됩니다.',
+        subMessage: '이미 다운받은 파일은 재저장 버튼을 누르시면 다시 다운로드 받을 필요가 없습니다.',
+        onConfirm: () => {
+          setCustomAlert({ visible: false, title: '', message: '', subMessage: '', onConfirm: null });
+        }
+      });
+    } else {
+      // 기본 Alert 사용
+      Alert.alert(
+        '알림',
+        isVideo 
+          ? '영상 다운로드를 시작합니다. 다운로드가 완료되면 알림이 표시됩니다.'
+          : '음악 다운로드를 시작합니다. 다운로드가 완료되면 알림이 표시됩니다.'
+      );
+    }
+  };
   
   // 앱 시작 시 입력 필드 초기화 (혹시 모를 기본값 제거)
   useEffect(() => {
@@ -107,109 +135,6 @@ export default function SearchScreen({ navigation, route }) {
   );
   
   // 앱 시작/컴포넌트 마운트 시 다운로드 상태 초기화 및 불완전한 파일 정리
-  // 백그라운드에서 완료된 다운로드 확인 함수
-  const checkCompletedDownloads = async () => {
-    console.log('[SearchScreen] Checking for completed downloads in background...');
-    
-    // 현재 다운로드 중인 항목들 가져오기
-    setDownloading(prev => {
-      const currentDownloading = { ...prev };
-      const videoIds = Object.keys(currentDownloading);
-      
-      if (videoIds.length === 0) {
-        return prev; // 다운로드 중인 항목이 없으면 업데이트하지 않음
-      }
-      
-      // 각 비디오에 대해 비동기로 확인
-      videoIds.forEach(async (videoId) => {
-        const downloadInfo = currentDownloading[videoId];
-        const item = results.find(r => r.id === videoId);
-        
-        if (!item) {
-          // 결과에 없는 항목은 제거
-          setDownloading(current => {
-            const newState = { ...current };
-            delete newState[videoId];
-            return newState;
-          });
-          return;
-        }
-        
-        try {
-          // 파일 URI 생성
-          const sanitizedTitle = sanitizeFileName(item.title || (downloadInfo.type === 'video' ? 'video' : 'audio'), 195);
-          const fileExtension = downloadInfo.type === 'video' ? '.mp4' : '.m4a';
-          const fileName = `${sanitizedTitle}${fileExtension}`;
-          const fileUri = `${FileSystem.documentDirectory}downloads/${fileName}`;
-          
-          // 파일 존재 확인
-          const fileInfo = await FileSystem.getInfoAsync(fileUri);
-          
-          if (fileInfo.exists && fileInfo.size > (downloadInfo.type === 'video' ? 1024 * 1024 : 100 * 1024)) {
-            // 예상 크기와 비교하여 완전성 확인
-            try {
-              const videoInfo = await getVideoInfo(item.url);
-              const expectedSize = videoInfo.filesize || null;
-              
-              let isComplete = false;
-              if (expectedSize && expectedSize > 0) {
-                const sizeRatio = fileInfo.size / expectedSize;
-                
-                // 예상 크기의 90% 이상이고 110% 이하면 완전한 파일로 간주
-                if (sizeRatio >= 0.9 && sizeRatio <= 1.1) {
-                  console.log('[SearchScreen] ✅ Download completed in background for videoId:', videoId);
-                  isComplete = true;
-                }
-              } else {
-                // 예상 크기를 얻지 못한 경우: 파일이 있으면 완전한 것으로 간주
-                console.log('[SearchScreen] ✅ Download may be complete (size check only) for videoId:', videoId);
-                isComplete = true;
-              }
-              
-              if (isComplete) {
-                // 완전한 파일이 있으면 다운로드 성공으로 표시 (progress 1.0)
-                setDownloading(current => ({
-                  ...current,
-                  [videoId]: { ...downloadInfo, progress: 1.0 }
-                }));
-                return;
-              }
-            } catch (infoError) {
-              console.warn('[SearchScreen] Could not verify file size for videoId:', videoId, infoError);
-              // 예상 크기를 얻지 못한 경우: 파일이 있으면 완전한 것으로 간주
-              if (fileInfo.size > (downloadInfo.type === 'video' ? 1024 * 1024 : 100 * 1024)) {
-                console.log('[SearchScreen] ✅ Download may be complete (size check only) for videoId:', videoId);
-                setDownloading(current => ({
-                  ...current,
-                  [videoId]: { ...downloadInfo, progress: 1.0 }
-                }));
-                return;
-              }
-            }
-          }
-          
-          // 완전한 파일이 없으면 상태 초기화 (재다운로드 가능)
-          console.log('[SearchScreen] Download not completed for videoId:', videoId, '- clearing state');
-          setDownloading(current => {
-            const newState = { ...current };
-            delete newState[videoId];
-            return newState;
-          });
-        } catch (error) {
-          console.error('[SearchScreen] Error checking download status for videoId:', videoId, error);
-          // 에러 발생 시 상태 초기화 (안전을 위해)
-          setDownloading(current => {
-            const newState = { ...current };
-            delete newState[videoId];
-            return newState;
-          });
-        }
-      });
-      
-      return prev; // 즉시 반환 (비동기 작업은 별도로 처리)
-    });
-  };
-
   useEffect(() => {
     // 컴포넌트가 마운트될 때 다운로드 상태 초기화
     setDownloading({});
@@ -219,15 +144,18 @@ export default function SearchScreen({ navigation, route }) {
       console.error('[SearchScreen] Error cleaning up incomplete files:', error);
     });
     
-    // 앱이 백그라운드에서 포그라운드로 돌아올 때 다운로드 상태 확인
+    // 앱이 백그라운드에서 포그라운드로 돌아올 때
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active') {
-        console.log('[SearchScreen] App became active, checking download status...');
+        console.log('[SearchScreen] App became active');
         
-        // ✅ 백그라운드에서 완료된 다운로드 확인
-        checkCompletedDownloads();
+        // ✅ 다운로드 상태 초기화 (사용자가 "다시다운" 버튼을 누를 수 있도록)
+        setDownloading({});
         
-        // 앱이 활성화될 때 불완전한 파일 정리 (주기적으로 정리)
+        // ✅ 파일 목록 새로고침 (UI 업데이트)
+        loadDownloadedFiles();
+        
+        // 앱이 활성화될 때 불완전한 파일 정리
         cleanupIncompleteFiles().catch(error => {
           console.error('[SearchScreen] Error cleaning up incomplete files:', error);
         });
@@ -237,7 +165,7 @@ export default function SearchScreen({ navigation, route }) {
     return () => {
       subscription?.remove();
     };
-  }, [results]); // results를 dependency에 추가하여 최신 결과 참조
+  }, []); // ✅ results dependency 제거 (불필요)
 
   // Deep Linking으로 받은 URL 처리 - 자동으로 링크 입력 및 가져오기 실행
   const processSharedUrl = useCallback((urlParam, timestamp, forceUpdate, forceReload) => {
@@ -527,7 +455,7 @@ export default function SearchScreen({ navigation, route }) {
     }
   };
 
-  const handleDownloadVideo = async (item) => {
+  const handleDownloadVideo = async (item, existingFile = null) => {
     if (!item.url || !item.id) {
       Alert.alert('오류', '다운로드할 영상 정보가 없습니다.');
       return;
@@ -560,7 +488,8 @@ export default function SearchScreen({ navigation, route }) {
     try {
       setDownloading(prev => ({ ...prev, [item.id]: { type: 'video', progress: 0 } }));
       
-      Alert.alert('알림', '영상 다운로드를 시작합니다. 다운로드가 완료되면 알림이 표시됩니다.');
+      // ✅ 커스텀 Alert 표시 (이미 다운로드된 파일이 있으면 안내 메시지 포함)
+      showDownloadAlert(!!existingFile, true);
       
       const fileUri = await downloadVideo(
         item.url,
@@ -688,7 +617,7 @@ export default function SearchScreen({ navigation, route }) {
     */
   };
 
-  const handleDownloadAudio = async (item) => {
+  const handleDownloadAudio = async (item, existingFile = null) => {
     if (!item.url || !item.id) {
       Alert.alert('오류', '다운로드할 음악 정보가 없습니다.');
       return;
@@ -721,7 +650,8 @@ export default function SearchScreen({ navigation, route }) {
     try {
       setDownloading(prev => ({ ...prev, [item.id]: { type: 'audio', progress: 0 } }));
       
-      Alert.alert('알림', '음악 다운로드를 시작합니다. 다운로드가 완료되면 알림이 표시됩니다.');
+      // ✅ 커스텀 Alert 표시 (이미 다운로드된 파일이 있으면 안내 메시지 포함)
+      showDownloadAlert(!!existingFile, false);
       
       const fileUri = await downloadAudio(
         item.url,
@@ -994,16 +924,44 @@ export default function SearchScreen({ navigation, route }) {
     const downloadProgress = downloading[item.id]?.progress || 0;
     const isDownloading = isDownloadingVideo || isDownloadingAudio;
     
+    // ✅ 해당 영상의 다운로드된 파일 찾기 (제목 기반 매칭)
+    const findDownloadedFile = (isVideo) => {
+      if (!item.title) return null;
+      
+      const sanitizedTitle = sanitizeFileName(item.title || (isVideo ? 'video' : 'audio'), 195);
+      
+      return downloadedFiles.find(file => {
+        const fileBaseName = file.fileName.replace(/\.[^.]+$/, '');
+        const normalizedFileTitle = fileBaseName.replace(/_/g, ' ');
+        const normalizedItemTitle = sanitizedTitle.replace(/_/g, ' ');
+        
+        return normalizedFileTitle === normalizedItemTitle && file.isVideo === isVideo;
+      });
+    };
+    
+    const downloadedVideo = findDownloadedFile(true);
+    const downloadedAudio = findDownloadedFile(false);
+    const hasDownloadedFiles = downloadedVideo || downloadedAudio;
+    
     return (
       <TouchableOpacity 
         style={styles.videoItem}
-        onPress={() => handleOpenYouTube(item)}
-        activeOpacity={0.8}
+        onPress={() => {
+          // ✅ 다운로드 중일 때는 유튜브 이동 비활성화
+          if (!isDownloading) {
+            handleOpenYouTube(item);
+          }
+        }}
+        activeOpacity={isDownloading ? 1 : 0.8}
+        disabled={isDownloading}
       >
         {item.thumbnail && (
           <Image 
             source={{ uri: item.thumbnail }} 
-            style={styles.videoThumbnail}
+            style={[
+              styles.videoThumbnail,
+              isDownloading && styles.videoThumbnailDisabled
+            ]}
             resizeMode="cover"
           />
         )}
@@ -1020,76 +978,227 @@ export default function SearchScreen({ navigation, route }) {
           <Text style={styles.videoTitle} numberOfLines={2}>
             {item.title || 'Video'}
           </Text>
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity 
-              style={styles.favoriteButton}
-              onPress={(e) => {
-                e.stopPropagation(); // 부모 TouchableOpacity의 onPress 방지
-                handleAddFavorite(item);
-              }}
-            >
-              <Ionicons 
-                name={favorites.has(item.id) ? "star" : "star-outline"} 
-                size={20} 
-                color={favorites.has(item.id) ? "#FFD700" : "#999"} 
-              />
-              <Text style={styles.buttonText}>찜하기</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[
-                styles.videoButton,
-                (isDownloading && !isDownloadingVideo) && styles.buttonDisabled
-              ]}
-              onPress={(e) => {
-                e.stopPropagation(); // 부모 TouchableOpacity의 onPress 방지
-                if (!isDownloading) {
-                  handleDownloadVideo(item);
-                }
-              }}
-              disabled={isDownloading}
-            >
-              {isDownloadingVideo ? (
-                <>
-                  <ActivityIndicator size="small" color="#fff" />
-                  <Text style={styles.videoButtonText}>
-                    {Math.round(downloadProgress * 100)}%
-                  </Text>
-                </>
-              ) : (
-                <>
-                  <Ionicons name="videocam" size={20} color="#fff" />
-                  <Text style={styles.videoButtonText}>영상다운</Text>
-                </>
+          
+          {/* ✅ 다운로드된 파일이 있을 때: 재생, 공유, 재저장, 삭제 버튼 표시 */}
+          {!isDownloading && hasDownloadedFiles && (
+            <View style={styles.downloadedActionsContainer}>
+              {/* ✅ 영상 행 */}
+              {downloadedVideo && (
+                <View style={styles.downloadedActionsRowContainer}>
+                  <View style={styles.downloadedActionsRowLabel}>
+                    <Ionicons name="videocam" size={16} color="#FF0000" />
+                    <Text style={styles.downloadedActionsRowLabelText}>영상</Text>
+                  </View>
+                  <View style={styles.downloadedActionsRow}>
+                    <TouchableOpacity
+                      style={styles.downloadedActionButton}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handlePlayFile(downloadedVideo);
+                      }}
+                    >
+                      <Ionicons name="play" size={18} color="#FF0000" />
+                      <Text style={[styles.downloadedActionText, { color: '#FF0000' }]}>재생</Text>
+                    </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={styles.downloadedActionButton}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      shareDownloadedFile(downloadedVideo.fileUri, downloadedVideo.fileName, true);
+                    }}
+                  >
+                    <Ionicons name="share" size={18} color="#2196F3" />
+                    <Text style={[styles.downloadedActionText, { color: '#2196F3' }]}>공유</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={styles.downloadedActionButton}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleResaveFile(downloadedVideo);
+                    }}
+                  >
+                    <Ionicons name="save" size={18} color="#FF9800" />
+                    <Text style={[styles.downloadedActionText, { color: '#FF9800' }]}>재저장</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={[styles.downloadedActionButton, styles.deleteActionButton]}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      Alert.alert(
+                        '파일 삭제',
+                        `"${downloadedVideo.title}" 영상 파일을 삭제하시겠습니까?`,
+                        [
+                          { text: '취소', style: 'cancel' },
+                          {
+                            text: '삭제',
+                            style: 'destructive',
+                            onPress: async () => {
+                              try {
+                                await FileSystem.deleteAsync(downloadedVideo.fileUri, { idempotent: true });
+                                loadDownloadedFiles();
+                                Alert.alert('완료', '영상 파일이 삭제되었습니다.');
+                              } catch (error) {
+                                Alert.alert('오류', '파일 삭제 중 오류가 발생했습니다.');
+                              }
+                            }
+                          }
+                        ]
+                      );
+                    }}
+                  >
+                    <Ionicons name="trash" size={18} color="#f44336" />
+                    <Text style={[styles.downloadedActionText, styles.deleteActionText]}>삭제</Text>
+                  </TouchableOpacity>
+                  </View>
+                </View>
               )}
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[
-                styles.audioButton,
-                (isDownloading && !isDownloadingAudio) && styles.buttonDisabled
-              ]}
-              onPress={(e) => {
-                e.stopPropagation(); // 부모 TouchableOpacity의 onPress 방지
-                if (!isDownloading) {
-                  handleDownloadAudio(item);
-                }
-              }}
-              disabled={isDownloading}
-            >
-              {isDownloadingAudio ? (
-                <>
-                  <ActivityIndicator size="small" color="#fff" />
-                  <Text style={styles.audioButtonText}>
-                    {Math.round(downloadProgress * 100)}%
-                  </Text>
-                </>
-              ) : (
-                <>
-                  <Ionicons name="musical-notes" size={20} color="#fff" />
-                  <Text style={styles.audioButtonText}>음악다운</Text>
-                </>
+              
+              {/* ✅ 음악 행 */}
+              {downloadedAudio && (
+                <View style={styles.downloadedActionsRowContainer}>
+                  <View style={styles.downloadedActionsRowLabel}>
+                    <Ionicons name="musical-notes" size={16} color="#4CAF50" />
+                    <Text style={[styles.downloadedActionsRowLabelText, { color: '#4CAF50' }]}>음악</Text>
+                  </View>
+                  <View style={styles.downloadedActionsRow}>
+                    <TouchableOpacity
+                      style={styles.downloadedActionButton}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handlePlayFile(downloadedAudio);
+                      }}
+                    >
+                      <Ionicons name="play" size={18} color="#4CAF50" />
+                      <Text style={[styles.downloadedActionText, { color: '#4CAF50' }]}>재생</Text>
+                    </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={styles.downloadedActionButton}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      shareDownloadedFile(downloadedAudio.fileUri, downloadedAudio.fileName, false);
+                    }}
+                  >
+                    <Ionicons name="share" size={18} color="#2196F3" />
+                    <Text style={[styles.downloadedActionText, { color: '#2196F3' }]}>공유</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={styles.downloadedActionButton}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleResaveFile(downloadedAudio);
+                    }}
+                  >
+                    <Ionicons name="save" size={18} color="#FF9800" />
+                    <Text style={[styles.downloadedActionText, { color: '#FF9800' }]}>재저장</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={[styles.downloadedActionButton, styles.deleteActionButton]}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      Alert.alert(
+                        '파일 삭제',
+                        `"${downloadedAudio.title}" 음악 파일을 삭제하시겠습니까?`,
+                        [
+                          { text: '취소', style: 'cancel' },
+                          {
+                            text: '삭제',
+                            style: 'destructive',
+                            onPress: async () => {
+                              try {
+                                await FileSystem.deleteAsync(downloadedAudio.fileUri, { idempotent: true });
+                                loadDownloadedFiles();
+                                Alert.alert('완료', '음악 파일이 삭제되었습니다.');
+                              } catch (error) {
+                                Alert.alert('오류', '파일 삭제 중 오류가 발생했습니다.');
+                              }
+                            }
+                          }
+                        ]
+                      );
+                    }}
+                  >
+                    <Ionicons name="trash" size={18} color="#f44336" />
+                    <Text style={[styles.downloadedActionText, styles.deleteActionText]}>삭제</Text>
+                  </TouchableOpacity>
+                  </View>
+                </View>
               )}
-            </TouchableOpacity>
-          </View>
+            </View>
+          )}
+          
+          {/* ✅ 다운로드 중일 때: 진행률 표시 */}
+          {isDownloading && (
+            <View style={styles.downloadingContainer}>
+              {isDownloadingVideo && (
+                <View style={styles.downloadingItem}>
+                  <ActivityIndicator size="small" color="#FF0000" />
+                  <Text style={styles.downloadingText}>
+                    영상 다운로드 중... {Math.round(downloadProgress * 100)}%
+                  </Text>
+                </View>
+              )}
+              {isDownloadingAudio && (
+                <View style={styles.downloadingItem}>
+                  <ActivityIndicator size="small" color="#4CAF50" />
+                  <Text style={styles.downloadingText}>
+                    음악 다운로드 중... {Math.round(downloadProgress * 100)}%
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+          
+          {/* ✅ 다운로드 버튼 컨테이너 - 항상 표시 (다운로드 중이 아닐 때) */}
+          {!isDownloading && (
+            <View style={styles.buttonContainer}>
+              <TouchableOpacity 
+                style={styles.favoriteButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleAddFavorite(item);
+                }}
+              >
+                <Ionicons 
+                  name={favorites.has(item.id) ? "star" : "star-outline"} 
+                  size={20} 
+                  color={favorites.has(item.id) ? "#FFD700" : "#999"} 
+                />
+                <Text style={styles.buttonText}>찜하기</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.videoButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleDownloadVideo(item, downloadedVideo);
+                }}
+              >
+                <Ionicons name="videocam" size={20} color="#fff" />
+                <Text style={styles.videoButtonText}>
+                  {downloadedVideo ? '다시다운' : '영상다운'}
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.audioButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleDownloadAudio(item, downloadedAudio);
+                }}
+              >
+                <Ionicons name="musical-notes" size={20} color="#fff" />
+                <Text style={styles.audioButtonText}>
+                  {downloadedAudio ? '다시다운' : '음악다운'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </TouchableOpacity>
     );
@@ -1198,6 +1307,38 @@ export default function SearchScreen({ navigation, route }) {
           ListFooterComponent={results.length > 0 ? <AdBanner style={{ marginTop: 20 }} /> : null}
         />
       )}
+      
+      {/* ✅ 커스텀 Alert 모달 (빨간 글씨 안내 메시지 포함) */}
+      <Modal
+        visible={customAlert.visible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setCustomAlert({ visible: false, title: '', message: '', subMessage: '', onConfirm: null });
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{customAlert.title}</Text>
+            <Text style={styles.modalMessage}>{customAlert.message}</Text>
+            {customAlert.subMessage && (
+              <Text style={styles.modalSubMessage}>{customAlert.subMessage}</Text>
+            )}
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => {
+                if (customAlert.onConfirm) {
+                  customAlert.onConfirm();
+                } else {
+                  setCustomAlert({ visible: false, title: '', message: '', subMessage: '', onConfirm: null });
+                }
+              }}
+            >
+              <Text style={styles.modalButtonText}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1492,5 +1633,121 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.5,
+  },
+  videoThumbnailDisabled: {
+    opacity: 0.6,
+  },
+  downloadedActionsContainer: {
+    marginTop: 8,
+    gap: 8,
+  },
+  downloadedActionsRowContainer: {
+    marginBottom: 8,
+  },
+  downloadedActionsRowLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+    gap: 4,
+  },
+  downloadedActionsRowLabelText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FF0000',
+  },
+  downloadedActionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  downloadedActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f5f5f5',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  downloadedActionText: {
+    fontSize: 11,
+    color: '#666',
+    marginLeft: 4,
+    fontWeight: '500',
+  },
+  deleteActionButton: {
+    backgroundColor: '#ffebee',
+  },
+  deleteActionText: {
+    color: '#f44336',
+  },
+  downloadingContainer: {
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 6,
+  },
+  downloadingItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  downloadingText: {
+    fontSize: 12,
+    color: '#666',
+    marginLeft: 8,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    width: '80%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 12,
+  },
+  modalMessage: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+    lineHeight: 20,
+  },
+  modalSubMessage: {
+    fontSize: 12,
+    color: '#f44336',
+    marginTop: 8,
+    lineHeight: 18,
+    fontWeight: '500',
+  },
+  modalButton: {
+    backgroundColor: '#FF0000',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  modalButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

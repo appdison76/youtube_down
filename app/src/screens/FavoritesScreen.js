@@ -102,7 +102,7 @@ export default function FavoritesScreen({ navigation }) {
     }
   };
 
-  // 데이터 배열에 광고 삽입 (3개마다)
+  // 데이터 배열에 광고 삽입 (5개마다)
   const getDataWithAds = () => {
     if (favorites.length === 0) {
       return [];
@@ -117,11 +117,11 @@ export default function FavoritesScreen({ navigation }) {
       result.push({ type: 'ad', id: 'ad-bottom' });
     }
     
-    // 나머지 항목들을 3개마다 광고 삽입
+    // 나머지 항목들을 5개마다 광고 삽입
     for (let i = 1; i < favorites.length; i++) {
       result.push(favorites[i]);
-      // 3개마다 광고 삽입 (인덱스 1, 4, 7, ... 이후)
-      if ((i - 1) % 3 === 2) {
+      // 5개마다 광고 삽입 (인덱스 1, 6, 11, ... 이후)
+      if ((i - 1) % 5 === 4) {
         result.push({ type: 'ad', id: `ad-${i}` });
       }
     }

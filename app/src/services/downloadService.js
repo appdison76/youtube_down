@@ -81,95 +81,30 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
     currentFileUri = fileUri; // 파일 URI 저장 (정리용)
     
     console.log('[DownloadService] Generated file name:', fileName);
-    console.log('[DownloadService] Base file name:', baseFileName);
     console.log('[DownloadService] File URI:', fileUri);
     
-    // 예상 파일 크기 가져오기 (서버에서 video-info API로)
+    // ✅ 무조건 기존 파일 삭제하고 새로 받기
+    try {
+      const fileInfo = await FileSystem.getInfoAsync(fileUri);
+      if (fileInfo.exists) {
+        console.log('[DownloadService] Existing file found, deleting before re-download:', fileUri);
+        await FileSystem.deleteAsync(fileUri, { idempotent: true });
+        console.log('[DownloadService] Existing file deleted successfully');
+      }
+    } catch (deleteError) {
+      console.warn('[DownloadService] Could not delete existing file (may not exist):', deleteError);
+    }
+    
+    // 예상 파일 크기 가져오기 (참고용으로만 사용, 검증 로직 없음)
     try {
       const videoInfo = await getVideoInfo(videoUrl);
       expectedSize = videoInfo.filesize || null;
       if (expectedSize) {
         console.log('[DownloadService] Expected file size:', expectedSize, 'bytes (', (expectedSize / (1024 * 1024)).toFixed(2), 'MB)');
-      } else {
-        console.log('[DownloadService] Expected file size not available');
       }
     } catch (error) {
-      console.warn('[DownloadService] Could not get expected file size, will use max downloaded size for validation:', error);
-      // 예상 크기를 얻지 못해도 계속 진행 (최대 다운로드 크기로 검증)
-    }
-    
-    // 이미 다운로드된 파일이 있는지 확인 (내부 저장소만)
-    const fileInfo = await FileSystem.getInfoAsync(fileUri);
-    if (fileInfo.exists && fileInfo.size > 1024 * 1024) { // 1MB 이상
-      console.log('[DownloadService] File already exists:', fileUri);
-      console.log('[DownloadService] Existing file size:', (fileInfo.size / (1024 * 1024)).toFixed(2), 'MB');
-      
-      // 예상 크기와 비교하여 완전한 파일인지 확인
-      if (expectedSize && expectedSize > 0) {
-        const sizeDifference = Math.abs(fileInfo.size - expectedSize) / expectedSize;
-        const sizeRatio = fileInfo.size / expectedSize;
-        
-        console.log('[DownloadService] Size comparison - Actual:', fileInfo.size, 'Expected:', expectedSize);
-        console.log('[DownloadService] Size difference:', (sizeDifference * 100).toFixed(2) + '%');
-        console.log('[DownloadService] Size ratio:', (sizeRatio * 100).toFixed(2) + '%');
-        
-        // 예상 크기의 90% 이상이고 110% 이하면 완전한 파일로 간주 (10% 오차 허용)
-        if (sizeRatio >= 0.9 && sizeRatio <= 1.1 && sizeDifference <= 0.1) {
-          console.log('[DownloadService] File size matches expected size, using existing file');
-          try {
-            const verifyInfo = await FileSystem.getInfoAsync(fileUri);
-            if (verifyInfo.exists && verifyInfo.size > 1024 * 1024) {
-              if (onProgress) {
-                onProgress(1.0); // 100% 완료로 표시
-              }
-              return fileUri;
-            }
-          } catch (verifyError) {
-            console.warn('[DownloadService] File exists but cannot be verified, re-downloading:', verifyError);
-            try {
-              await FileSystem.deleteAsync(fileUri, { idempotent: true });
-            } catch (deleteError) {
-              console.warn('[DownloadService] Could not delete existing file:', deleteError);
-            }
-          }
-        } else {
-          // 예상 크기와 맞지 않으면 부분 파일로 간주 → 삭제하고 재다운로드
-          console.log('[DownloadService] File size does not match expected size, deleting and re-downloading');
-          console.log('[DownloadService] Size ratio:', (sizeRatio * 100).toFixed(2) + '% (expected: 90-110%)');
-          try {
-            await FileSystem.deleteAsync(fileUri, { idempotent: true });
-          } catch (deleteError) {
-            console.warn('[DownloadService] Could not delete mismatched file:', deleteError);
-          }
-        }
-      } else {
-        // 예상 크기를 얻지 못한 경우: 기존 로직 사용 (1MB 이상이면 통과)
-        console.log('[DownloadService] Expected size not available, using size-based check only');
-        try {
-          const verifyInfo = await FileSystem.getInfoAsync(fileUri);
-          if (verifyInfo.exists && verifyInfo.size > 1024 * 1024) {
-            if (onProgress) {
-              onProgress(1.0); // 100% 완료로 표시
-            }
-            return fileUri;
-          }
-        } catch (verifyError) {
-          console.warn('[DownloadService] File exists but cannot be verified, re-downloading:', verifyError);
-          try {
-            await FileSystem.deleteAsync(fileUri, { idempotent: true });
-          } catch (deleteError) {
-            console.warn('[DownloadService] Could not delete existing file:', deleteError);
-          }
-        }
-      }
-    } else if (fileInfo.exists && fileInfo.size <= 1024 * 1024) {
-      // 파일이 있지만 크기가 너무 작으면 불완전한 다운로드로 간주하고 삭제
-      console.log('[DownloadService] File exists but size is too small, deleting and re-downloading:', fileInfo.size, 'bytes');
-      try {
-        await FileSystem.deleteAsync(fileUri, { idempotent: true });
-      } catch (deleteError) {
-        console.warn('[DownloadService] Could not delete incomplete file:', deleteError);
-      }
+      console.log('[DownloadService] Could not get expected file size, proceeding without it:', error.message || error);
+      expectedSize = null;
     }
     
     // 동적으로 API URL 가져오기 (외부 config.json에서)
@@ -326,147 +261,38 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
       
       console.log('[DownloadService] Video downloaded:', result.uri, 'Size:', (fileInfo.size / (1024 * 1024)).toFixed(2), 'MB');
       
-      // ✅ 예상 크기와 비교하여 파일 완전성 검증
-      if (expectedSize && expectedSize > 0) {
-        const sizeDifference = Math.abs(fileInfo.size - expectedSize) / expectedSize;
-        const sizeRatio = fileInfo.size / expectedSize;
-        
-        console.log('[DownloadService] File integrity check - Actual:', fileInfo.size, 'Expected:', expectedSize);
-        console.log('[DownloadService] Size difference:', (sizeDifference * 100).toFixed(2) + '%');
-        console.log('[DownloadService] Size ratio:', (sizeRatio * 100).toFixed(2) + '%');
-        
-        // 예상 크기의 90% 이상이고 110% 이하면 완전한 파일로 간주 (10% 오차 허용)
-        if (sizeRatio >= 0.9 && sizeRatio <= 1.1 && sizeDifference <= 0.1) {
-          console.log('[DownloadService] ✅ File size matches expected size, download complete');
-        } else {
-          console.warn('[DownloadService] ⚠️ File size does not match expected size - may be incomplete');
-          console.warn('[DownloadService] Size ratio:', (sizeRatio * 100).toFixed(2) + '% (expected: 90-110%)');
-          // 크기가 예상과 다르지만, 최대 다운로드 크기와 비교해보기
-          if (maxDownloadedSize > 0 && Math.abs(fileInfo.size - maxDownloadedSize) / maxDownloadedSize < 0.05) {
-            console.log('[DownloadService] File size matches max downloaded size, considering complete');
-          } else {
-            // 크기가 예상과 다르고 최대 다운로드 크기와도 다름 → 불완전 가능성
-            console.warn('[DownloadService] File size mismatch detected, but proceeding (may be incomplete)');
-          }
-        }
-      } else {
-        // 예상 크기를 얻지 못한 경우: 최대 다운로드 크기와 비교
-        if (maxDownloadedSize > 0) {
-          const sizeDifference = Math.abs(fileInfo.size - maxDownloadedSize) / maxDownloadedSize;
-          console.log('[DownloadService] Expected size not available, comparing with max downloaded size');
-          console.log('[DownloadService] Actual:', fileInfo.size, 'Max downloaded:', maxDownloadedSize);
-          console.log('[DownloadService] Size difference:', (sizeDifference * 100).toFixed(2) + '%');
-          
-          if (sizeDifference > 0.05) { // 5% 이상 차이나면 경고
-            console.warn('[DownloadService] ⚠️ File size differs from max downloaded size by more than 5%');
-          }
-        }
-      }
-      
-      // 다운로드 성공 시 currentFileUri를 null로 설정 (정리하지 않도록)
       currentFileUri = null;
       
       if (onProgress) {
-        onProgress(1.0); // 완료
+        onProgress(1.0);
       }
       return result.uri;
     } else {
-      // 다운로드가 완료되지 않은 경우: 파일 상태 확인 후 삭제 여부 결정
-      if (currentFileUri) {
-        try {
-          const fileInfo = await FileSystem.getInfoAsync(currentFileUri);
-          if (fileInfo.exists) {
-            console.log('[DownloadService] Download not completed, checking file integrity...');
-            console.log('[DownloadService] File size:', fileInfo.size, 'bytes (', (fileInfo.size / (1024 * 1024)).toFixed(2), 'MB)');
-            
-            // ✅ 예상 크기나 최대 다운로드 크기와 비교하여 완전성 확인
-            let isComplete = false;
-            if (expectedSize && expectedSize > 0) {
-              const sizeRatio = fileInfo.size / expectedSize;
-              if (sizeRatio >= 0.9 && sizeRatio <= 1.1) {
-                console.log('[DownloadService] ✅ File size matches expected size, download may be complete');
-                isComplete = true;
-              }
-            } else if (maxDownloadedSize > 0) {
-              const sizeDifference = Math.abs(fileInfo.size - maxDownloadedSize) / maxDownloadedSize;
-              if (sizeDifference < 0.05) { // 5% 이내 차이면 완전으로 간주
-                console.log('[DownloadService] ✅ File size matches max downloaded size, download may be complete');
-                isComplete = true;
-              }
-            }
-            
-            // 완전하지 않으면 삭제
-            if (!isComplete) {
-              console.log('[DownloadService] Deleting incomplete file (download not completed):', currentFileUri);
-              await FileSystem.deleteAsync(currentFileUri, { idempotent: true });
-            } else {
-              console.log('[DownloadService] File appears complete, keeping it');
-              // 완전한 파일로 확인되면 반환
-              if (onProgress) {
-                onProgress(1.0);
-              }
-              return currentFileUri;
-            }
-          }
-        } catch (deleteError) {
-          console.warn('[DownloadService] Could not check/delete incomplete file:', deleteError);
-        }
-      }
       throw new Error('다운로드가 완료되지 않았습니다.');
     }
   } catch (error) {
     console.error('[DownloadService] Error downloading video:', error);
     
-    // 에러 발생 시 interval 정리 (이중 보장)
+    // interval 정리
     if (progressInterval) {
       clearInterval(progressInterval);
       progressInterval = null;
     }
     
-    // 에러 발생 시 파일 상태 확인 후 삭제 여부 결정
+    // ✅ 에러 발생 시 현재 다운로드 중인 파일 삭제 (불완전한 파일)
     if (currentFileUri) {
       try {
         const fileInfo = await FileSystem.getInfoAsync(currentFileUri);
         if (fileInfo.exists) {
-          console.log('[DownloadService] Error occurred, checking file integrity...');
-          console.log('[DownloadService] File size:', fileInfo.size, 'bytes (', (fileInfo.size / (1024 * 1024)).toFixed(2), 'MB)');
-          
-          // ✅ 예상 크기나 최대 다운로드 크기와 비교하여 완전성 확인
-          let isComplete = false;
-          if (expectedSize && expectedSize > 0) {
-            const sizeRatio = fileInfo.size / expectedSize;
-            if (sizeRatio >= 0.9 && sizeRatio <= 1.1) {
-              console.log('[DownloadService] ✅ File size matches expected size despite error, download may be complete');
-              isComplete = true;
-            }
-          } else if (maxDownloadedSize > 0) {
-            const sizeDifference = Math.abs(fileInfo.size - maxDownloadedSize) / maxDownloadedSize;
-            if (sizeDifference < 0.05) { // 5% 이내 차이면 완전으로 간주
-              console.log('[DownloadService] ✅ File size matches max downloaded size despite error, download may be complete');
-              isComplete = true;
-            }
-          }
-          
-          // 완전하지 않으면 삭제 (재시도하기 전에)
-          if (!isComplete) {
-            console.log('[DownloadService] Deleting incomplete file due to error:', currentFileUri);
-            await FileSystem.deleteAsync(currentFileUri, { idempotent: true });
-            console.log('[DownloadService] Incomplete file deleted successfully');
-          } else {
-            console.log('[DownloadService] File appears complete despite error, keeping it');
-            // 완전한 파일로 확인되면 에러를 던지지 않고 반환
-            if (onProgress) {
-              onProgress(1.0);
-            }
-            return currentFileUri;
-          }
+          console.log('[DownloadService] Deleting incomplete file due to error:', currentFileUri);
+          await FileSystem.deleteAsync(currentFileUri, { idempotent: true });
         }
       } catch (deleteError) {
-        console.warn('[DownloadService] Could not check/delete incomplete file:', deleteError);
+        console.warn('[DownloadService] Could not delete incomplete file:', deleteError);
       }
     }
     
-    // 네트워크 오류나 연결 끊김 오류인 경우 재시도
+    // 네트워크 오류 재시도 로직
     const isRetryableError = 
       error.message?.includes('connection') ||
       error.message?.includes('abort') ||
@@ -476,29 +302,19 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
       error.message?.includes('Software caused connection abort');
     
     if (isRetryableError && retryCount < MAX_RETRIES) {
-      console.log(`[DownloadService] Retryable error detected, retrying in ${RETRY_DELAY}ms... (${retryCount + 1}/${MAX_RETRIES})`);
-      
-      // 재시도 전 대기
+      console.log(`[DownloadService] Retryable error detected, retrying... (${retryCount + 1}/${MAX_RETRIES})`);
       await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-      
-      // 재시도 (진행률은 그대로 유지, currentFileUri는 null로 초기화)
       currentFileUri = null;
       return downloadVideo(videoUrl, videoTitle, onProgress, retryCount + 1);
     }
     
-    // 재시도 불가능하거나 최대 재시도 횟수 초과
     throw error;
   } finally {
-    // finally 블록에서 interval 정리 보장
+    // interval 정리만
     if (progressInterval) {
       clearInterval(progressInterval);
       progressInterval = null;
     }
-    
-    // finally 블록에서도 불완전한 파일 정리 시도 (에러가 발생했을 가능성)
-    // 단, 성공한 경우에는 currentFileUri가 유효한 파일 URI이므로 삭제하지 않음
-    // 하지만 여기서는 파일이 성공적으로 다운로드되었는지 확인할 수 없으므로
-    // catch 블록에서만 삭제하도록 함 (성공한 경우 currentFileUri를 null로 설정할 수 없음)
   }
 };
 
@@ -525,95 +341,30 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
     currentFileUri = fileUri; // 파일 URI 저장 (정리용)
     
     console.log('[DownloadService] Generated file name:', fileName);
-    console.log('[DownloadService] Base file name:', baseFileName);
     console.log('[DownloadService] File URI:', fileUri);
     
-    // 예상 파일 크기 가져오기 (서버에서 video-info API로)
+    // ✅ 무조건 기존 파일 삭제하고 새로 받기
+    try {
+      const fileInfo = await FileSystem.getInfoAsync(fileUri);
+      if (fileInfo.exists) {
+        console.log('[DownloadService] Existing file found, deleting before re-download:', fileUri);
+        await FileSystem.deleteAsync(fileUri, { idempotent: true });
+        console.log('[DownloadService] Existing file deleted successfully');
+      }
+    } catch (deleteError) {
+      console.warn('[DownloadService] Could not delete existing file (may not exist):', deleteError);
+    }
+    
+    // 예상 파일 크기 가져오기 (참고용으로만 사용, 검증 로직 없음)
     try {
       const videoInfo = await getVideoInfo(videoUrl);
       expectedSize = videoInfo.filesize || null;
       if (expectedSize) {
         console.log('[DownloadService] Expected file size:', expectedSize, 'bytes (', (expectedSize / (1024 * 1024)).toFixed(2), 'MB)');
-      } else {
-        console.log('[DownloadService] Expected file size not available');
       }
     } catch (error) {
-      console.warn('[DownloadService] Could not get expected file size, will use max downloaded size for validation:', error);
-      // 예상 크기를 얻지 못해도 계속 진행 (최대 다운로드 크기로 검증)
-    }
-    
-    // 이미 다운로드된 파일이 있는지 확인 (내부 저장소만)
-    const fileInfo = await FileSystem.getInfoAsync(fileUri);
-    if (fileInfo.exists && fileInfo.size > 100 * 1024) { // 100KB 이상
-      console.log('[DownloadService] File already exists:', fileUri);
-      console.log('[DownloadService] Existing file size:', (fileInfo.size / (1024 * 1024)).toFixed(2), 'MB');
-      
-      // 예상 크기와 비교하여 완전한 파일인지 확인
-      if (expectedSize && expectedSize > 0) {
-        const sizeDifference = Math.abs(fileInfo.size - expectedSize) / expectedSize;
-        const sizeRatio = fileInfo.size / expectedSize;
-        
-        console.log('[DownloadService] Size comparison - Actual:', fileInfo.size, 'Expected:', expectedSize);
-        console.log('[DownloadService] Size difference:', (sizeDifference * 100).toFixed(2) + '%');
-        console.log('[DownloadService] Size ratio:', (sizeRatio * 100).toFixed(2) + '%');
-        
-        // 예상 크기의 90% 이상이고 110% 이하면 완전한 파일로 간주 (10% 오차 허용)
-        if (sizeRatio >= 0.9 && sizeRatio <= 1.1 && sizeDifference <= 0.1) {
-          console.log('[DownloadService] File size matches expected size, using existing file');
-          try {
-            const verifyInfo = await FileSystem.getInfoAsync(fileUri);
-            if (verifyInfo.exists && verifyInfo.size > 100 * 1024) {
-              if (onProgress) {
-                onProgress(1.0); // 100% 완료로 표시
-              }
-              return fileUri;
-            }
-          } catch (verifyError) {
-            console.warn('[DownloadService] File exists but cannot be verified, re-downloading:', verifyError);
-            try {
-              await FileSystem.deleteAsync(fileUri, { idempotent: true });
-            } catch (deleteError) {
-              console.warn('[DownloadService] Could not delete existing file:', deleteError);
-            }
-          }
-        } else {
-          // 예상 크기와 맞지 않으면 부분 파일로 간주 → 삭제하고 재다운로드
-          console.log('[DownloadService] File size does not match expected size, deleting and re-downloading');
-          console.log('[DownloadService] Size ratio:', (sizeRatio * 100).toFixed(2) + '% (expected: 90-110%)');
-          try {
-            await FileSystem.deleteAsync(fileUri, { idempotent: true });
-          } catch (deleteError) {
-            console.warn('[DownloadService] Could not delete mismatched file:', deleteError);
-          }
-        }
-      } else {
-        // 예상 크기를 얻지 못한 경우: 기존 로직 사용 (100KB 이상이면 통과)
-        console.log('[DownloadService] Expected size not available, using size-based check only');
-        try {
-          const verifyInfo = await FileSystem.getInfoAsync(fileUri);
-          if (verifyInfo.exists && verifyInfo.size > 100 * 1024) {
-            if (onProgress) {
-              onProgress(1.0); // 100% 완료로 표시
-            }
-            return fileUri;
-          }
-        } catch (verifyError) {
-          console.warn('[DownloadService] File exists but cannot be verified, re-downloading:', verifyError);
-          try {
-            await FileSystem.deleteAsync(fileUri, { idempotent: true });
-          } catch (deleteError) {
-            console.warn('[DownloadService] Could not delete existing file:', deleteError);
-          }
-        }
-      }
-    } else if (fileInfo.exists && fileInfo.size <= 100 * 1024) {
-      // 파일이 있지만 크기가 너무 작으면 불완전한 다운로드로 간주하고 삭제
-      console.log('[DownloadService] File exists but size is too small, deleting and re-downloading:', fileInfo.size, 'bytes');
-      try {
-        await FileSystem.deleteAsync(fileUri, { idempotent: true });
-      } catch (deleteError) {
-        console.warn('[DownloadService] Could not delete incomplete file:', deleteError);
-      }
+      console.log('[DownloadService] Could not get expected file size, proceeding without it:', error.message || error);
+      expectedSize = null;
     }
     
     // 동적으로 API URL 가져오기 (외부 config.json에서)
@@ -768,147 +519,38 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
       
       console.log('[DownloadService] Audio downloaded:', result.uri, 'Size:', (fileInfo.size / (1024 * 1024)).toFixed(2), 'MB');
       
-      // ✅ 예상 크기와 비교하여 파일 완전성 검증
-      if (expectedSize && expectedSize > 0) {
-        const sizeDifference = Math.abs(fileInfo.size - expectedSize) / expectedSize;
-        const sizeRatio = fileInfo.size / expectedSize;
-        
-        console.log('[DownloadService] File integrity check - Actual:', fileInfo.size, 'Expected:', expectedSize);
-        console.log('[DownloadService] Size difference:', (sizeDifference * 100).toFixed(2) + '%');
-        console.log('[DownloadService] Size ratio:', (sizeRatio * 100).toFixed(2) + '%');
-        
-        // 예상 크기의 90% 이상이고 110% 이하면 완전한 파일로 간주 (10% 오차 허용)
-        if (sizeRatio >= 0.9 && sizeRatio <= 1.1 && sizeDifference <= 0.1) {
-          console.log('[DownloadService] ✅ File size matches expected size, download complete');
-        } else {
-          console.warn('[DownloadService] ⚠️ File size does not match expected size - may be incomplete');
-          console.warn('[DownloadService] Size ratio:', (sizeRatio * 100).toFixed(2) + '% (expected: 90-110%)');
-          // 크기가 예상과 다르지만, 최대 다운로드 크기와 비교해보기
-          if (maxDownloadedSize > 0 && Math.abs(fileInfo.size - maxDownloadedSize) / maxDownloadedSize < 0.05) {
-            console.log('[DownloadService] File size matches max downloaded size, considering complete');
-          } else {
-            // 크기가 예상과 다르고 최대 다운로드 크기와도 다름 → 불완전 가능성
-            console.warn('[DownloadService] File size mismatch detected, but proceeding (may be incomplete)');
-          }
-        }
-      } else {
-        // 예상 크기를 얻지 못한 경우: 최대 다운로드 크기와 비교
-        if (maxDownloadedSize > 0) {
-          const sizeDifference = Math.abs(fileInfo.size - maxDownloadedSize) / maxDownloadedSize;
-          console.log('[DownloadService] Expected size not available, comparing with max downloaded size');
-          console.log('[DownloadService] Actual:', fileInfo.size, 'Max downloaded:', maxDownloadedSize);
-          console.log('[DownloadService] Size difference:', (sizeDifference * 100).toFixed(2) + '%');
-          
-          if (sizeDifference > 0.05) { // 5% 이상 차이나면 경고
-            console.warn('[DownloadService] ⚠️ File size differs from max downloaded size by more than 5%');
-          }
-        }
-      }
-      
-      // 다운로드 성공 시 currentFileUri를 null로 설정 (정리하지 않도록)
       currentFileUri = null;
       
       if (onProgress) {
-        onProgress(1.0); // 완료
+        onProgress(1.0);
       }
       return result.uri;
     } else {
-      // 다운로드가 완료되지 않은 경우: 파일 상태 확인 후 삭제 여부 결정
-      if (currentFileUri) {
-        try {
-          const fileInfo = await FileSystem.getInfoAsync(currentFileUri);
-          if (fileInfo.exists) {
-            console.log('[DownloadService] Download not completed, checking file integrity...');
-            console.log('[DownloadService] File size:', fileInfo.size, 'bytes (', (fileInfo.size / (1024 * 1024)).toFixed(2), 'MB)');
-            
-            // ✅ 예상 크기나 최대 다운로드 크기와 비교하여 완전성 확인
-            let isComplete = false;
-            if (expectedSize && expectedSize > 0) {
-              const sizeRatio = fileInfo.size / expectedSize;
-              if (sizeRatio >= 0.9 && sizeRatio <= 1.1) {
-                console.log('[DownloadService] ✅ File size matches expected size, download may be complete');
-                isComplete = true;
-              }
-            } else if (maxDownloadedSize > 0) {
-              const sizeDifference = Math.abs(fileInfo.size - maxDownloadedSize) / maxDownloadedSize;
-              if (sizeDifference < 0.05) { // 5% 이내 차이면 완전으로 간주
-                console.log('[DownloadService] ✅ File size matches max downloaded size, download may be complete');
-                isComplete = true;
-              }
-            }
-            
-            // 완전하지 않으면 삭제
-            if (!isComplete) {
-              console.log('[DownloadService] Deleting incomplete file (download not completed):', currentFileUri);
-              await FileSystem.deleteAsync(currentFileUri, { idempotent: true });
-            } else {
-              console.log('[DownloadService] File appears complete, keeping it');
-              // 완전한 파일로 확인되면 반환
-              if (onProgress) {
-                onProgress(1.0);
-              }
-              return currentFileUri;
-            }
-          }
-        } catch (deleteError) {
-          console.warn('[DownloadService] Could not check/delete incomplete file:', deleteError);
-        }
-      }
       throw new Error('다운로드가 완료되지 않았습니다.');
     }
   } catch (error) {
     console.error('[DownloadService] Error downloading audio:', error);
     
-    // 에러 발생 시 interval 정리 (이중 보장)
+    // interval 정리
     if (progressInterval) {
       clearInterval(progressInterval);
       progressInterval = null;
     }
     
-    // 에러 발생 시 파일 상태 확인 후 삭제 여부 결정
+    // ✅ 에러 발생 시 현재 다운로드 중인 파일 삭제 (불완전한 파일)
     if (currentFileUri) {
       try {
         const fileInfo = await FileSystem.getInfoAsync(currentFileUri);
         if (fileInfo.exists) {
-          console.log('[DownloadService] Error occurred, checking file integrity...');
-          console.log('[DownloadService] File size:', fileInfo.size, 'bytes (', (fileInfo.size / (1024 * 1024)).toFixed(2), 'MB)');
-          
-          // ✅ 예상 크기나 최대 다운로드 크기와 비교하여 완전성 확인
-          let isComplete = false;
-          if (expectedSize && expectedSize > 0) {
-            const sizeRatio = fileInfo.size / expectedSize;
-            if (sizeRatio >= 0.9 && sizeRatio <= 1.1) {
-              console.log('[DownloadService] ✅ File size matches expected size despite error, download may be complete');
-              isComplete = true;
-            }
-          } else if (maxDownloadedSize > 0) {
-            const sizeDifference = Math.abs(fileInfo.size - maxDownloadedSize) / maxDownloadedSize;
-            if (sizeDifference < 0.05) { // 5% 이내 차이면 완전으로 간주
-              console.log('[DownloadService] ✅ File size matches max downloaded size despite error, download may be complete');
-              isComplete = true;
-            }
-          }
-          
-          // 완전하지 않으면 삭제 (재시도하기 전에)
-          if (!isComplete) {
-            console.log('[DownloadService] Deleting incomplete file due to error:', currentFileUri);
-            await FileSystem.deleteAsync(currentFileUri, { idempotent: true });
-            console.log('[DownloadService] Incomplete file deleted successfully');
-          } else {
-            console.log('[DownloadService] File appears complete despite error, keeping it');
-            // 완전한 파일로 확인되면 에러를 던지지 않고 반환
-            if (onProgress) {
-              onProgress(1.0);
-            }
-            return currentFileUri;
-          }
+          console.log('[DownloadService] Deleting incomplete file due to error:', currentFileUri);
+          await FileSystem.deleteAsync(currentFileUri, { idempotent: true });
         }
       } catch (deleteError) {
-        console.warn('[DownloadService] Could not check/delete incomplete file:', deleteError);
+        console.warn('[DownloadService] Could not delete incomplete file:', deleteError);
       }
     }
     
-    // 네트워크 오류나 연결 끊김 오류인 경우 재시도
+    // 네트워크 오류 재시도 로직
     const isRetryableError = 
       error.message?.includes('connection') ||
       error.message?.includes('abort') ||
@@ -918,27 +560,19 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
       error.message?.includes('Software caused connection abort');
     
     if (isRetryableError && retryCount < MAX_RETRIES) {
-      console.log(`[DownloadService] Retryable error detected, retrying in ${RETRY_DELAY}ms... (${retryCount + 1}/${MAX_RETRIES})`);
-      
-      // 재시도 전 대기
+      console.log(`[DownloadService] Retryable error detected, retrying... (${retryCount + 1}/${MAX_RETRIES})`);
       await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-      
-      // 재시도 (진행률은 그대로 유지, currentFileUri는 null로 초기화)
       currentFileUri = null;
       return downloadAudio(videoUrl, videoTitle, onProgress, retryCount + 1);
     }
     
-    // 재시도 불가능하거나 최대 재시도 횟수 초과
     throw error;
   } finally {
-    // finally 블록에서 interval 정리 보장
+    // interval 정리만
     if (progressInterval) {
       clearInterval(progressInterval);
       progressInterval = null;
     }
-    
-    // finally 블록에서도 불완전한 파일 정리 시도 (에러가 발생했을 가능성)
-    // 단, 성공한 경우에는 currentFileUri가 null이므로 삭제하지 않음
   }
 };
 

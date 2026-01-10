@@ -28,6 +28,7 @@ export default function DownloadsScreen({ navigation }) {
   const [filteredFiles, setFilteredFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [fileTypeFilter, setFileTypeFilter] = useState('all'); // ✅ 'all' | 'video' | 'audio'
 
   // 다운로드한 파일 목록 로드
   const loadDownloadedFiles = useCallback(async () => {
@@ -35,7 +36,6 @@ export default function DownloadsScreen({ navigation }) {
       setLoading(true);
       const files = await getDownloadedFiles();
       setDownloadedFiles(files);
-      setFilteredFiles(files);
       console.log('[DownloadsScreen] Loaded downloaded files:', files.length);
     } catch (error) {
       console.error('[DownloadsScreen] Error loading downloaded files:', error);
@@ -45,19 +45,29 @@ export default function DownloadsScreen({ navigation }) {
     }
   }, []);
 
-  // 검색 필터링
+  // ✅ 검색 및 타입 필터링
   useEffect(() => {
-    if (!searchQuery.trim()) {
-      setFilteredFiles(downloadedFiles);
-    } else {
+    let filtered = [...downloadedFiles];
+    
+    // 파일 타입 필터링
+    if (fileTypeFilter === 'video') {
+      filtered = filtered.filter(file => file.isVideo);
+    } else if (fileTypeFilter === 'audio') {
+      filtered = filtered.filter(file => !file.isVideo);
+    }
+    // fileTypeFilter === 'all'이면 모든 파일 표시
+    
+    // 검색 필터링
+    if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      const filtered = downloadedFiles.filter(file =>
+      filtered = filtered.filter(file =>
         file.title.toLowerCase().includes(query) ||
         file.fileName.toLowerCase().includes(query)
       );
-      setFilteredFiles(filtered);
     }
-  }, [searchQuery, downloadedFiles]);
+    
+    setFilteredFiles(filtered);
+  }, [searchQuery, downloadedFiles, fileTypeFilter]);
 
   // 화면 포커스 시 파일 목록 새로고침
   // 단, 외부 앱에서 돌아온 직후에는 새로고침하지 않음 (의도치 않은 네비게이션 방지)
@@ -139,6 +149,44 @@ export default function DownloadsScreen({ navigation }) {
     }
   };
 
+  // 다운로드한 파일 삭제
+  const handleDeleteFile = async (file) => {
+    Alert.alert(
+      '파일 삭제',
+      `"${file.title}" 파일을 삭제하시겠습니까?\n\n삭제 후에는 다시 다운로드해야 합니다.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // 파일 존재 확인
+              const fileInfo = await FileSystem.getInfoAsync(file.fileUri);
+              if (fileInfo.exists) {
+                // 내부 저장소에서 파일 삭제
+                await FileSystem.deleteAsync(file.fileUri, { idempotent: true });
+                console.log('[DownloadsScreen] File deleted:', file.fileName);
+                
+                // 파일 목록 새로고침
+                loadDownloadedFiles();
+                
+                Alert.alert('완료', '파일이 삭제되었습니다.');
+              } else {
+                Alert.alert('알림', '파일을 찾을 수 없습니다.');
+                // 목록 새로고침 (이미 삭제된 파일일 수 있음)
+                loadDownloadedFiles();
+              }
+            } catch (error) {
+              console.error('[DownloadsScreen] Error deleting file:', error);
+              Alert.alert('오류', error.message || '파일 삭제 중 오류가 발생했습니다.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   // 데이터 배열에 광고 삽입 (3개마다)
   const getDataWithAds = () => {
     if (filteredFiles.length === 0) {
@@ -215,6 +263,13 @@ export default function DownloadsScreen({ navigation }) {
             <Ionicons name="save" size={24} color="#FF9800" />
             <Text style={styles.actionButtonText}>재저장</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.deleteButton]}
+            onPress={() => handleDeleteFile(item)}
+          >
+            <Ionicons name="trash" size={24} color="#f44336" />
+            <Text style={[styles.actionButtonText, styles.deleteButtonText]}>삭제</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -268,6 +323,64 @@ export default function DownloadsScreen({ navigation }) {
         </View>
       </View>
 
+      {/* ✅ 파일 타입 필터 버튼 */}
+      <View style={styles.filterSection}>
+        <TouchableOpacity
+          style={[
+            styles.filterButton,
+            fileTypeFilter === 'all' && styles.filterButtonActive
+          ]}
+          onPress={() => setFileTypeFilter('all')}
+        >
+          <Text style={[
+            styles.filterButtonText,
+            fileTypeFilter === 'all' && styles.filterButtonTextActive
+          ]}>
+            전체
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.filterButton,
+            fileTypeFilter === 'video' && styles.filterButtonActive
+          ]}
+          onPress={() => setFileTypeFilter('video')}
+        >
+          <Ionicons 
+            name="videocam" 
+            size={16} 
+            color={fileTypeFilter === 'video' ? '#fff' : '#666'} 
+            style={{ marginRight: 4 }}
+          />
+          <Text style={[
+            styles.filterButtonText,
+            fileTypeFilter === 'video' && styles.filterButtonTextActive
+          ]}>
+            영상
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.filterButton,
+            fileTypeFilter === 'audio' && styles.filterButtonActive
+          ]}
+          onPress={() => setFileTypeFilter('audio')}
+        >
+          <Ionicons 
+            name="musical-notes" 
+            size={16} 
+            color={fileTypeFilter === 'audio' ? '#fff' : '#666'} 
+            style={{ marginRight: 4 }}
+          />
+          <Text style={[
+            styles.filterButtonText,
+            fileTypeFilter === 'audio' && styles.filterButtonTextActive
+          ]}>
+            음악
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       {loading ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#FF0000" />
@@ -282,10 +395,20 @@ export default function DownloadsScreen({ navigation }) {
             <View style={styles.centerContainer}>
               <Ionicons name="folder-outline" size={64} color="#ddd" />
               <Text style={styles.emptyText}>
-                {searchQuery ? '검색 결과가 없습니다' : '다운로드한 파일이 없습니다'}
+                {searchQuery 
+                  ? '검색 결과가 없습니다' 
+                  : fileTypeFilter === 'video' 
+                    ? '다운로드한 영상이 없습니다'
+                    : fileTypeFilter === 'audio'
+                      ? '다운로드한 음악이 없습니다'
+                      : '다운로드한 파일이 없습니다'
+                }
               </Text>
               <Text style={styles.emptySubText}>
-                {searchQuery ? '다른 검색어를 시도해보세요' : 'YouTube 영상을 다운로드해보세요'}
+                {searchQuery 
+                  ? '다른 검색어를 시도해보세요' 
+                  : 'YouTube 영상을 다운로드해보세요'
+                }
               </Text>
             </View>
           }
@@ -333,9 +456,43 @@ const styles = StyleSheet.create({
   },
   searchSection: {
     padding: 16,
+    paddingBottom: 12,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
+  },
+  filterSection: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    gap: 8,
+  },
+  filterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f5f5f5',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    flex: 1,
+  },
+  filterButtonActive: {
+    backgroundColor: '#FF0000',
+    borderColor: '#FF0000',
+  },
+  filterButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  filterButtonTextActive: {
+    color: '#fff',
   },
   searchContainer: {
     flexDirection: 'row',
@@ -439,6 +596,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     marginTop: 4,
+  },
+  deleteButton: {
+    backgroundColor: '#ffebee',
+  },
+  deleteButtonText: {
+    color: '#f44336',
+    fontWeight: '500',
   },
 });
 
