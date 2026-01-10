@@ -2,11 +2,12 @@
 # Python + Node.js 환경 설정
 
 [phases.setup]
-nixPkgs = ["python311", "pip", "nodejs-18_x"]
+nixPkgs = ["python311", "nodejs-18_x"]
 
 [phases.install]
 cmds = [
-  "pip install yt-dlp",
+  "python3 -m pip install --upgrade pip",
+  "python3 -m pip install yt-dlp",
   "npm install"
 ]
 

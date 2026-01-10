@@ -996,16 +996,16 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     marginRight: 12,
-    width: 52,
-    height: 52,
+    width: 44,
+    height: 44,
     overflow: 'hidden',
-    borderRadius: 12,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
   },
   logoImage: {
-    width: 68,
-    height: 68,
+    width: 56,
+    height: 56,
   },
   headerTitle: {
     color: '#fff',
