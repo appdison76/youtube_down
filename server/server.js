@@ -23,16 +23,21 @@ if (!fs.existsSync(DOWNLOAD_DIR)) {
 // YouTube 영상 정보 가져오기
 app.post('/api/video-info', async (req, res) => {
   try {
+    console.log('[Server] ===== Video info request received =====');
+    console.log('[Server] Request body:', req.body);
+    console.log('[Server] Headers:', req.headers);
+    
     const { url } = req.body;
     
     if (!url) {
+      console.error('[Server] ❌ URL missing in request body');
       return res.status(400).json({ error: 'URL이 필요합니다.' });
     }
 
     console.log('[Server] Getting video info for:', url);
     
     // yt-dlp를 사용하여 영상 정보 가져오기
-    const { stdout } = await execAsync(`python -m yt_dlp --dump-json --no-warnings "${url}"`);
+    const { stdout } = await execAsync(`python3 -m yt_dlp --dump-json --no-warnings "${url}"`);
     const info = JSON.parse(stdout);
     
     res.json({
@@ -70,7 +75,7 @@ app.get('/api/download/video', async (req, res) => {
     // spawn을 사용하여 더 세밀한 제어 가능
     // 비디오와 오디오가 합쳐진 파일을 다운로드 (best[ext=mp4]는 이미 합쳐진 비디오)
     // stdout으로 출력할 때는 합치기가 어려우므로, 이미 합쳐진 비디오를 우선 선택
-    const ytdlpProcess = spawn('python', [
+    const ytdlpProcess = spawn('python3', [
       '-m', 'yt_dlp',
       '-f', 'best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best',
       '--merge-output-format', 'mp4',
@@ -191,9 +196,14 @@ app.get('/api/download/video', async (req, res) => {
 // 오디오 다운로드 (스트리밍)
 app.get('/api/download/audio', async (req, res) => {
   try {
+    console.log('[Server] ===== Audio download request received =====');
+    console.log('[Server] Query params:', req.query);
+    console.log('[Server] Full URL:', req.url);
+    
     const { url, quality } = req.query;
     
     if (!url) {
+      console.error('[Server] ❌ URL missing in query params');
       return res.status(400).json({ error: 'URL이 필요합니다.' });
     }
 
@@ -207,7 +217,7 @@ app.get('/api/download/audio', async (req, res) => {
 
     // yt-dlp를 사용하여 오디오 다운로드 및 스트리밍
     // spawn을 사용하여 더 세밀한 제어 가능
-    const ytdlpProcess = spawn('python', [
+    const ytdlpProcess = spawn('python3', [
       '-m', 'yt_dlp',
       '-f', 'bestaudio[ext=m4a]/bestaudio',
       '--no-warnings',
