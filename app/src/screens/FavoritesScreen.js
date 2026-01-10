@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { getFavorites, removeFavorite, initDatabase } from '../services/database';
+import { deleteThumbnailCacheIfUnused } from '../services/downloadService';
 import AdBanner from '../components/AdBanner';
 
 export default function FavoritesScreen({ navigation }) {
@@ -58,6 +59,9 @@ export default function FavoritesScreen({ navigation }) {
       await removeFavorite(item.video_id);
       setFavorites(prev => prev.filter(fav => fav.video_id !== item.video_id));
       console.log('[FavoritesScreen] Favorite removed:', item.video_id);
+      
+      // ✅ 썸네일 캐시 스마트 삭제 (다운로드 파일이 없을 때만 삭제)
+      await deleteThumbnailCacheIfUnused(item.video_id);
     } catch (error) {
       console.error('[FavoritesScreen] Error removing favorite:', error);
       Alert.alert('오류', '즐겨찾기 삭제 중 오류가 발생했습니다.');

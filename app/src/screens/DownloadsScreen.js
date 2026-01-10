@@ -19,9 +19,30 @@ import { Ionicons } from '@expo/vector-icons';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as FileSystem from 'expo-file-system/legacy';
 import AdBanner from '../components/AdBanner';
-import { getDownloadedFiles } from '../services/downloadService';
+import { getDownloadedFiles, deleteFileWithMetadata, getThumbnailCachePath } from '../services/downloadService';
 import { shareDownloadedFile, saveFileToDevice } from '../services/downloadService';
 import MediaStoreModule from '../modules/MediaStoreModule';
+
+// 썸네일 이미지 컴포넌트 (YouTube URL 실패 시 캐시로 폴백)
+const ThumbnailImage = ({ sourceUri, cacheUri, style }) => {
+  const [imageUri, setImageUri] = React.useState(sourceUri || cacheUri);
+  
+  const handleError = () => {
+    // YouTube URL 로드 실패 시 캐시로 폴백
+    if (imageUri !== cacheUri && cacheUri) {
+      setImageUri(cacheUri);
+    }
+  };
+  
+  return (
+    <Image
+      source={{ uri: imageUri }}
+      style={style}
+      resizeMode="cover"
+      onError={handleError}
+    />
+  );
+};
 
 export default function DownloadsScreen({ navigation }) {
   const [downloadedFiles, setDownloadedFiles] = useState([]);
@@ -29,6 +50,7 @@ export default function DownloadsScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [fileTypeFilter, setFileTypeFilter] = useState('all'); // ✅ 'all' | 'video' | 'audio'
+  const [thumbnailCachePaths, setThumbnailCachePaths] = useState({}); // videoId -> cache path
 
   // 다운로드한 파일 목록 로드
   const loadDownloadedFiles = useCallback(async () => {
@@ -37,6 +59,18 @@ export default function DownloadsScreen({ navigation }) {
       const files = await getDownloadedFiles();
       setDownloadedFiles(files);
       console.log('[DownloadsScreen] Loaded downloaded files:', files.length);
+      
+      // ✅ 썸네일 캐시 경로 로드
+      const cachePaths = {};
+      for (const file of files) {
+        if (file.videoId) {
+          const cachePath = await getThumbnailCachePath(file.videoId);
+          if (cachePath) {
+            cachePaths[file.videoId] = cachePath;
+          }
+        }
+      }
+      setThumbnailCachePaths(cachePaths);
     } catch (error) {
       console.error('[DownloadsScreen] Error loading downloaded files:', error);
       Alert.alert('오류', '다운로드한 파일 목록을 불러오는 중 오류가 발생했습니다.');
@@ -168,6 +202,9 @@ export default function DownloadsScreen({ navigation }) {
                 await FileSystem.deleteAsync(file.fileUri, { idempotent: true });
                 console.log('[DownloadsScreen] File deleted:', file.fileName);
                 
+                // ✅ 메타데이터 정리 및 썸네일 캐시 스마트 삭제
+                await deleteFileWithMetadata(file.fileName, file.videoId);
+                
                 // 파일 목록 새로고침
                 loadDownloadedFiles();
                 
@@ -223,15 +260,40 @@ export default function DownloadsScreen({ navigation }) {
     
     const fileSizeMB = (item.size / (1024 * 1024)).toFixed(2);
     
+    // ✅ 썸네일 표시: 온라인에서는 YouTube URL 우선, 실패 시 캐시 사용
+    const cachePath = item.videoId ? thumbnailCachePaths[item.videoId] : null;
+    const cacheUri = cachePath ? `file://${cachePath}` : null;
+    
     return (
       <View style={styles.fileItem}>
         <View style={styles.fileInfo}>
-          <Ionicons 
-            name={item.isVideo ? "videocam" : "musical-notes"} 
-            size={32} 
-            color={item.isVideo ? "#FF0000" : "#4CAF50"} 
-            style={styles.fileIcon}
-          />
+          <View style={styles.fileThumbnailContainer}>
+            {(item.thumbnailUrl || cacheUri) ? (
+              <ThumbnailImage
+                sourceUri={item.thumbnailUrl}
+                cacheUri={cacheUri}
+                style={styles.fileThumbnail}
+              />
+            ) : (
+              <View style={[styles.fileThumbnail, styles.fileThumbnailPlaceholder]}>
+                <Ionicons 
+                  name={item.isVideo ? "videocam" : "musical-notes"} 
+                  size={24} 
+                  color={item.isVideo ? "#FF0000" : "#4CAF50"} 
+                />
+              </View>
+            )}
+            {/* ✅ 썸네일 위에 아이콘 오버레이 */}
+            {(item.thumbnailUrl || cacheUri) && (
+              <View style={styles.fileThumbnailIcon}>
+                <Ionicons 
+                  name={item.isVideo ? "videocam" : "musical-notes"} 
+                  size={14} 
+                  color={item.isVideo ? "#FF0000" : "#4CAF50"} 
+                />
+              </View>
+            )}
+          </View>
           <View style={styles.fileDetails}>
             <Text style={styles.fileName} numberOfLines={2}>
               {item.title}
@@ -566,6 +628,34 @@ const styles = StyleSheet.create({
   },
   fileIcon: {
     marginRight: 12,
+  },
+  fileThumbnailContainer: {
+    width: 60,
+    height: 45,
+    marginRight: 12,
+    position: 'relative',
+  },
+  fileThumbnail: {
+    width: 60,
+    height: 45,
+    borderRadius: 8,
+    backgroundColor: '#ddd',
+  },
+  fileThumbnailPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  fileThumbnailIcon: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   fileDetails: {
     flex: 1,

@@ -18,6 +18,10 @@ if (MediaStoreModule) {
 
 // 다운로드 디렉토리 경로
 const DOWNLOAD_DIR = `${FileSystem.documentDirectory}downloads/`;
+// 썸네일 캐시 디렉토리 경로
+const THUMBNAIL_CACHE_DIR = `${FileSystem.documentDirectory}thumbnails/`;
+// 메타데이터 파일 경로
+const METADATA_FILE = `${FileSystem.documentDirectory}download_metadata.json`;
 
 // 다운로드 디렉토리 생성
 const ensureDownloadDir = async () => {
@@ -25,6 +29,15 @@ const ensureDownloadDir = async () => {
   if (!dirInfo.exists) {
     await FileSystem.makeDirectoryAsync(DOWNLOAD_DIR, { intermediates: true });
     console.log('[DownloadService] Download directory created');
+  }
+};
+
+// 썸네일 캐시 디렉토리 생성
+const ensureThumbnailCacheDir = async () => {
+  const dirInfo = await FileSystem.getInfoAsync(THUMBNAIL_CACHE_DIR);
+  if (!dirInfo.exists) {
+    await FileSystem.makeDirectoryAsync(THUMBNAIL_CACHE_DIR, { intermediates: true });
+    console.log('[DownloadService] Thumbnail cache directory created');
   }
 };
 
@@ -59,7 +72,7 @@ export const getVideoInfo = async (videoUrl) => {
 };
 
 // 영상 다운로드 (재시도 로직 포함)
-export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount = 0) => {
+export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount = 0, videoId = null, thumbnailUrl = null) => {
   const MAX_RETRIES = 3; // 최대 3번 재시도
   const RETRY_DELAY = 2000; // 재시도 전 2초 대기
   let currentFileUri = null; // 현재 다운로드 중인 파일 URI 저장 (정리용)
@@ -261,6 +274,30 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
       
       console.log('[DownloadService] Video downloaded:', result.uri, 'Size:', (fileInfo.size / (1024 * 1024)).toFixed(2), 'MB');
       
+      // ✅ 다운로드 완료 후 썸네일 다운로드 및 메타데이터 저장
+      if (videoId && fileName) {
+        try {
+          // 썸네일 다운로드 및 캐시 저장
+          if (thumbnailUrl) {
+            await downloadThumbnail(videoId, thumbnailUrl);
+          }
+          
+          // 메타데이터 저장
+          const metadata = await getMetadata();
+          metadata[fileName] = {
+            videoId,
+            thumbnailUrl: thumbnailUrl || null,
+            type: 'video',
+            downloadedAt: Date.now()
+          };
+          await saveMetadata(metadata);
+          console.log('[DownloadService] Metadata saved for video:', fileName);
+        } catch (error) {
+          console.error('[DownloadService] Error saving thumbnail/metadata (non-critical):', error);
+          // 썸네일 저장 실패는 다운로드 성공을 막지 않음
+        }
+      }
+      
       currentFileUri = null;
       
       if (onProgress) {
@@ -305,7 +342,7 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
       console.log(`[DownloadService] Retryable error detected, retrying... (${retryCount + 1}/${MAX_RETRIES})`);
       await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
       currentFileUri = null;
-      return downloadVideo(videoUrl, videoTitle, onProgress, retryCount + 1);
+      return downloadVideo(videoUrl, videoTitle, onProgress, retryCount + 1, videoId, thumbnailUrl);
     }
     
     throw error;
@@ -319,7 +356,7 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
 };
 
 // 음악 다운로드 (오디오만, 재시도 로직 포함)
-export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount = 0) => {
+export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount = 0, videoId = null, thumbnailUrl = null) => {
   const MAX_RETRIES = 3; // 최대 3번 재시도
   const RETRY_DELAY = 2000; // 재시도 전 2초 대기
   let currentFileUri = null; // 현재 다운로드 중인 파일 URI 저장 (정리용)
@@ -519,6 +556,30 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
       
       console.log('[DownloadService] Audio downloaded:', result.uri, 'Size:', (fileInfo.size / (1024 * 1024)).toFixed(2), 'MB');
       
+      // ✅ 다운로드 완료 후 썸네일 다운로드 및 메타데이터 저장
+      if (videoId && fileName) {
+        try {
+          // 썸네일 다운로드 및 캐시 저장
+          if (thumbnailUrl) {
+            await downloadThumbnail(videoId, thumbnailUrl);
+          }
+          
+          // 메타데이터 저장
+          const metadata = await getMetadata();
+          metadata[fileName] = {
+            videoId,
+            thumbnailUrl: thumbnailUrl || null,
+            type: 'audio',
+            downloadedAt: Date.now()
+          };
+          await saveMetadata(metadata);
+          console.log('[DownloadService] Metadata saved for audio:', fileName);
+        } catch (error) {
+          console.error('[DownloadService] Error saving thumbnail/metadata (non-critical):', error);
+          // 썸네일 저장 실패는 다운로드 성공을 막지 않음
+        }
+      }
+      
       currentFileUri = null;
       
       if (onProgress) {
@@ -563,7 +624,7 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
       console.log(`[DownloadService] Retryable error detected, retrying... (${retryCount + 1}/${MAX_RETRIES})`);
       await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
       currentFileUri = null;
-      return downloadAudio(videoUrl, videoTitle, onProgress, retryCount + 1);
+      return downloadAudio(videoUrl, videoTitle, onProgress, retryCount + 1, videoId, thumbnailUrl);
     }
     
     throw error;
@@ -1103,6 +1164,9 @@ export const getDownloadedFiles = async () => {
       return [];
     }
     
+    // ✅ 메타데이터 읽기
+    const metadata = await getMetadata();
+    
     // 디렉토리 내용 읽기
     const files = await FileSystem.readDirectoryAsync(DOWNLOAD_DIR);
     
@@ -1177,19 +1241,38 @@ export const getDownloadedFiles = async () => {
           finalIsVideo = false;
         }
         
-        fileList.push({
+        // ✅ 메타데이터에서 videoId와 thumbnailUrl 가져오기
+        const fileMetadata = metadata[fileName] || {};
+        const fileData = {
           fileName,
           fileUri,
           title,
           size: fileInfo.size,
           isVideo: finalIsVideo,
           modifiedTime: fileInfo.modificationTime || Date.now(),
-        });
+          videoId: fileMetadata.videoId || null,
+          thumbnailUrl: fileMetadata.thumbnailUrl || null,
+        };
+        
+        fileList.push(fileData);
       }
     }
     
     // 최신순으로 정렬
     fileList.sort((a, b) => b.modifiedTime - a.modifiedTime);
+    
+    // ✅ 존재하지 않는 파일의 메타데이터 정리
+    const existingFileNames = new Set(fileList.map(f => f.fileName));
+    let metadataUpdated = false;
+    for (const fileName in metadata) {
+      if (!existingFileNames.has(fileName)) {
+        delete metadata[fileName];
+        metadataUpdated = true;
+      }
+    }
+    if (metadataUpdated) {
+      await saveMetadata(metadata);
+    }
     
     return fileList;
   } catch (error) {
@@ -1213,6 +1296,156 @@ export const getFileInfo = async (fileUri) => {
   } catch (error) {
     console.error('[DownloadService] Error getting file info:', error);
     return null;
+  }
+};
+
+// ========== 썸네일 캐시 관리 함수 ==========
+
+// 메타데이터 읽기
+const getMetadata = async () => {
+  try {
+    const fileInfo = await FileSystem.getInfoAsync(METADATA_FILE);
+    if (fileInfo.exists) {
+      const content = await FileSystem.readAsStringAsync(METADATA_FILE);
+      return JSON.parse(content);
+    }
+    return {};
+  } catch (error) {
+    console.error('[DownloadService] Error reading metadata:', error);
+    return {};
+  }
+};
+
+// 메타데이터 저장
+const saveMetadata = async (metadata) => {
+  try {
+    await FileSystem.writeAsStringAsync(METADATA_FILE, JSON.stringify(metadata, null, 2));
+  } catch (error) {
+    console.error('[DownloadService] Error saving metadata:', error);
+  }
+};
+
+// 썸네일 다운로드 및 캐시 저장
+export const downloadThumbnail = async (videoId, thumbnailUrl) => {
+  try {
+    await ensureThumbnailCacheDir();
+    
+    if (!thumbnailUrl || !videoId) {
+      console.warn('[DownloadService] No thumbnail URL or videoId provided:', { videoId, thumbnailUrl });
+      return null;
+    }
+    
+    const thumbnailPath = `${THUMBNAIL_CACHE_DIR}${videoId}.jpg`;
+    
+    // 이미 캐시가 있으면 스킵
+    const existingCache = await FileSystem.getInfoAsync(thumbnailPath);
+    if (existingCache.exists) {
+      console.log('[DownloadService] Thumbnail cache already exists:', videoId);
+      return thumbnailPath;
+    }
+    
+    console.log('[DownloadService] Downloading thumbnail:', thumbnailUrl, 'to:', thumbnailPath);
+    
+    // 썸네일 다운로드
+    const downloadResult = await FileSystem.downloadAsync(thumbnailUrl, thumbnailPath);
+    
+    if (downloadResult.status === 200) {
+      console.log('[DownloadService] Thumbnail cached successfully:', videoId);
+      return thumbnailPath;
+    } else {
+      console.warn('[DownloadService] Failed to download thumbnail, status:', downloadResult.status);
+      return null;
+    }
+  } catch (error) {
+    console.error('[DownloadService] Error downloading thumbnail:', error);
+    return null;
+  }
+};
+
+// 썸네일 캐시 경로 가져오기 (없으면 null)
+export const getThumbnailCachePath = async (videoId) => {
+  try {
+    if (!videoId) return null;
+    const thumbnailPath = `${THUMBNAIL_CACHE_DIR}${videoId}.jpg`;
+    const fileInfo = await FileSystem.getInfoAsync(thumbnailPath);
+    if (fileInfo.exists) {
+      return thumbnailPath;
+    }
+    return null;
+  } catch (error) {
+    console.error('[DownloadService] Error getting thumbnail cache path:', error);
+    return null;
+  }
+};
+
+// 썸네일 캐시 삭제 (옵션 2: 스마트 삭제 - 찜하기와 다운로드 파일 둘 다 없을 때만 삭제)
+export const deleteThumbnailCacheIfUnused = async (videoId) => {
+  try {
+    if (!videoId) return false;
+    
+    // 찜하기에 있는지 확인
+    const { isFavorite } = await import('./database');
+    const hasFavorite = await isFavorite(videoId);
+    
+    // 다운로드 파일에 있는지 확인
+    const downloadedFiles = await getDownloadedFiles();
+    const metadata = await getMetadata();
+    const hasDownloadedFile = downloadedFiles.some(file => {
+      const fileMetadata = metadata[file.fileName];
+      return fileMetadata && fileMetadata.videoId === videoId;
+    });
+    
+    // 둘 다 없을 때만 삭제
+    if (!hasFavorite && !hasDownloadedFile) {
+      const thumbnailPath = `${THUMBNAIL_CACHE_DIR}${videoId}.jpg`;
+      const fileInfo = await FileSystem.getInfoAsync(thumbnailPath);
+      if (fileInfo.exists) {
+        await FileSystem.deleteAsync(thumbnailPath, { idempotent: true });
+        console.log('[DownloadService] Thumbnail cache deleted (unused):', videoId);
+        return true;
+      }
+    } else {
+      console.log('[DownloadService] Thumbnail cache kept (in use):', videoId, {
+        hasFavorite,
+        hasDownloadedFile
+      });
+    }
+    return false;
+  } catch (error) {
+    console.error('[DownloadService] Error deleting thumbnail cache:', error);
+    return false;
+  }
+};
+
+// 파일 삭제 시 메타데이터 정리 및 썸네일 캐시 스마트 삭제
+export const deleteFileWithMetadata = async (fileName, videoId = null) => {
+  try {
+    // 메타데이터에서 videoId 찾기 (파라미터로 전달되지 않은 경우)
+    if (!videoId) {
+      const metadata = await getMetadata();
+      const fileMetadata = metadata[fileName];
+      if (fileMetadata && fileMetadata.videoId) {
+        videoId = fileMetadata.videoId;
+      }
+    }
+    
+    // 메타데이터에서 해당 파일 정보 삭제
+    const metadata = await getMetadata();
+    if (metadata[fileName]) {
+      delete metadata[fileName];
+      await saveMetadata(metadata);
+      console.log('[DownloadService] Metadata deleted for file:', fileName);
+    }
+    
+    // videoId가 있으면 썸네일 캐시 스마트 삭제 시도
+    if (videoId) {
+      await deleteThumbnailCacheIfUnused(videoId);
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('[DownloadService] Error deleting file metadata:', error);
+    return false;
   }
 };
 

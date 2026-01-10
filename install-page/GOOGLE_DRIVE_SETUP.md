@@ -171,3 +171,4 @@ https://drive.google.com/file/d/1b7NPh_HjyJb9Ihy5V3LRrus7MaEMNuJc/view?usp=shari
 - 현재 APK 크기: 약 113MB → 문제 없음 ✅
 
 
+

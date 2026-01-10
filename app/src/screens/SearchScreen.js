@@ -21,7 +21,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import AdBanner from '../components/AdBanner';
 import { addFavorite, removeFavorite, isFavorite, initDatabase } from '../services/database';
-import { downloadVideo, downloadAudio, shareDownloadedFile, saveFileToDevice, getFileInfo, sanitizeFileName, getDownloadedFiles, cleanupIncompleteFiles, getVideoInfo } from '../services/downloadService';
+import { downloadVideo, downloadAudio, shareDownloadedFile, saveFileToDevice, getFileInfo, sanitizeFileName, getDownloadedFiles, cleanupIncompleteFiles, getVideoInfo, deleteFileWithMetadata } from '../services/downloadService';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as FileSystem from 'expo-file-system/legacy';
 import MediaStoreModule from '../modules/MediaStoreModule';
@@ -572,7 +572,10 @@ export default function SearchScreen({ navigation, route }) {
               [item.id]: { type: 'video', progress }
             };
           });
-        }
+        },
+        0, // retryCount
+        item.id, // videoId
+        item.thumbnail // thumbnailUrl
       );
       
       // 다운로드가 완료되었는지 확인 (취소되지 않았는지)
@@ -734,7 +737,10 @@ export default function SearchScreen({ navigation, route }) {
               [item.id]: { type: 'audio', progress }
             };
           });
-        }
+        },
+        0, // retryCount
+        item.id, // videoId
+        item.thumbnail // thumbnailUrl
       );
       
       // 다운로드가 완료되었는지 확인 (취소되지 않았는지)
@@ -1104,6 +1110,8 @@ export default function SearchScreen({ navigation, route }) {
                             onPress: async () => {
                               try {
                                 await FileSystem.deleteAsync(downloadedVideo.fileUri, { idempotent: true });
+                                // ✅ 메타데이터 정리 및 썸네일 캐시 스마트 삭제
+                                await deleteFileWithMetadata(downloadedVideo.fileName, downloadedVideo.videoId);
                                 loadDownloadedFiles();
                                 Alert.alert('완료', '영상 파일이 삭제되었습니다.');
                               } catch (error) {
@@ -1178,6 +1186,8 @@ export default function SearchScreen({ navigation, route }) {
                             onPress: async () => {
                               try {
                                 await FileSystem.deleteAsync(downloadedAudio.fileUri, { idempotent: true });
+                                // ✅ 메타데이터 정리 및 썸네일 캐시 스마트 삭제
+                                await deleteFileWithMetadata(downloadedAudio.fileName, downloadedAudio.videoId);
                                 loadDownloadedFiles();
                                 Alert.alert('완료', '음악 파일이 삭제되었습니다.');
                               } catch (error) {
