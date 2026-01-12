@@ -71,6 +71,46 @@ export const getVideoInfo = async (videoUrl) => {
   }
 };
 
+// YouTube 영상 검색
+export const searchYouTubeVideos = async (searchQuery, maxResults = 20) => {
+  try {
+    console.log('[DownloadService] Searching YouTube for:', searchQuery);
+    const apiBaseUrl = await getApiBaseUrl();
+    
+    const response = await fetch(`${apiBaseUrl}/api/search`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ q: searchQuery, maxResults: maxResults }),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || '검색에 실패했습니다.');
+    }
+    
+    const data = await response.json();
+    
+    // YouTube API 응답을 앱에서 사용할 수 있는 형식으로 변환
+    const results = data.items.map(item => ({
+      id: item.id.videoId,
+      title: item.snippet.title,
+      url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
+      thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.default?.url,
+      author: item.snippet.channelTitle,
+      authorUrl: `https://www.youtube.com/channel/${item.snippet.channelId}`,
+      description: item.snippet.description,
+      publishedAt: item.snippet.publishedAt,
+    }));
+    
+    return results;
+  } catch (error) {
+    console.error('[DownloadService] Error searching YouTube:', error);
+    throw error;
+  }
+};
+
 // 영상 다운로드 (재시도 로직 포함)
 export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount = 0, videoId = null, thumbnailUrl = null) => {
   const MAX_RETRIES = 3; // 최대 3번 재시도

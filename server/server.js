@@ -353,6 +353,76 @@ app.get('/api/download/audio', async (req, res) => {
   }
 });
 
+// YouTube 검색 API (메모리 캐싱 포함)
+const searchCache = new Map();
+const CACHE_TTL = 1000 * 60 * 60; // 1시간
+const MAX_CACHE_SIZE = 1000; // 최대 캐시 항목 수
+
+app.post('/api/search', async (req, res) => {
+  try {
+    const { q, maxResults = 20 } = req.body;
+    
+    if (!q || q.trim() === '') {
+      return res.status(400).json({ error: '검색어가 필요합니다.' });
+    }
+
+    const searchKey = `${q.toLowerCase().trim()}_${maxResults}`;
+    
+    // 캐시 확인 (메모리)
+    const cached = searchCache.get(searchKey);
+    if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
+      console.log('[Server] Cache hit for:', q);
+      return res.json(cached.data);
+    }
+
+    // YouTube Data API 호출
+    const apiKey = process.env.YOUTUBE_API_KEY;
+    if (!apiKey) {
+      console.error('[Server] YouTube API key not set');
+      return res.status(500).json({ error: 'YouTube API 키가 설정되지 않았습니다.' });
+    }
+
+    console.log('[Server] Searching YouTube for:', q);
+    const response = await fetch(
+      `https://www.googleapis.com/youtube/v3/search?` +
+      `part=snippet&type=video&q=${encodeURIComponent(q.trim())}&` +
+      `maxResults=${Math.min(maxResults, 50)}&key=${apiKey}`
+    );
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      console.error('[Server] YouTube API error status:', response.status);
+      console.error('[Server] YouTube API error body:', JSON.stringify(error, null, 2));
+      const errorMessage = error.error?.message || error.message || '검색에 실패했습니다.';
+      console.error('[Server] YouTube API error message:', errorMessage);
+      return res.status(response.status).json({ 
+        error: errorMessage
+      });
+    }
+
+    const data = await response.json();
+    
+    // 캐시 저장
+    searchCache.set(searchKey, {
+      data: data,
+      timestamp: Date.now()
+    });
+
+    // 캐시 크기 제한 (메모리 관리)
+    if (searchCache.size > MAX_CACHE_SIZE) {
+      // 가장 오래된 항목 제거 (FIFO)
+      const firstKey = searchCache.keys().next().value;
+      searchCache.delete(firstKey);
+    }
+
+    console.log('[Server] Search completed, cache size:', searchCache.size);
+    res.json(data);
+  } catch (error) {
+    console.error('[Server] Search error:', error);
+    res.status(500).json({ error: '검색 중 오류가 발생했습니다.' });
+  }
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -361,6 +431,5 @@ app.get('/health', (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[Server] YouTube Downloader Server running on port ${PORT}`);
   console.log(`[Server] Accessible at http://localhost:${PORT}`);
-  console.log(`[Server] Accessible at http://172.30.1.25:${PORT}`);
 });
 
