@@ -436,6 +436,14 @@ export default function SearchScreen({ navigation, route }) {
     // 정규화된 URL 생성 (타임스탬프나 불필요한 파라미터 제거)
     const normalizedUrl = `https://www.youtube.com/watch?v=${videoId}`;
     
+    // ✅ URL을 route params에 저장하여 다른 메뉴에서 돌아와도 유지되도록 함
+    navigation.setParams({ 
+      url: normalizedUrl, 
+      timestamp: null,
+      forceUpdate: false,
+      forceReload: false
+    });
+    
     // YouTube oEmbed API를 사용하여 비디오 정보 가져오기
     const oEmbedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(normalizedUrl)}&format=json`;
     
@@ -480,9 +488,9 @@ export default function SearchScreen({ navigation, route }) {
           if (isFav) {
             setFavorites(prev => new Set(prev).add(videoId));
           }
-        }).catch(err => console.error('[SearchScreen] Error checking favorite:', err));
-      });
-  }, []);
+      }).catch(err => console.error('[SearchScreen] Error checking favorite:', err));
+    });
+  }, [navigation]);
 
   const handleSearch = () => {
     if (query.trim() === '') return;
@@ -1469,7 +1477,7 @@ export default function SearchScreen({ navigation, route }) {
           <TextInput
             ref={textInputRef}
             style={styles.searchInput}
-            placeholder="YouTube URL을 입력하거나"
+            placeholder="YouTube URL 붙여넣기"
             placeholderTextColor="#999"
             value={query}
             onChangeText={setQuery}
@@ -1538,13 +1546,19 @@ export default function SearchScreen({ navigation, route }) {
                   ]}
                 >
                   <Text style={styles.emptyIcon}>📺</Text>
-                  <Text style={styles.iconHintText}>탭하여 YouTube 열기</Text>
+                  <Text style={styles.iconHintText}>유튜브 영상 가져오기</Text>
                 </Animated.View>
               </TouchableOpacity>
-              <Text style={styles.emptyText}>YouTube 앱에서 공유하기를 사용하세요</Text>
-              <Text style={styles.emptySubText}>
-                또는 YouTube URL을 복사해서{'\n'}입력하세요
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={styles.emptyText}>YouTube 앱에서 공유하기를 사용하세요</Text>
+                <Ionicons name="arrow-redo-outline" size={18} color="#333" style={{ marginLeft: 6 }} />
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={styles.emptySubText}>
+                  또는 YouTube URL을 링크복사 해서{'\n'}검색창에 붙여넣으세요
+                </Text>
+                <Ionicons name="copy-outline" size={16} color="#666" style={{ marginLeft: 6 }} />
+              </View>
             </View>
           }
           contentContainerStyle={results.length === 0 ? styles.listContentEmpty : styles.listContent}
@@ -1616,6 +1630,17 @@ const styles = StyleSheet.create({
   logoImage: {
     width: 56,
     height: 56,
+  },
+  logoIcon3D: {
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 8, // Android
+    transform: [{ rotateY: '15deg' }, { perspective: 1000 }],
   },
   headerTitle: {
     color: '#fff',
@@ -1705,7 +1730,7 @@ const styles = StyleSheet.create({
     maxWidth: 200,
   },
   iconHintText: {
-    fontSize: 13,
+    fontSize: 16,
     color: '#FF0000',
     fontWeight: '700',
     marginTop: 10,

@@ -50,6 +50,8 @@ export default function DownloadsScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [fileTypeFilter, setFileTypeFilter] = useState('all'); // ✅ 'all' | 'video' | 'audio'
+  const [sortBy, setSortBy] = useState('date-desc'); // 'date-desc' | 'date-asc' | 'title-asc' | 'title-desc' | null
+  const [showFilters, setShowFilters] = useState(false); // 필터/정렬 섹션 표시 여부
   const [thumbnailCachePaths, setThumbnailCachePaths] = useState({}); // videoId -> cache path
 
   // 다운로드한 파일 목록 로드
@@ -79,7 +81,7 @@ export default function DownloadsScreen({ navigation }) {
     }
   }, []);
 
-  // ✅ 검색 및 타입 필터링
+  // ✅ 검색 및 타입 필터링 및 정렬
   useEffect(() => {
     let filtered = [...downloadedFiles];
     
@@ -100,8 +102,28 @@ export default function DownloadsScreen({ navigation }) {
       );
     }
     
+    // 정렬
+    if (sortBy) {
+      if (sortBy.startsWith('date')) {
+        // 날짜 정렬 (modifiedTime 기준)
+        filtered.sort((a, b) => {
+          const timeA = a.modifiedTime || 0;
+          const timeB = b.modifiedTime || 0;
+          return sortBy === 'date-desc' ? timeB - timeA : timeA - timeB;
+        });
+      } else if (sortBy.startsWith('title')) {
+        // 제목 정렬
+        filtered.sort((a, b) => {
+          const titleA = (a.title || '').toLowerCase();
+          const titleB = (b.title || '').toLowerCase();
+          const compare = titleA.localeCompare(titleB, 'ko');
+          return sortBy === 'title-asc' ? compare : -compare;
+        });
+      }
+    }
+    
     setFilteredFiles(filtered);
-  }, [searchQuery, downloadedFiles, fileTypeFilter]);
+  }, [searchQuery, downloadedFiles, fileTypeFilter, sortBy]);
 
   // 화면 포커스 시 파일 목록 새로고침
   // 단, 외부 앱에서 돌아온 직후에는 새로고침하지 않음 (의도치 않은 네비게이션 방지)
@@ -117,6 +139,27 @@ export default function DownloadsScreen({ navigation }) {
       lastFocusTime.current = now;
     }, [loadDownloadedFiles])
   );
+
+  // 정렬 버튼 핸들러 (3단계 토글)
+  const handleDateSort = () => {
+    if (sortBy === 'date-desc') {
+      setSortBy('date-asc'); // 오래된순
+    } else if (sortBy === 'date-asc') {
+      setSortBy('date-desc'); // 최신순 (기본값)
+    } else {
+      setSortBy('date-desc'); // 최신순
+    }
+  };
+
+  const handleTitleSort = () => {
+    if (sortBy === 'title-asc') {
+      setSortBy('title-desc'); // 가나다 내림차순
+    } else if (sortBy === 'title-desc') {
+      setSortBy('title-asc'); // 가나다 오름차순
+    } else {
+      setSortBy('title-asc'); // 가나다 오름차순
+    }
+  };
 
   // 다운로드한 파일 재생 (외부 플레이어로 열기)
   const handlePlayFile = async (file) => {
@@ -489,11 +532,22 @@ export default function DownloadsScreen({ navigation }) {
               <Ionicons name="close-circle" size={20} color="#999" />
             </TouchableOpacity>
           )}
+          <TouchableOpacity
+            style={styles.filterToggleButton}
+            onPress={() => setShowFilters(!showFilters)}
+          >
+            <Ionicons 
+              name={showFilters ? "options" : "options-outline"} 
+              size={20} 
+              color="#666" 
+            />
+          </TouchableOpacity>
         </View>
       </View>
 
       {/* ✅ 파일 타입 필터 버튼 */}
-      <View style={styles.filterSection}>
+      {showFilters && (
+        <View style={styles.filterSection}>
         <TouchableOpacity
           style={[
             styles.filterButton,
@@ -517,7 +571,7 @@ export default function DownloadsScreen({ navigation }) {
         >
           <Ionicons 
             name="videocam" 
-            size={16} 
+            size={12} 
             color={fileTypeFilter === 'video' ? '#fff' : '#666'} 
             style={{ marginRight: 4 }}
           />
@@ -537,7 +591,7 @@ export default function DownloadsScreen({ navigation }) {
         >
           <Ionicons 
             name="musical-notes" 
-            size={16} 
+            size={12} 
             color={fileTypeFilter === 'audio' ? '#fff' : '#666'} 
             style={{ marginRight: 4 }}
           />
@@ -549,6 +603,53 @@ export default function DownloadsScreen({ navigation }) {
           </Text>
         </TouchableOpacity>
       </View>
+      )}
+
+      {/* 정렬 버튼 */}
+      {showFilters && !loading && (
+        <View style={styles.sortSection}>
+          <TouchableOpacity
+            style={[
+              styles.sortButton,
+              (sortBy === 'date-desc' || sortBy === 'date-asc') && styles.sortButtonActive
+            ]}
+            onPress={handleDateSort}
+          >
+            <Ionicons 
+              name={sortBy === 'date-asc' ? 'arrow-up' : 'arrow-down'} 
+              size={12} 
+              color={(sortBy === 'date-desc' || sortBy === 'date-asc') ? '#fff' : '#666'} 
+              style={{ marginRight: 4 }}
+            />
+            <Text style={[
+              styles.sortButtonText,
+              (sortBy === 'date-desc' || sortBy === 'date-asc') && styles.sortButtonTextActive
+            ]}>
+              {sortBy === 'date-desc' ? '최신순' : sortBy === 'date-asc' ? '오래된순' : '최신순'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.sortButton,
+              (sortBy === 'title-asc' || sortBy === 'title-desc') && styles.sortButtonActive
+            ]}
+            onPress={handleTitleSort}
+          >
+            <Ionicons 
+              name={sortBy === 'title-desc' ? 'arrow-down' : 'arrow-up'} 
+              size={12} 
+              color={(sortBy === 'title-asc' || sortBy === 'title-desc') ? '#fff' : '#666'} 
+              style={{ marginRight: 4 }}
+            />
+            <Text style={[
+              styles.sortButtonText,
+              (sortBy === 'title-asc' || sortBy === 'title-desc') && styles.sortButtonTextActive
+            ]}>
+              제목순
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {loading ? (
         <View style={styles.centerContainer}>
@@ -618,6 +719,17 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
   },
+  logoIcon3D: {
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 8, // Android
+    transform: [{ rotateY: '15deg' }, { perspective: 1000 }],
+  },
   headerTitle: {
     color: '#fff',
     fontSize: 19,
@@ -630,10 +742,43 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
   },
+  sortSection: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    gap: 8,
+  },
+  sortButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#f5f5f5',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    flex: 1,
+  },
+  sortButtonActive: {
+    backgroundColor: '#ff6b6b',
+    borderColor: '#ff6b6b',
+  },
+  sortButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  sortButtonTextActive: {
+    color: '#fff',
+  },
   filterSection: {
     flexDirection: 'row',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 8,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
@@ -643,8 +788,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 20,
     backgroundColor: '#f5f5f5',
     borderWidth: 1,
@@ -652,8 +797,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   filterButtonActive: {
-    backgroundColor: '#FF0000',
-    borderColor: '#FF0000',
+    backgroundColor: '#ff6b6b',
+    borderColor: '#ff6b6b',
   },
   filterButtonText: {
     fontSize: 14,
@@ -679,6 +824,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
     paddingVertical: 0,
+  },
+  filterToggleButton: {
+    padding: 4,
+    marginLeft: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   clearButton: {
     marginLeft: 8,
