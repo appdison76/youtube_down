@@ -442,6 +442,16 @@ app.post('/api/search', async (req, res) => {
       console.error('[Server] YouTube API error body:', JSON.stringify(error, null, 2));
       const errorMessage = error.error?.message || error.message || '검색에 실패했습니다.';
       console.error('[Server] YouTube API error message:', errorMessage);
+      
+      // YouTube API 할당량 초과 감지
+      if (errorMessage.includes('quota') || errorMessage.includes('Quota exceeded') || errorMessage.includes('Daily Limit') || response.status === 403) {
+        console.error('[Server] YouTube API quota exceeded - using code 88');
+        return res.status(429).json({ 
+          error: 'DAILY_LIMIT_EXCEEDED',
+          message: '오늘의 검색 요청 횟수가 모두 소진되었습니다. 다운로드 화면을 이용하여 유튜브 영상을 가져오기하세요. (코드: 88)'
+        });
+      }
+      
       return res.status(response.status).json({ 
         error: errorMessage
       });
