@@ -532,34 +532,58 @@ app.post('/api/autocomplete', async (req, res) => {
       return res.status(response.status).json({ error: '자동완성에 실패했습니다.' });
     }
 
-    // 응답을 텍스트로 먼저 읽기 (JSON이 아닐 수 있음)
+    // 응답을 텍스트로 먼저 읽기 (JSONP 형식일 수 있음)
     const textResponse = await response.text();
     console.log('[Server] Autocomplete API raw response (first 200 chars):', textResponse.substring(0, 200));
     
-    let data;
+    let suggestions = [];
+    
     try {
-      // JSONP 형식일 수 있으므로 먼저 JSON 파싱 시도
-      data = JSON.parse(textResponse);
-      console.log('[Server] Autocomplete API response type:', Array.isArray(data) ? 'array' : typeof data);
-      console.log('[Server] Autocomplete API response length:', Array.isArray(data) ? data.length : 'N/A');
-    } catch (parseError) {
-      console.error('[Server] Failed to parse autocomplete response as JSON:', parseError);
-      console.error('[Server] Raw response:', textResponse.substring(0, 500));
+      // JSONP 형식 파싱: window.google.ac.h([query, [suggestions...], ...])
+      // 정규식으로 함수 호출 내부의 배열 추출
+      const jsonpMatch = textResponse.match(/window\.google\.ac\.h\(\[(.*)\]\)/s);
       
-      // JSONP 형식인지 확인 (예: window.google.ac.h(...))
-      // 또는 다른 형식일 수 있으므로 빈 배열 반환
-      console.warn('[Server] Autocomplete response is not valid JSON, returning empty suggestions');
+      if (jsonpMatch) {
+        // 함수 호출 내부의 배열 부분만 추출
+        const arrayStart = textResponse.indexOf('[');
+        const arrayEnd = textResponse.lastIndexOf(']');
+        
+        if (arrayStart !== -1 && arrayEnd !== -1) {
+          const arrayString = textResponse.substring(arrayStart, arrayEnd + 1);
+          const data = JSON.parse(arrayString);
+          
+          // 응답 형식: [query, [suggestions...], ...]
+          // suggestions는 [["term", 0, [512]], ...] 형식
+          if (Array.isArray(data) && data.length >= 2 && Array.isArray(data[1])) {
+            // 각 제안에서 첫 번째 요소(제안어)만 추출
+            suggestions = data[1]
+              .filter(item => Array.isArray(item) && item.length > 0)
+              .map(item => item[0])
+              .filter(term => typeof term === 'string');
+            
+            console.log('[Server] Extracted suggestions count:', suggestions.length);
+          }
+        }
+      } else {
+        // 순수 JSON 형식인지 시도
+        const data = JSON.parse(textResponse);
+        if (Array.isArray(data) && data.length >= 2 && Array.isArray(data[1])) {
+          suggestions = data[1]
+            .filter(item => Array.isArray(item) && item.length > 0)
+            .map(item => item[0])
+            .filter(term => typeof term === 'string');
+        }
+      }
+    } catch (parseError) {
+      console.error('[Server] Failed to parse autocomplete response:', parseError);
+      console.error('[Server] Raw response (first 500 chars):', textResponse.substring(0, 500));
+      // 에러가 나도 빈 배열 반환 (치명적이지 않음)
       return res.json([]);
     }
     
-    // 응답 형식: [query, [suggestions...], ...]
-    if (!Array.isArray(data) || data.length < 2) {
-      console.error('[Server] Unexpected autocomplete response format:', data);
-      return res.status(500).json({ error: '자동완성 응답 형식이 올바르지 않습니다.' });
+    if (suggestions.length === 0) {
+      console.warn('[Server] No suggestions extracted from response');
     }
-    
-    const suggestions = Array.isArray(data[1]) ? data[1] : [];
-    console.log('[Server] Extracted suggestions count:', suggestions.length);
     
     // 캐시 저장
     autocompleteCache.set(cacheKey, {
