@@ -12,6 +12,7 @@ import {
   StatusBar,
   ActivityIndicator,
   InteractionManager,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -292,6 +293,57 @@ export default function YouTubeSearchScreen({ navigation, route }) {
     }
   };
 
+  // YouTube에서 영상 열기
+  const openYouTubeVideo = useCallback(async (item) => {
+    if (!item.url) {
+      Alert.alert('오류', 'YouTube URL을 찾을 수 없습니다.');
+      return;
+    }
+
+    try {
+      const youtubeUrl = item.url;
+      console.log('[YouTubeSearchScreen] Opening YouTube video:', youtubeUrl);
+
+      if (Platform.OS === 'android') {
+        // Android: YouTube 앱으로 열기 시도
+        const videoId = youtubeUrl.match(/[?&]v=([^&]+)/)?.[1];
+        if (videoId) {
+          const youtubeAppUrl = `vnd.youtube:${videoId}`;
+          try {
+            const canOpen = await Linking.canOpenURL(youtubeAppUrl);
+            if (canOpen) {
+              await Linking.openURL(youtubeAppUrl);
+              return;
+            }
+          } catch (e) {
+            console.log('[YouTubeSearchScreen] YouTube app not available, using web');
+          }
+        }
+      } else if (Platform.OS === 'ios') {
+        // iOS: YouTube 앱으로 열기 시도
+        const videoId = youtubeUrl.match(/[?&]v=([^&]+)/)?.[1];
+        if (videoId) {
+          const youtubeAppUrl = `youtube://watch?v=${videoId}`;
+          try {
+            const canOpen = await Linking.canOpenURL(youtubeAppUrl);
+            if (canOpen) {
+              await Linking.openURL(youtubeAppUrl);
+              return;
+            }
+          } catch (e) {
+            console.log('[YouTubeSearchScreen] YouTube app not available, using web');
+          }
+        }
+      }
+
+      // YouTube 앱이 없으면 웹 브라우저로 열기
+      await Linking.openURL(youtubeUrl);
+    } catch (error) {
+      console.error('[YouTubeSearchScreen] Error opening YouTube video:', error);
+      Alert.alert('오류', 'YouTube를 열 수 없습니다.');
+    }
+  }, []);
+
   // 영상 선택 (다운로드 화면으로 이동)
   const handleSelectVideo = (item) => {
     if (!item.url) {
@@ -385,19 +437,32 @@ export default function YouTubeSearchScreen({ navigation, route }) {
             </Text>
           )}
         </View>
-        <TouchableOpacity
-          style={styles.favoriteButton}
-          onPress={(e) => {
-            e.stopPropagation();
-            handleToggleFavorite(item);
-          }}
-        >
-          <Ionicons 
-            name={isFav ? "star" : "star-outline"} 
-            size={24} 
-            color={isFav ? "#FFD700" : "#999"} 
-          />
-        </TouchableOpacity>
+        <View style={styles.searchItemActions}>
+          <TouchableOpacity
+            style={styles.playButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              openYouTubeVideo(item);
+            }}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="play-circle" size={24} color="#FF0000" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.favoriteButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleToggleFavorite(item);
+            }}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons 
+              name={isFav ? "star" : "star-outline"} 
+              size={24} 
+              color={isFav ? "#FFD700" : "#999"} 
+            />
+          </TouchableOpacity>
+        </View>
       </TouchableOpacity>
     );
   };
@@ -768,8 +833,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
+  searchItemActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 8,
+    gap: 8,
+  },
+  playButton: {
+    padding: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   favoriteButton: {
-    padding: 12,
+    padding: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },
