@@ -506,14 +506,24 @@ app.post('/api/autocomplete', async (req, res) => {
 
     // YouTube Autocomplete API 호출 (무료, API 키 불필요)
     console.log('[Server] Fetching autocomplete for:', q);
-    const response = await fetch(
-      `https://suggestqueries.google.com/complete/search?client=youtube&ds=yt&q=${encodeURIComponent(q.trim())}`,
-      {
+    const autocompleteUrl = `https://suggestqueries.google.com/complete/search?client=youtube&ds=yt&q=${encodeURIComponent(q.trim())}`;
+    console.log('[Server] Autocomplete URL:', autocompleteUrl);
+    
+    let response;
+    try {
+      response = await fetch(autocompleteUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'application/json',
         }
-      }
-    );
+      });
+      console.log('[Server] Autocomplete API response status:', response.status);
+    } catch (fetchError) {
+      console.error('[Server] Fetch error:', fetchError);
+      console.error('[Server] Fetch error message:', fetchError.message);
+      console.error('[Server] Fetch error stack:', fetchError?.stack);
+      throw new Error(`YouTube Autocomplete API 호출 실패: ${fetchError.message}`);
+    }
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => '');
@@ -560,8 +570,15 @@ app.post('/api/autocomplete', async (req, res) => {
     res.json(suggestions);
   } catch (error) {
     console.error('[Server] Autocomplete error:', error);
+    console.error('[Server] Autocomplete error message:', error.message);
     console.error('[Server] Autocomplete error stack:', error.stack);
-    res.status(500).json({ error: '자동완성 중 오류가 발생했습니다.' });
+    console.error('[Server] Autocomplete error name:', error.name);
+    
+    // 더 자세한 에러 정보 반환 (개발용)
+    res.status(500).json({ 
+      error: '자동완성 중 오류가 발생했습니다.',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 

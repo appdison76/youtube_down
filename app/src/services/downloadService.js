@@ -5,6 +5,22 @@ import * as MediaLibrary from 'expo-media-library';
 import { API_BASE_URL, getApiBaseUrl } from '../config/api';
 import MediaStoreModule from '../modules/MediaStoreModule';
 
+// HTML 엔티티 디코딩 함수
+const decodeHtmlEntities = (text) => {
+  if (!text || typeof text !== 'string') return text;
+  
+  // HTML 엔티티를 일반 문자로 변환
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#x27;/g, "'")
+    .replace(/&#x2F;/g, '/');
+};
+
 // 디버깅: 모든 네이티브 모듈 목록 출력
 console.log('[DownloadService] All NativeModules keys:', Object.keys(NativeModules));
 console.log('[DownloadService] MediaStoreModule available:', !!MediaStoreModule);
@@ -96,12 +112,12 @@ export const searchYouTubeVideos = async (searchQuery, maxResults = 20) => {
     // YouTube API 응답을 앱에서 사용할 수 있는 형식으로 변환
     const results = data.items.map(item => ({
       id: item.id.videoId,
-      title: item.snippet.title,
+      title: decodeHtmlEntities(item.snippet.title),
       url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
       thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.default?.url,
-      author: item.snippet.channelTitle,
+      author: decodeHtmlEntities(item.snippet.channelTitle),
       authorUrl: `https://www.youtube.com/channel/${item.snippet.channelId}`,
-      description: item.snippet.description,
+      description: decodeHtmlEntities(item.snippet.description),
       publishedAt: item.snippet.publishedAt,
     }));
     

@@ -87,6 +87,26 @@ export default function YouTubeSearchScreen({ navigation, route }) {
     }
   }, [searchHistory]);
 
+  // 검색 이력에서 특정 항목 삭제
+  const removeSearchHistoryItem = useCallback(async (query) => {
+    try {
+      const trimmedQuery = query.trim();
+      let history = [...searchHistory];
+      
+      // 해당 항목 제거
+      const index = history.indexOf(trimmedQuery);
+      if (index > -1) {
+        history.splice(index, 1);
+        
+        // 저장
+        await AsyncStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(history));
+        setSearchHistory(history);
+      }
+    } catch (error) {
+      console.error('[YouTubeSearchScreen] Error removing search history item:', error);
+    }
+  }, [searchHistory]);
+
   // 즐겨찾기 상태 확인
   const checkFavoritesStatus = useCallback(async () => {
     try {
@@ -529,7 +549,19 @@ export default function YouTubeSearchScreen({ navigation, route }) {
                   {item.text}
                 </Text>
                 {item.isLocal && (
-                  <Text style={styles.suggestionLabel}>최근 검색</Text>
+                  <>
+                    <Text style={styles.suggestionLabel}>최근 검색</Text>
+                    <TouchableOpacity
+                      style={styles.suggestionDeleteButton}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        removeSearchHistoryItem(item.text);
+                      }}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <Ionicons name="close-circle" size={20} color="#999" />
+                    </TouchableOpacity>
+                  </>
                 )}
               </TouchableOpacity>
             )}
@@ -679,6 +711,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#999',
     marginLeft: 8,
+  },
+  suggestionDeleteButton: {
+    marginLeft: 8,
+    padding: 4,
   },
   centerContainer: {
     flex: 1,
