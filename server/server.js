@@ -532,16 +532,24 @@ app.post('/api/autocomplete', async (req, res) => {
       return res.status(response.status).json({ error: '자동완성에 실패했습니다.' });
     }
 
+    // 응답을 텍스트로 먼저 읽기 (JSON이 아닐 수 있음)
+    const textResponse = await response.text();
+    console.log('[Server] Autocomplete API raw response (first 200 chars):', textResponse.substring(0, 200));
+    
     let data;
     try {
-      data = await response.json();
+      // JSONP 형식일 수 있으므로 먼저 JSON 파싱 시도
+      data = JSON.parse(textResponse);
       console.log('[Server] Autocomplete API response type:', Array.isArray(data) ? 'array' : typeof data);
       console.log('[Server] Autocomplete API response length:', Array.isArray(data) ? data.length : 'N/A');
     } catch (parseError) {
       console.error('[Server] Failed to parse autocomplete response as JSON:', parseError);
-      const textResponse = await response.text();
       console.error('[Server] Raw response:', textResponse.substring(0, 500));
-      return res.status(500).json({ error: '자동완성 응답 파싱에 실패했습니다.' });
+      
+      // JSONP 형식인지 확인 (예: window.google.ac.h(...))
+      // 또는 다른 형식일 수 있으므로 빈 배열 반환
+      console.warn('[Server] Autocomplete response is not valid JSON, returning empty suggestions');
+      return res.json([]);
     }
     
     // 응답 형식: [query, [suggestions...], ...]
