@@ -112,6 +112,42 @@ export const searchYouTubeVideos = async (searchQuery, maxResults = 20) => {
   }
 };
 
+// YouTube 자동완성 가져오기
+export const getYouTubeAutocomplete = async (query) => {
+  try {
+    if (!query || query.trim().length < 2) {
+      return [];
+    }
+
+    console.log('[DownloadService] Getting autocomplete for:', query);
+    const apiBaseUrl = await getApiBaseUrl();
+    
+    const response = await fetch(`${apiBaseUrl}/api/autocomplete`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ q: query.trim() }),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || '자동완성에 실패했습니다.');
+    }
+    
+    const suggestions = await response.json();
+    return Array.isArray(suggestions) ? suggestions : [];
+  } catch (error) {
+    console.error('[DownloadService] Error getting autocomplete:', error);
+    console.error('[DownloadService] Autocomplete error details:', {
+      message: error.message,
+      stack: error.stack,
+    });
+    // 자동완성 실패는 치명적이지 않으므로 빈 배열 반환
+    return [];
+  }
+};
+
 // 영상 다운로드 (재시도 로직 포함)
 export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount = 0, videoId = null, thumbnailUrl = null) => {
   const MAX_RETRIES = 3; // 최대 3번 재시도

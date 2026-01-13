@@ -358,6 +358,11 @@ const searchCache = new Map();
 const CACHE_TTL = 1000 * 60 * 60; // 1시간
 const MAX_CACHE_SIZE = 1000; // 최대 캐시 항목 수
 
+// YouTube 자동완성 API 캐시
+const autocompleteCache = new Map();
+const AUTOCOMPLETE_CACHE_TTL = 1000 * 60 * 30; // 30분 (자동완성은 더 짧게)
+const MAX_AUTOCOMPLETE_CACHE_SIZE = 500; // 최대 캐시 항목 수
+
 // 일일 제한 (IP별 카운트 관리)
 const dailyLimitMap = new Map(); // { ip: { count: number, date: string } }
 const DAILY_LIMIT = process.env.DAILY_LIMIT ? parseInt(process.env.DAILY_LIMIT) : 100; // 환경 변수 또는 기본값 100회
@@ -477,6 +482,70 @@ app.post('/api/search', async (req, res) => {
   } catch (error) {
     console.error('[Server] Search error:', error);
     res.status(500).json({ error: '검색 중 오류가 발생했습니다.' });
+  }
+});
+
+// YouTube 자동완성 API
+app.post('/api/autocomplete', async (req, res) => {
+  try {
+    const { q } = req.body;
+    
+    if (!q || q.trim() === '') {
+      return res.status(400).json({ error: '검색어가 필요합니다.' });
+    }
+
+    const query = q.trim().toLowerCase();
+    const cacheKey = query;
+    
+    // 캐시 확인
+    const cached = autocompleteCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < AUTOCOMPLETE_CACHE_TTL) {
+      console.log('[Server] Autocomplete cache hit for:', q);
+      return res.json(cached.data);
+    }
+
+    // YouTube Autocomplete API 호출 (무료, API 키 불필요)
+    console.log('[Server] Fetching autocomplete for:', q);
+    const response = await fetch(
+      `https://suggestqueries.google.com/complete/search?client=youtube&ds=yt&q=${encodeURIComponent(q.trim())}`,
+      {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        }
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      console.error('[Server] Autocomplete API error status:', response.status);
+      console.error('[Server] Autocomplete API error body:', errorText);
+      return res.status(response.status).json({ error: '자동완성에 실패했습니다.' });
+    }
+
+    const data = await response.json();
+    console.log('[Server] Autocomplete API response:', JSON.stringify(data).substring(0, 200));
+    // 응답 형식: [query, [suggestions...], ...]
+    const suggestions = data[1] || [];
+    
+    // 캐시 저장
+    autocompleteCache.set(cacheKey, {
+      data: suggestions,
+      timestamp: Date.now()
+    });
+
+    // 캐시 크기 제한 (메모리 관리)
+    if (autocompleteCache.size > MAX_AUTOCOMPLETE_CACHE_SIZE) {
+      // 가장 오래된 항목 제거 (FIFO)
+      const firstKey = autocompleteCache.keys().next().value;
+      autocompleteCache.delete(firstKey);
+    }
+
+    console.log('[Server] Autocomplete completed, cache size:', autocompleteCache.size);
+    res.json(suggestions);
+  } catch (error) {
+    console.error('[Server] Autocomplete error:', error);
+    console.error('[Server] Autocomplete error stack:', error.stack);
+    res.status(500).json({ error: '자동완성 중 오류가 발생했습니다.' });
   }
 });
 
