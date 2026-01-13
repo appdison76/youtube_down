@@ -522,10 +522,26 @@ app.post('/api/autocomplete', async (req, res) => {
       return res.status(response.status).json({ error: '자동완성에 실패했습니다.' });
     }
 
-    const data = await response.json();
-    console.log('[Server] Autocomplete API response:', JSON.stringify(data).substring(0, 200));
+    let data;
+    try {
+      data = await response.json();
+      console.log('[Server] Autocomplete API response type:', Array.isArray(data) ? 'array' : typeof data);
+      console.log('[Server] Autocomplete API response length:', Array.isArray(data) ? data.length : 'N/A');
+    } catch (parseError) {
+      console.error('[Server] Failed to parse autocomplete response as JSON:', parseError);
+      const textResponse = await response.text();
+      console.error('[Server] Raw response:', textResponse.substring(0, 500));
+      return res.status(500).json({ error: '자동완성 응답 파싱에 실패했습니다.' });
+    }
+    
     // 응답 형식: [query, [suggestions...], ...]
-    const suggestions = data[1] || [];
+    if (!Array.isArray(data) || data.length < 2) {
+      console.error('[Server] Unexpected autocomplete response format:', data);
+      return res.status(500).json({ error: '자동완성 응답 형식이 올바르지 않습니다.' });
+    }
+    
+    const suggestions = Array.isArray(data[1]) ? data[1] : [];
+    console.log('[Server] Extracted suggestions count:', suggestions.length);
     
     // 캐시 저장
     autocompleteCache.set(cacheKey, {

@@ -132,6 +132,11 @@ export const getYouTubeAutocomplete = async (query) => {
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
+      console.error('[DownloadService] Autocomplete server error:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorData: errorData,
+      });
       throw new Error(errorData.error || '자동완성에 실패했습니다.');
     }
     
