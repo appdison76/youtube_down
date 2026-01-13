@@ -1452,12 +1452,8 @@ export default function SearchScreen({ navigation, route }) {
           <TouchableOpacity 
             style={styles.logoContainer}
             onPress={() => {
-              // 이미 다운로드 화면에 있으므로 스크롤을 맨 위로 이동하거나 새로고침
-              setQuery('');
-              setResults([]);
-              if (textInputRef.current) {
-                textInputRef.current.focus();
-              }
+              // YouTubeSearchScreen으로 이동
+              navigation.navigate('YouTubeSearch');
             }}
             activeOpacity={0.7}
           >
@@ -1502,6 +1498,25 @@ export default function SearchScreen({ navigation, route }) {
             }}
             selectTextOnFocus={true}
           />
+          {query.length > 0 && (
+            <TouchableOpacity
+              style={styles.clearButton}
+              onPress={() => {
+                setQuery('');
+                setResults([]);
+                // route params도 초기화
+                navigation.setParams({
+                  url: undefined,
+                  timestamp: undefined,
+                  forceUpdate: false,
+                  forceReload: false,
+                });
+                lastProcessedUrl.current = null;
+              }}
+            >
+              <Ionicons name="close-circle" size={20} color="#999" />
+            </TouchableOpacity>
+          )}
         </View>
         <TouchableOpacity style={styles.searchButton} onPress={handleSearch}>
           <Text style={styles.searchButtonText}>가져오기</Text>
@@ -1678,6 +1693,10 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
     textAlignVertical: 'center',
     paddingVertical: 0,
+  },
+  clearButton: {
+    marginLeft: 8,
+    padding: 4,
   },
   searchButton: {
     height: 48,

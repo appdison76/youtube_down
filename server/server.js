@@ -358,6 +358,26 @@ const searchCache = new Map();
 const CACHE_TTL = 1000 * 60 * 60; // 1시간
 const MAX_CACHE_SIZE = 1000; // 최대 캐시 항목 수
 
+// 일일 제한 (IP별 카운트 관리)
+const dailyLimitMap = new Map(); // { ip: { count: number, date: string } }
+const DAILY_LIMIT = process.env.DAILY_LIMIT ? parseInt(process.env.DAILY_LIMIT) : 100; // 환경 변수 또는 기본값 100회
+
+// IP 주소 추출
+const getClientIP = (req) => {
+  return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
+         req.connection.remoteAddress || 
+         req.socket.remoteAddress ||
+         'unknown';
+};
+
+// 한국 시간(KST, UTC+9) 기준으로 오늘 날짜 가져오기
+const getTodayDate = () => {
+  const now = new Date();
+  // UTC 시간에 9시간 추가 (한국 시간)
+  const kstTime = new Date(now.getTime() + (9 * 60 * 60 * 1000));
+  return kstTime.toISOString().split('T')[0]; // YYYY-MM-DD
+};
+
 app.post('/api/search', async (req, res) => {
   try {
     const { q, maxResults = 20 } = req.body;
@@ -368,11 +388,38 @@ app.post('/api/search', async (req, res) => {
 
     const searchKey = `${q.toLowerCase().trim()}_${maxResults}`;
     
-    // 캐시 확인 (메모리)
+    // 캐시 확인 (메모리) - 캐시 히트면 제한 체크 안 함
     const cached = searchCache.get(searchKey);
     if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
       console.log('[Server] Cache hit for:', q);
       return res.json(cached.data);
+    }
+
+    // 캐시 미스 → API 호출 필요 → 일일 제한 체크
+    const clientIP = getClientIP(req);
+    const today = getTodayDate(); // 한국 시간 기준 오늘 날짜
+    const limitData = dailyLimitMap.get(clientIP);
+
+    if (limitData) {
+      // 날짜가 바뀌었으면 리셋 (한국 시간 기준 자정에 자동 리셋)
+      if (limitData.date !== today) {
+        dailyLimitMap.set(clientIP, { count: 1, date: today });
+        console.log('[Server] Daily limit reset for IP:', clientIP, 'Date:', today);
+      } else {
+        // 오늘 제한 초과 체크
+        if (limitData.count >= DAILY_LIMIT) {
+          console.log('[Server] Daily limit exceeded for IP:', clientIP, 'Count:', limitData.count);
+          return res.status(429).json({ 
+            error: 'DAILY_LIMIT_EXCEEDED',
+            message: '오늘의 검색 요청 횟수가 모두 소진되었습니다. 다운로드 화면을 이용하여 유튜브 영상을 가져오기하세요.'
+          });
+        }
+        // 카운트 증가
+        limitData.count++;
+      }
+    } else {
+      // 첫 요청
+      dailyLimitMap.set(clientIP, { count: 1, date: today });
     }
 
     // YouTube Data API 호출
@@ -382,7 +429,7 @@ app.post('/api/search', async (req, res) => {
       return res.status(500).json({ error: 'YouTube API 키가 설정되지 않았습니다.' });
     }
 
-    console.log('[Server] Searching YouTube for:', q);
+    console.log('[Server] Searching YouTube for:', q, 'IP:', clientIP, 'Count:', dailyLimitMap.get(clientIP).count);
     const response = await fetch(
       `https://www.googleapis.com/youtube/v3/search?` +
       `part=snippet&type=video&q=${encodeURIComponent(q.trim())}&` +

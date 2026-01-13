@@ -496,8 +496,8 @@ export default function DownloadsScreen({ navigation }) {
           <TouchableOpacity 
             style={styles.logoContainer}
             onPress={() => {
-              // Tab Navigator에서 직접 Search 탭으로 이동
-              navigation.navigate('Search');
+              // YouTubeSearchScreen으로 이동
+              navigation.navigate('YouTubeSearch');
             }}
             activeOpacity={0.7}
           >

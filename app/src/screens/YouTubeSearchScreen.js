@@ -88,7 +88,28 @@ export default function YouTubeSearchScreen({ navigation, route }) {
       setLoading(false);
     } catch (error) {
       console.error('[YouTubeSearchScreen] Search error:', error);
-      Alert.alert('검색 오류', error.message || '검색 중 오류가 발생했습니다.');
+      
+      // 제한 초과 에러 처리
+      if (error.message && error.message.includes('오늘의 검색 요청 횟수')) {
+        Alert.alert(
+          '검색 제한',
+          '오늘의 검색 요청 횟수가 모두 소진되었습니다.\n\n다운로드 화면을 이용하여 유튜브 영상을 가져오기하세요.',
+          [
+            { text: '취소', style: 'cancel' },
+            { 
+              text: '다운로드 화면으로 이동', 
+              onPress: () => {
+                const tabNav = navigation.getParent();
+                if (tabNav) {
+                  tabNav.navigate('Search');
+                }
+              }
+            }
+          ]
+        );
+      } else {
+        Alert.alert('검색 오류', error.message || '검색 중 오류가 발생했습니다.');
+      }
       setLoading(false);
     }
   }, [searchQuery, navigation]);
@@ -225,9 +246,9 @@ export default function YouTubeSearchScreen({ navigation, route }) {
           }}
         >
           <Ionicons 
-            name={isFav ? "heart" : "heart-outline"} 
+            name={isFav ? "star" : "star-outline"} 
             size={24} 
-            color={isFav ? "#FF0000" : "#999"} 
+            color={isFav ? "#FFD700" : "#999"} 
           />
         </TouchableOpacity>
       </TouchableOpacity>
@@ -243,7 +264,13 @@ export default function YouTubeSearchScreen({ navigation, route }) {
           <TouchableOpacity 
             style={styles.logoContainer}
             onPress={() => {
-              navigation.navigate('Search');
+              // X 버튼과 동일하게 초기화
+              setSearchQuery('');
+              setResults([]);
+              navigation.setParams({
+                searchQuery: '',
+                searchResults: [],
+              });
             }}
             activeOpacity={0.7}
           >
@@ -275,7 +302,14 @@ export default function YouTubeSearchScreen({ navigation, route }) {
           {searchQuery.length > 0 && (
             <TouchableOpacity
               style={styles.clearButton}
-              onPress={() => setSearchQuery('')}
+              onPress={() => {
+                setSearchQuery('');
+                setResults([]);
+                navigation.setParams({
+                  searchQuery: '',
+                  searchResults: [],
+                });
+              }}
             >
               <Ionicons name="close-circle" size={20} color="#999" />
             </TouchableOpacity>

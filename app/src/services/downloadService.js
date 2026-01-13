@@ -87,7 +87,8 @@ export const searchYouTubeVideos = async (searchQuery, maxResults = 20) => {
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || '검색에 실패했습니다.');
+      // 서버의 message를 우선 사용 (제한 초과 등의 경우)
+      throw new Error(errorData.message || errorData.error || '검색에 실패했습니다.');
     }
     
     const data = await response.json();
