@@ -312,11 +312,11 @@ export default function FavoritesScreen({ navigation }) {
     }
 
     try {
-      const youtubeUrl = item.url;
-      console.log('[FavoritesScreen] Navigating to Search with URL:', youtubeUrl);
+      const videoUrl = item.url;
+      console.log('[FavoritesScreen] Navigating to Search with URL:', videoUrl);
       
       const params = {
-        url: youtubeUrl,
+        url: videoUrl,
         timestamp: Date.now(),
         forceUpdate: true,
         forceReload: true, // 강제 리로드로 이전 결과 초기화
@@ -453,8 +453,8 @@ export default function FavoritesScreen({ navigation }) {
           <TouchableOpacity 
             style={styles.logoContainer}
             onPress={() => {
-              // YouTubeSearchScreen으로 이동
-              navigation.navigate('YouTubeSearch');
+              // VideoSearchScreen으로 이동
+              navigation.navigate('VideoSearch');
             }}
             activeOpacity={0.7}
           >

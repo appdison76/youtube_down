@@ -21,7 +21,7 @@ const getDatabase = async () => {
   initPromise = (async () => {
     try {
       if (!db) {
-        db = await SQLite.openDatabaseAsync('youtube_downloader.db');
+        db = await SQLite.openDatabaseAsync('video_downloader.db');
       }
       // 테이블 생성 확인
       if (!isInitialized) {

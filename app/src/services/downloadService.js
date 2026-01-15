@@ -53,8 +53,8 @@ const ensureThumbnailCacheDir = async () => {
     if (!dirInfo.exists) {
       await FileSystem.makeDirectoryAsync(THUMBNAIL_CACHE_DIR, { intermediates: true });
       console.log('[downloadService] Thumbnail cache directory created');
-    }
-  } catch (error) {
+        }
+      } catch (error) {
     console.error('[downloadService] Error ensuring thumbnail cache directory:', error);
   }
 };
@@ -232,7 +232,7 @@ export const cleanupIncompleteFiles = async () => {
   }
 };
 
-// 비디오 정보 가져오기 (YouTube oEmbed API 사용)
+// 비디오 정보 가져오기 (oEmbed API 사용)
 export const getVideoInfo = async (url) => {
   try {
     const oEmbedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
@@ -250,7 +250,7 @@ export const getVideoInfo = async (url) => {
     
     return {
           id: videoId,
-      title: data.title || 'YouTube Video',
+      title: data.title || 'Video',
       url: url,
       thumbnail: data.thumbnail_url || (videoId ? `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg` : ''),
           author: data.author_name || '',
@@ -364,7 +364,7 @@ export const saveFileToDevice = async (fileUri, fileName, isVideo) => {
         if (fileInfo && fileInfo.exists) {
           normalizedUri = path;
           console.log('[downloadService] File found at:', normalizedUri);
-          break;
+        break;
         }
       } catch (error) {
         console.log('[downloadService] Failed to check path:', path, error.message);
@@ -657,9 +657,9 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
           if (testError instanceof Error && testError.message) {
             throw testError;
           }
-        }
-        
-        try {
+    }
+
+    try {
           await FileSystem.deleteAsync(result.uri, { idempotent: true });
         } catch (deleteError) {
           console.warn('[downloadService] Could not delete incomplete file:', deleteError);
@@ -699,7 +699,7 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
           
           await FileSystem.writeAsStringAsync(metadataUri, JSON.stringify(metadata));
           console.log('[downloadService] Metadata saved for video:', fileName);
-        } catch (error) {
+              } catch (error) {
           console.error('[downloadService] Error saving thumbnail/metadata (non-critical):', error);
           // 썸네일/메타데이터 저장 실패는 다운로드 성공을 막지 않음
         }
@@ -714,7 +714,7 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
     } else {
       throw new Error('다운로드가 완료되지 않았습니다.');
     }
-  } catch (error) {
+    } catch (error) {
     console.error('[downloadService] Error downloading video:', error);
     
     if (progressInterval) {
@@ -858,8 +858,8 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
           if (progressInterval) {
             clearInterval(progressInterval);
             progressInterval = null;
-          }
-        } else {
+        }
+      } else {
           // Content-Length가 없으면 다운로드된 바이트로 추정 진행률 계산
           const downloadedMB = downloadProgress.totalBytesWritten / (1024 * 1024);
           let estimatedProgress;
@@ -1029,7 +1029,7 @@ export const deleteFileWithMetadata = async (fileName, videoId) => {
       if (metadataInfo.exists) {
         await FileSystem.deleteAsync(metadataUri, { idempotent: true });
       }
-    } catch (error) {
+                              } catch (error) {
       console.warn('[downloadService] Error deleting metadata:', error);
     }
     
@@ -1141,10 +1141,10 @@ export const deleteThumbnailCacheIfUnused = async (videoId) => {
   }
 };
 
-// YouTube 영상 검색
-export const searchYouTubeVideos = async (searchQuery, maxResults = 20) => {
+// 영상 검색
+export const searchVideos = async (searchQuery, maxResults = 20) => {
   try {
-    console.log('[downloadService] Searching YouTube for:', searchQuery);
+    console.log('[downloadService] Searching videos for:', searchQuery);
     const apiBaseUrl = await getApiBaseUrl();
     
     const response = await fetch(`${apiBaseUrl}/api/search`, {
@@ -1163,7 +1163,7 @@ export const searchYouTubeVideos = async (searchQuery, maxResults = 20) => {
     
     const data = await response.json();
     
-    // YouTube API 응답을 앱에서 사용하는 형식으로 변환
+    // API 응답을 앱에서 사용하는 형식으로 변환
     const results = data.items.map(item => ({
       id: item.id.videoId,
       title: decodeHtmlEntities(item.snippet.title),
@@ -1177,13 +1177,13 @@ export const searchYouTubeVideos = async (searchQuery, maxResults = 20) => {
     
     return results;
   } catch (error) {
-    console.error('[downloadService] Error searching YouTube:', error);
+    console.error('[downloadService] Error searching videos:', error);
     throw error;
   }
 };
 
-// YouTube 자동완성 가져오기
-export const getYouTubeAutocomplete = async (query) => {
+// 자동완성 가져오기
+export const getAutocomplete = async (query) => {
   try {
     if (!query || query.trim().length < 2) {
       return [];

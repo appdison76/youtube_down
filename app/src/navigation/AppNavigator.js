@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import SearchScreen from '../screens/SearchScreen';
 import FavoritesScreen from '../screens/FavoritesScreen';
 import DownloadsScreen from '../screens/DownloadsScreen';
-import YouTubeSearchScreen from '../screens/YouTubeSearchScreen';
+import VideoSearchScreen from '../screens/VideoSearchScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -18,7 +18,7 @@ function MainTabs() {
         tabBarIcon: ({ focused, color, size }) => {
           let iconName;
 
-          if (route.name === 'YouTubeSearch') {
+          if (route.name === 'VideoSearch') {
             iconName = focused ? 'search' : 'search-outline';
           } else if (route.name === 'Search') {
             iconName = focused ? 'save' : 'save-outline';
@@ -36,8 +36,8 @@ function MainTabs() {
       })}
     >
       <Tab.Screen 
-        name="YouTubeSearch" 
-        component={YouTubeSearchScreen}
+        name="VideoSearch" 
+        component={VideoSearchScreen}
         options={{
           title: '검색',
         }}

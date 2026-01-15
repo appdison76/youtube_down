@@ -37,7 +37,7 @@ export default function SearchScreen({ navigation, route }) {
   const [customAlert, setCustomAlert] = useState({ visible: false, title: '', message: '', subMessage: '', onConfirm: null });
   const textInputRef = useRef(null);
   const lastProcessedUrl = useRef(null);
-  const pulseAnim = useRef(new Animated.Value(1)).current; // YouTube 아이콘 펄스 애니메이션
+  const pulseAnim = useRef(new Animated.Value(1)).current; // 비디오 아이콘 펄스 애니메이션
   
   // ✅ 커스텀 Alert 함수 (빨간 글씨 안내 메시지 포함)
   const showDownloadAlert = (hasExistingFile, isVideo = true) => {
@@ -203,7 +203,7 @@ export default function SearchScreen({ navigation, route }) {
     };
   }, []); // ✅ results dependency 제거 (불필요)
 
-  // YouTube 아이콘 펄스 애니메이션 (결과가 없을 때만)
+  // 비디오 아이콘 펄스 애니메이션 (결과가 없을 때만)
   useEffect(() => {
     if (results.length === 0 && !loading) {
       const pulse = Animated.loop(
@@ -227,42 +227,42 @@ export default function SearchScreen({ navigation, route }) {
     }
   }, [results.length, loading, pulseAnim]);
 
-  // YouTube 앱 열기
-  const openYouTubeApp = useCallback(async () => {
+  // 영상 앱 열기
+  const openVideoApp = useCallback(async () => {
     try {
       if (Platform.OS === 'ios') {
-        // iOS: YouTube 앱 열기 시도
-        const youtubeUrl = 'youtube://';
-        const canOpen = await Linking.canOpenURL(youtubeUrl);
+        // iOS: 앱 열기 시도
+        const videoUrl = 'youtube://';
+        const canOpen = await Linking.canOpenURL(videoUrl);
         if (canOpen) {
-          await Linking.openURL(youtubeUrl);
+          await Linking.openURL(videoUrl);
         } else {
-          // YouTube 앱이 없으면 웹 브라우저로 YouTube 열기
+          // 앱이 없으면 웹 브라우저로 열기
           await Linking.openURL('https://www.youtube.com');
         }
       } else {
-        // Android: Intent를 사용하여 YouTube 앱 열기
+        // Android: Intent를 사용하여 앱 열기
         const intentUrl = 'intent://www.youtube.com/#Intent;scheme=https;package=com.google.android.youtube;end';
         try {
           await Linking.openURL(intentUrl);
         } catch (intentError) {
-          // Intent 실패 시 일반 YouTube URL 시도
-          const youtubeUrl = 'https://www.youtube.com';
-          const canOpen = await Linking.canOpenURL(youtubeUrl);
+          // Intent 실패 시 일반 URL 시도
+          const videoUrl = 'https://www.youtube.com';
+          const canOpen = await Linking.canOpenURL(videoUrl);
           if (canOpen) {
-            await Linking.openURL(youtubeUrl);
+            await Linking.openURL(videoUrl);
           } else {
-            Alert.alert('오류', 'YouTube를 열 수 없습니다.');
+            Alert.alert('오류', '영상을 열 수 없습니다.');
           }
         }
       }
     } catch (error) {
-      console.error('[SearchScreen] Error opening YouTube app:', error);
-      // 실패 시 웹 브라우저로 YouTube 열기
+      console.error('[SearchScreen] Error opening video app:', error);
+      // 실패 시 웹 브라우저로 열기
       try {
         await Linking.openURL('https://www.youtube.com');
       } catch (webError) {
-        Alert.alert('오류', 'YouTube를 열 수 없습니다.');
+        Alert.alert('오류', '영상을 열 수 없습니다.');
       }
     }
   }, []);
@@ -335,7 +335,7 @@ export default function SearchScreen({ navigation, route }) {
       console.log('[SearchScreen] 잘린 URL 복구:', sharedUrl);
     }
     
-    // 정규화된 YouTube URL로 변환
+    // 정규화된 영상 URL로 변환
     const urlMatch = sharedUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s?]+)/);
     if (urlMatch) {
       const videoId = urlMatch[1].split('?')[0].split('&')[0]; // ?si= 같은 파라미터 제거
@@ -462,7 +462,7 @@ export default function SearchScreen({ navigation, route }) {
     }
     
     if (!videoId) {
-      console.log('[SearchScreen] Invalid YouTube URL:', cleanUrl);
+      console.log('[SearchScreen] Invalid video URL:', cleanUrl);
       setLoading(false);
       return;
     }
@@ -478,7 +478,7 @@ export default function SearchScreen({ navigation, route }) {
       forceReload: false
     });
     
-    // YouTube oEmbed API를 사용하여 비디오 정보 가져오기
+    // oEmbed API를 사용하여 비디오 정보 가져오기
     const oEmbedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(normalizedUrl)}&format=json`;
     
     fetch(oEmbedUrl)
@@ -492,7 +492,7 @@ export default function SearchScreen({ navigation, route }) {
         console.log('[SearchScreen] oEmbed data:', data);
         const result = {
           id: videoId,
-          title: data.title || `YouTube Video (${videoId})`,
+          title: data.title || `Video (${videoId})`,
           url: normalizedUrl,
           thumbnail: data.thumbnail_url || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
           author: data.author_name || '',
@@ -509,7 +509,7 @@ export default function SearchScreen({ navigation, route }) {
         // 에러 발생 시에도 기본 정보로 표시 (사용자가 볼 수 있도록)
         const fallbackResult = {
           id: videoId,
-          title: `YouTube Video (${videoId})`,
+          title: `Video (${videoId})`,
           url: normalizedUrl,
           thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
         };
@@ -649,7 +649,7 @@ export default function SearchScreen({ navigation, route }) {
               try {
                 const fileName = `${item.title || 'video'}.mp4`;
                 await saveFileToDevice(fileUri, fileName, true);
-                Alert.alert('알림', '영상파일이 갤러리에 저장되었습니다.\n\n저장 위치: Movies/YouTube Videos');
+                Alert.alert('알림', '영상파일이 갤러리에 저장되었습니다.\n\n저장 위치: Movies/Videos');
               } catch (error) {
                 console.error('[SearchScreen] Error saving file:', error);
                 Alert.alert('오류', error.message || '파일 저장 중 오류가 발생했습니다.');
@@ -814,7 +814,7 @@ export default function SearchScreen({ navigation, route }) {
               try {
                 const fileName = `${item.title || 'audio'}.m4a`;
                 await saveFileToDevice(fileUri, fileName, false);
-                Alert.alert('알림', '음악파일이 음악 앱에 저장되었습니다.\n\n저장 위치: Music/YouTube Audio');
+                Alert.alert('알림', '음악파일이 음악 앱에 저장되었습니다.\n\n저장 위치: Music/Audio');
               } catch (error) {
                 console.error('[SearchScreen] Error saving file:', error);
                 Alert.alert('오류', error.message || '파일 저장 중 오류가 발생했습니다.');
@@ -893,26 +893,26 @@ export default function SearchScreen({ navigation, route }) {
     */
   };
 
-  const handleOpenYouTube = async (item) => {
+  const handleOpenVideo = async (item) => {
     if (!item.url) {
-      Alert.alert('오류', 'YouTube URL을 찾을 수 없습니다.');
+      Alert.alert('오류', '영상 URL을 찾을 수 없습니다.');
       return;
     }
 
     try {
-      const youtubeUrl = item.url;
-      console.log('[SearchScreen] Opening YouTube URL:', youtubeUrl);
+      const videoUrl = item.url;
+      console.log('[SearchScreen] Opening video URL:', videoUrl);
       
-      // YouTube 앱으로 열기 시도
-      const canOpen = await Linking.canOpenURL(youtubeUrl);
+      // 앱으로 열기 시도
+      const canOpen = await Linking.canOpenURL(videoUrl);
       if (canOpen) {
-        await Linking.openURL(youtubeUrl);
+        await Linking.openURL(videoUrl);
       } else {
-        Alert.alert('오류', 'YouTube를 열 수 없습니다.');
+        Alert.alert('오류', '영상을 열 수 없습니다.');
       }
     } catch (error) {
-      console.error('[SearchScreen] Error opening YouTube:', error);
-      Alert.alert('오류', 'YouTube를 열 수 없습니다.');
+      console.error('[SearchScreen] Error opening video:', error);
+      Alert.alert('오류', '영상을 열 수 없습니다.');
     }
   };
 
@@ -1125,8 +1125,8 @@ export default function SearchScreen({ navigation, route }) {
       Alert.alert(
         '알림',
         file.isVideo 
-          ? '영상파일이 갤러리에 저장되었습니다.\n\n저장 위치: Movies/YouTube Videos'
-          : '음악파일이 음악 앱에 저장되었습니다.\n\n저장 위치: Music/YouTube Audio'
+          ? '영상파일이 갤러리에 저장되었습니다.\n\n저장 위치: Movies/Videos'
+          : '음악파일이 음악 앱에 저장되었습니다.\n\n저장 위치: Music/Audio'
       );
       // 저장 후 파일 목록 새로고침
       loadDownloadedFiles();
@@ -1216,9 +1216,9 @@ export default function SearchScreen({ navigation, route }) {
       <TouchableOpacity 
         style={styles.videoItem}
         onPress={() => {
-          // ✅ 다운로드 중일 때는 유튜브 이동 비활성화
+          // ✅ 다운로드 중일 때는 영상 이동 비활성화
           if (!isDownloading) {
-            handleOpenYouTube(item);
+            handleOpenVideo(item);
           }
         }}
         activeOpacity={isDownloading ? 1 : 0.8}
@@ -1486,8 +1486,8 @@ export default function SearchScreen({ navigation, route }) {
           <TouchableOpacity 
             style={styles.logoContainer}
             onPress={() => {
-              // YouTubeSearchScreen으로 이동
-              navigation.navigate('YouTubeSearch');
+              // VideoSearchScreen으로 이동
+              navigation.navigate('VideoSearch');
             }}
             activeOpacity={0.7}
           >
@@ -1510,7 +1510,7 @@ export default function SearchScreen({ navigation, route }) {
           <TextInput
             ref={textInputRef}
             style={styles.searchInput}
-            placeholder="YouTube URL 붙여넣기"
+            placeholder="영상 URL 붙여넣기"
             placeholderTextColor="#999"
             value={query}
             onChangeText={setQuery}
@@ -1595,12 +1595,12 @@ export default function SearchScreen({ navigation, route }) {
             ListEmptyComponent={
               <View style={styles.centerContainer}>
                 <TouchableOpacity 
-                  onPress={openYouTubeApp}
+                  onPress={openVideoApp}
                   activeOpacity={0.7}
                 >
                   <Animated.View 
                     style={[
-                      styles.youtubeIconButton,
+                      styles.videoIconButton,
                       { transform: [{ scale: pulseAnim }] }
                     ]}
                   >
@@ -1609,12 +1609,12 @@ export default function SearchScreen({ navigation, route }) {
                   </Animated.View>
                 </TouchableOpacity>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                  <Text style={styles.emptyText}>YouTube 앱에서 공유하기를 사용하세요</Text>
+                  <Text style={styles.emptyText}>영상 앱에서 공유하기를 사용하세요</Text>
                   <Ionicons name="arrow-redo-outline" size={18} color="#333" style={{ marginLeft: 6 }} />
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                   <Text style={styles.emptySubText}>
-                    또는 YouTube URL을 링크복사 해서{'\n'}검색창에 붙여넣으세요
+                    또는 영상 URL을 링크복사 해서{'\n'}검색창에 붙여넣으세요
                   </Text>
                   <Ionicons name="copy-outline" size={16} color="#666" style={{ marginLeft: 6 }} />
                 </View>
@@ -1782,7 +1782,7 @@ const styles = StyleSheet.create({
     marginBottom: 0,
     textAlign: 'center',
   },
-  youtubeIconButton: {
+  videoIconButton: {
     padding: 24,
     borderRadius: 28,
     backgroundColor: '#fff',

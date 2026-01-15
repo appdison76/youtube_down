@@ -18,7 +18,7 @@ const getDatabase = async () => {
   initPromise = (async () => {
     try {
       if (!db) {
-        db = await SQLite.openDatabaseAsync('youtube_downloader.db');
+        db = await SQLite.openDatabaseAsync('video_downloader.db');
       }
       if (!isInitialized) {
         await db.execAsync(`

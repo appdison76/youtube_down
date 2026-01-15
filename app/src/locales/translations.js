@@ -14,7 +14,7 @@ export const translations = {
     
     // 즐겨찾기
     noFavorites: '즐겨찾기가 없습니다',
-    favoriteHint: 'YouTube 영상을 즐겨찾기에 추가해보세요',
+    favoriteHint: '영상을 즐겨찾기에 추가해보세요',
     favoritesLoadError: '즐겨찾기를 불러오는 중 오류가 발생했습니다.',
     favoritesDeleteError: '즐겨찾기를 삭제하는 중 오류가 발생했습니다.',
     
@@ -27,8 +27,8 @@ export const translations = {
     bookmarkGroupDeleteError: '찜하기그룹 삭제 중 오류가 발생했습니다.',
     bookmarkGroupAssignError: '찜하기그룹 할당 중 오류가 발생했습니다.',
     
-    // YouTube 관련
-    ytUrlError: '유효한 YouTube URL이 아닙니다.',
+    // 영상 관련
+    ytUrlError: '유효한 영상 URL이 아닙니다.',
     navigateError: '화면 이동 중 오류가 발생했습니다.',
   },
   en: {
@@ -46,7 +46,7 @@ export const translations = {
     
     // Favorites
     noFavorites: 'No favorites',
-    favoriteHint: 'Add YouTube videos to favorites',
+    favoriteHint: 'Add videos to favorites',
     favoritesLoadError: 'Error loading favorites.',
     favoritesDeleteError: 'Error deleting favorites.',
     
@@ -59,8 +59,8 @@ export const translations = {
     bookmarkGroupDeleteError: 'Error deleting bookmark group.',
     bookmarkGroupAssignError: 'Error assigning bookmark group.',
     
-    // YouTube related
-    ytUrlError: 'Invalid YouTube URL.',
+    // Video related
+    ytUrlError: 'Invalid video URL.',
     navigateError: 'Error navigating to screen.',
   },
   ja: {
@@ -78,7 +78,7 @@ export const translations = {
     
     // お気に入り
     noFavorites: 'お気に入りがありません',
-    favoriteHint: 'YouTube動画をお気に入りに追加してください',
+    favoriteHint: '動画をお気に入りに追加してください',
     favoritesLoadError: 'お気に入りの読み込み中にエラーが発生しました。',
     favoritesDeleteError: 'お気に入りの削除中にエラーが発生しました。',
     
@@ -91,8 +91,8 @@ export const translations = {
     bookmarkGroupDeleteError: 'ブックマークグループの削除中にエラーが発生しました。',
     bookmarkGroupAssignError: 'ブックマークグループの割り当て中にエラーが発生しました。',
     
-    // YouTube関連
-    ytUrlError: '有効なYouTube URLではありません。',
+    // 動画関連
+    ytUrlError: '有効な動画 URLではありません。',
     navigateError: '画面遷移中にエラーが発生しました。',
   },
   zh: {
@@ -110,7 +110,7 @@ export const translations = {
     
     // 收藏
     noFavorites: '没有收藏',
-    favoriteHint: '将YouTube视频添加到收藏',
+    favoriteHint: '将视频添加到收藏',
     favoritesLoadError: '加载收藏时出错。',
     favoritesDeleteError: '删除收藏时出错。',
     
@@ -123,8 +123,8 @@ export const translations = {
     bookmarkGroupDeleteError: '删除书签组时出错。',
     bookmarkGroupAssignError: '分配书签组时出错。',
     
-    // YouTube相关
-    ytUrlError: '无效的YouTube URL。',
+    // 视频相关
+    ytUrlError: '无效的视频 URL。',
     navigateError: '导航到屏幕时出错。',
   },
 };

@@ -12,6 +12,7 @@ import {
   StatusBar,
   Linking,
   Alert,
+  InteractionManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -29,12 +30,12 @@ import { shareDownloadedFile, saveFileToDevice } from '../services/downloadServi
 import { getPlaylists, createPlaylist, updatePlaylist, deletePlaylist, assignFileToPlaylist, getPlaylistsForFile } from '../services/playlistService';
 import MediaStoreModule from '../modules/MediaStoreModule';
 
-// 썸네일 이미지 컴포넌트 (YouTube URL 실패 시 캐시로 폴백)
+// 썸네일 이미지 컴포넌트 (영상 URL 실패 시 캐시로 폴백)
 const ThumbnailImage = ({ sourceUri, cacheUri, style }) => {
   const [imageUri, setImageUri] = React.useState(sourceUri || cacheUri);
   
   const handleError = () => {
-    // YouTube URL 로드 실패 시 캐시로 폴백
+    // 영상 URL 로드 실패 시 캐시로 폴백
     if (imageUri !== cacheUri && cacheUri) {
       setImageUri(cacheUri);
     }
@@ -72,6 +73,8 @@ export default function DownloadsScreen({ navigation }) {
   const [isPlaying, setIsPlaying] = useState(false); // 재생 중 여부
   const [sound, setSound] = useState(null); // expo-av Sound 객체
   const soundRef = useRef(null); // sound 객체 참조
+  const prevPlaylistFilterRef = useRef(null); // 이전 playlistFilter 값 저장
+  const [playingPlaylistFilter, setPlayingPlaylistFilter] = useState(null); // 재생 시작 시의 playlistFilter 저장
 
   // 플레이리스트 목록 로드
   const loadPlaylists = useCallback(async () => {
@@ -216,7 +219,18 @@ export default function DownloadsScreen({ navigation }) {
     setFilteredFiles(filtered);
     
     // ✅ 재생 중인 플레이리스트가 필터링 결과와 다르면 업데이트
-    if (playlist.length > 0 && isPlaying) {
+    // 단, playlistFilter가 변경된 경우는 제외 (기존 재생 유지)
+    const isPlaylistFilterChanged = prevPlaylistFilterRef.current !== playlistFilter;
+    prevPlaylistFilterRef.current = playlistFilter;
+    
+    // 재생 중이고, 재생 시작 시의 필터와 현재 필터가 다르면 재생 관련 로직 건너뛰기
+    if (isPlaying && playingPlaylistFilter !== playlistFilter) {
+      // 다른 필터로 변경했지만 재생은 계속 유지 (목록은 이미 setFilteredFiles로 설정됨)
+      // playingPlaylistFilter === null (전체)이고 playlistFilter !== null인 경우도 포함
+      return;
+    }
+    
+    if (playlist.length > 0 && isPlaying && !isPlaylistFilterChanged) {
       const audioFiles = filtered.filter(file => !file.isVideo);
       const currentItem = playlist[currentIndex];
       const newIndex = audioFiles.findIndex(file => file.fileUri === currentItem?.fileUri);
@@ -234,8 +248,8 @@ export default function DownloadsScreen({ navigation }) {
   // ✅ 음악 전체재생 시작
   const handlePlayAll = async () => {
     try {
-      // 재생 중이면 일시정지/재생 토글
-      if (isPlaying && playlist.length > 0) {
+      // 재생 중이고, 현재 필터가 재생 시작 시의 필터와 일치할 때만 일시정지/재생 토글
+      if (isPlaying && playlist.length > 0 && playingPlaylistFilter === playlistFilter) {
         await handlePlayPause();
         return;
       }
@@ -246,7 +260,7 @@ export default function DownloadsScreen({ navigation }) {
         return;
       }
 
-      // 기존 재생 중지
+      // 기존 재생 중지 (다른 필터에서 재생 중이거나 새로 시작하는 경우)
       if (soundRef.current) {
         await soundRef.current.unloadAsync();
         soundRef.current = null;
@@ -254,6 +268,7 @@ export default function DownloadsScreen({ navigation }) {
 
       setPlaylist(audioFiles);
       setCurrentIndex(0);
+      setPlayingPlaylistFilter(playlistFilter); // 재생 시작 시의 필터 저장
       await playAudioFile(audioFiles[0], 0);
     } catch (error) {
       console.error('[DownloadsScreen] Error starting playlist:', error);
@@ -344,6 +359,7 @@ export default function DownloadsScreen({ navigation }) {
       setIsPlaying(false);
       setPlaylist([]);
       setCurrentIndex(0);
+      setPlayingPlaylistFilter(null); // 재생 중지 시 필터 초기화
     } catch (error) {
       console.error('[DownloadsScreen] Error stopping playlist:', error);
     }
@@ -353,7 +369,35 @@ export default function DownloadsScreen({ navigation }) {
   useEffect(() => {
     return () => {
       if (soundRef.current) {
-        soundRef.current.unloadAsync().catch(console.error);
+        // 앱 리로드 시 백그라운드 스레드에서 실행될 수 있으므로 안전하게 처리
+        const cleanup = async () => {
+          try {
+            // soundRef.current를 로컬 변수에 저장 (null 체크 방지)
+            const sound = soundRef.current;
+            if (sound) {
+              await sound.unloadAsync();
+            }
+          } catch (error) {
+            // 앱 리로드 중 발생하는 오류는 무시 (이미 리소스가 정리되고 있음)
+            if (error.message && error.message.includes('Player is accessed on the wrong thread')) {
+              console.log('[DownloadsScreen] Ignoring thread error during app reload');
+            } else {
+              console.error('[DownloadsScreen] Error cleaning up sound:', error);
+            }
+          } finally {
+            soundRef.current = null;
+          }
+        };
+        
+        // 메인 스레드에서 실행 시도, 실패하면 백그라운드에서도 안전하게 처리
+        try {
+          InteractionManager.runAfterInteractions(() => {
+            cleanup();
+          });
+        } catch (error) {
+          // InteractionManager 실패 시에도 cleanup 실행
+          cleanup();
+        }
       }
     };
   }, []);
@@ -433,8 +477,8 @@ export default function DownloadsScreen({ navigation }) {
       Alert.alert(
         '알림',
         file.isVideo 
-          ? '영상파일이 갤러리에 저장되었습니다.\n\n저장 위치: Movies/YouTube Videos'
-          : '음악파일이 음악 앱에 저장되었습니다.\n\n저장 위치: Music/YouTube Audio'
+          ? '영상파일이 갤러리에 저장되었습니다.\n\n저장 위치: Movies/Videos'
+          : '음악파일이 음악 앱에 저장되었습니다.\n\n저장 위치: Music/Audio'
       );
       // 저장 후 파일 목록 새로고침
       loadDownloadedFiles();
@@ -621,35 +665,33 @@ export default function DownloadsScreen({ navigation }) {
   // 파일 아이템 클릭 시 SearchScreen으로 이동
   const handleFileItemPress = (item) => {
     if (!item.videoId) {
-      Alert.alert('알림', '이 파일의 YouTube URL 정보가 없습니다.');
+      Alert.alert('알림', '이 파일의 영상 URL 정보가 없습니다.');
       return;
     }
 
     try {
-      const youtubeUrl = `https://www.youtube.com/watch?v=${item.videoId}`;
-      console.log('[DownloadsScreen] Navigating to Search with URL:', youtubeUrl);
+      const videoUrl = `https://www.youtube.com/watch?v=${item.videoId}`;
+      console.log('[DownloadsScreen] Navigating to Search with URL:', videoUrl);
       
       const params = {
-        url: youtubeUrl,
+        url: videoUrl,
         timestamp: Date.now(),
         forceUpdate: true,
         forceReload: true, // 강제 리로드로 이전 결과 초기화
       };
       
-      // Stack Navigator를 통해 Main 스크린의 Search 탭으로 navigate
-      // 구조: Stack.Navigator -> Main (Tab.Navigator) -> Search
-      // Tab Navigator에서 Stack Navigator에 접근하려면 getParent()를 두 번 호출
-      const tabNav = navigation.getParent(); // Tab Navigator
-      const stackNav = tabNav?.getParent(); // Stack Navigator
-      if (stackNav) {
-        // Stack Navigator를 통해 Main -> Search로 navigate
-        stackNav.navigate('Main', {
-          screen: 'Search',
-          params: params,
-        });
-      } else {
-        // fallback: 직접 navigate 시도 (Tab Navigator에서 직접)
+      // Tab Navigator 내에서 Search 탭으로 이동
+      // 같은 Tab Navigator 내에 있으므로 직접 navigate 가능
+      if (navigation.navigate) {
         navigation.navigate('Search', params);
+      } else {
+        // navigation 객체가 없거나 navigate 메서드가 없는 경우
+        const tabNav = navigation.getParent?.();
+        if (tabNav?.navigate) {
+          tabNav.navigate('Search', params);
+        } else {
+          throw new Error('Navigation not available');
+        }
       }
     } catch (error) {
       console.error('[DownloadsScreen] Error navigating to Search:', error);
@@ -665,7 +707,7 @@ export default function DownloadsScreen({ navigation }) {
     
     const fileSizeMB = (item.size / (1024 * 1024)).toFixed(2);
     
-    // ✅ 썸네일 표시: 온라인에서는 YouTube URL 우선, 실패 시 캐시 사용
+    // ✅ 썸네일 표시: 온라인에서는 영상 URL 우선, 실패 시 캐시 사용
     const cachePath = item.videoId ? thumbnailCachePaths[item.videoId] : null;
     const cacheUri = cachePath ? `file://${cachePath}` : null;
     
@@ -780,8 +822,8 @@ export default function DownloadsScreen({ navigation }) {
           <TouchableOpacity 
             style={styles.logoContainer}
             onPress={() => {
-              // YouTubeSearchScreen으로 이동
-              navigation.navigate('YouTubeSearch');
+              // VideoSearchScreen으로 이동
+              navigation.navigate('VideoSearch');
             }}
             activeOpacity={0.7}
           >
@@ -1035,7 +1077,7 @@ export default function DownloadsScreen({ navigation }) {
             {playlistFilter ? (
               <View style={styles.playAllButtonInner}>
                 <Ionicons 
-                  name={isPlaying ? "pause-circle" : "play-circle"} 
+                  name={isPlaying && playingPlaylistFilter === playlistFilter ? "pause-circle" : "play-circle"} 
                   size={24} 
                   color="#fff" 
                   style={{ flexShrink: 0 }}
@@ -1045,10 +1087,11 @@ export default function DownloadsScreen({ navigation }) {
                     const selectedPlaylist = playlists.find(p => p.playlist_id === playlistFilter);
                     const playlistPrefix = selectedPlaylist ? `${selectedPlaylist.playlist_name} ` : '';
                     
-                    if (isPlaying) {
+                    // 재생 중이고, 현재 필터가 재생 시작 시의 필터와 일치할 때만 "재생 중" 표시
+                    if (isPlaying && playingPlaylistFilter === playlistFilter) {
                       return `${playlistPrefix}재생 중 (${currentIndex + 1}/${playlist.length})`;
                     } else {
-                      return `${playlistPrefix}음악 전체재생 (${filteredFiles.filter(f => !f.isVideo).length}곡)`;
+                      return `${playlistPrefix}처음부터 재생 (${filteredFiles.filter(f => !f.isVideo).length}곡)`;
                     }
                   })()}
                 </Text>
@@ -1056,14 +1099,14 @@ export default function DownloadsScreen({ navigation }) {
             ) : (
               <>
                 <Ionicons 
-                  name={isPlaying ? "pause-circle" : "play-circle"} 
+                  name={isPlaying && playingPlaylistFilter === playlistFilter ? "pause-circle" : "play-circle"} 
                   size={24} 
                   color="#fff" 
                 />
                 <Text style={styles.playAllButtonText}>
-                  {isPlaying 
+                  {isPlaying && playingPlaylistFilter === playlistFilter
                     ? `재생 중 (${currentIndex + 1}/${playlist.length})` 
-                    : `음악 전체재생 (${filteredFiles.filter(f => !f.isVideo).length}곡)`
+                    : `처음부터 재생 (${filteredFiles.filter(f => !f.isVideo).length}곡)`
                   }
                 </Text>
               </>
@@ -1082,7 +1125,7 @@ export default function DownloadsScreen({ navigation }) {
             {playlistFilter ? (
               <View style={styles.playAllButtonInner}>
                 <Ionicons 
-                  name={isPlaying ? "pause-circle" : "play-circle"} 
+                  name={isPlaying && playingPlaylistFilter === playlistFilter ? "pause-circle" : "play-circle"} 
                   size={24} 
                   color="#fff" 
                   style={{ flexShrink: 0 }}
@@ -1092,10 +1135,11 @@ export default function DownloadsScreen({ navigation }) {
                     const selectedPlaylist = playlists.find(p => p.playlist_id === playlistFilter);
                     const playlistPrefix = selectedPlaylist ? `${selectedPlaylist.playlist_name} ` : '';
                     
-                    if (isPlaying) {
+                    // 재생 중이고, 현재 필터가 재생 시작 시의 필터와 일치할 때만 "재생 중" 표시
+                    if (isPlaying && playingPlaylistFilter === playlistFilter) {
                       return `${playlistPrefix}음악 재생 중 (${currentIndex + 1}/${playlist.length})`;
                     } else {
-                      return `${playlistPrefix}음악 전체재생 (${filteredFiles.filter(f => !f.isVideo).length}곡)`;
+                      return `${playlistPrefix}처음부터 재생 (${filteredFiles.filter(f => !f.isVideo).length}곡)`;
                     }
                   })()}
                 </Text>
@@ -1103,14 +1147,14 @@ export default function DownloadsScreen({ navigation }) {
             ) : (
               <>
                 <Ionicons 
-                  name={isPlaying ? "pause-circle" : "play-circle"} 
+                  name={isPlaying && playingPlaylistFilter === playlistFilter ? "pause-circle" : "play-circle"} 
                   size={24} 
                   color="#fff" 
                 />
                 <Text style={styles.playAllButtonText}>
-                  {isPlaying 
+                  {isPlaying && playingPlaylistFilter === playlistFilter
                     ? `음악 재생 중 (${currentIndex + 1}/${playlist.length})` 
-                    : `음악 전체재생 (${filteredFiles.filter(f => !f.isVideo).length}곡)`
+                    : `처음부터 재생 (${filteredFiles.filter(f => !f.isVideo).length}곡)`
                   }
                 </Text>
               </>
@@ -1145,7 +1189,7 @@ export default function DownloadsScreen({ navigation }) {
               <Text style={styles.emptySubText}>
                 {searchQuery 
                   ? '다른 검색어를 시도해보세요' 
-                  : 'YouTube 영상을 다운로드해보세요'
+                  : '영상을 다운로드해보세요'
                 }
               </Text>
             </View>
