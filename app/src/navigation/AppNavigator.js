@@ -21,7 +21,7 @@ function MainTabs() {
           if (route.name === 'YouTubeSearch') {
             iconName = focused ? 'search' : 'search-outline';
           } else if (route.name === 'Search') {
-            iconName = focused ? 'download' : 'download-outline';
+            iconName = focused ? 'save' : 'save-outline';
           } else if (route.name === 'Favorites') {
             iconName = focused ? 'star' : 'star-outline';
           } else if (route.name === 'Downloads') {
@@ -46,7 +46,7 @@ function MainTabs() {
         name="Search" 
         component={SearchScreen}
         options={{
-          title: '다운로드',
+          title: '저장',
         }}
       />
       <Tab.Screen 

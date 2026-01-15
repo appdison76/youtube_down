@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { Platform, Linking, NativeEventEmitter, NativeModules, AppState, Alert } from 'react-native';
 import AppNavigator from './src/navigation/AppNavigator';
 import { initDatabase } from './src/services/database';
+import { LanguageProvider } from './src/contexts/LanguageContext';
 import Constants from 'expo-constants';
 
 // YouTube URL인지 확인하는 함수
@@ -53,7 +54,6 @@ export default function App() {
           method: 'GET',
           headers: {
             'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache',
           },
         });
 
@@ -65,71 +65,53 @@ export default function App() {
         const versionInfo = await response.json();
         console.log('[App] Server version info:', versionInfo);
 
-        // 버전 비교 함수
-        const compareVersions = (v1, v2) => {
-          const parts1 = v1.split('.').map(Number);
-          const parts2 = v2.split('.').map(Number);
-          for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
-            const part1 = parts1[i] || 0;
-            const part2 = parts2[i] || 0;
-            if (part1 < part2) return -1;
-            if (part1 > part2) return 1;
-          }
-          return 0;
-        };
+        if (versionInfo.minVersion && versionInfo.updateUrl) {
+          // 버전 비교 함수
+          const compareVersions = (v1, v2) => {
+            const parts1 = v1.split('.').map(Number);
+            const parts2 = v2.split('.').map(Number);
+            for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+              const part1 = parts1[i] || 0;
+              const part2 = parts2[i] || 0;
+              if (part1 < part2) return -1;
+              if (part1 > part2) return 1;
+            }
+            return 0;
+          };
 
-        let shouldUpdate = false;
-        let updateMessage = versionInfo.message || '새로운 버전이 있습니다. 업데이트가 필요합니다.';
-
-        // forceUpdate가 true인 경우: 현재 버전이 서버의 version보다 낮으면 강제 업데이트
-        if (versionInfo.forceUpdate === true && versionInfo.version) {
-          const versionComparison = compareVersions(currentVersion, versionInfo.version);
-          console.log('[App] Force update check - Current:', currentVersion, 'Server version:', versionInfo.version, 'Comparison:', versionComparison);
-          if (versionComparison < 0) {
-            shouldUpdate = true;
-            console.log('[App] ⚠️ Force update required! Current:', currentVersion, 'Server version:', versionInfo.version);
-          }
-        }
-        
-        // forceUpdate가 false이거나 없고, minVersion이 있는 경우: 현재 버전이 minVersion보다 낮으면 업데이트
-        if (!shouldUpdate && versionInfo.minVersion && versionInfo.updateUrl) {
-          const minVersionComparison = compareVersions(currentVersion, versionInfo.minVersion);
-          console.log('[App] Min version check - Current:', currentVersion, 'Min:', versionInfo.minVersion, 'Comparison:', minVersionComparison);
-          if (minVersionComparison < 0) {
-            shouldUpdate = true;
+          // 현재 버전이 minVersion보다 낮으면 강제 업데이트
+          if (compareVersions(currentVersion, versionInfo.minVersion) < 0) {
             console.log('[App] ⚠️ Update required! Current:', currentVersion, 'Min:', versionInfo.minVersion);
-          }
-        }
-
-        if (shouldUpdate && versionInfo.updateUrl) {
-          Alert.alert(
-            '업데이트 필요',
-            updateMessage,
-            [
-              {
-                text: '업데이트',
-                onPress: () => {
-                  const updateUrl = versionInfo.updateUrl;
-                  Linking.openURL(updateUrl).catch(err => {
-                    console.error('[App] Failed to open update URL:', err);
-                  });
+            
+            Alert.alert(
+              '업데이트 필요',
+              versionInfo.message || '새로운 버전이 있습니다. 업데이트가 필요합니다.',
+              [
+                {
+                  text: '업데이트',
+                  onPress: () => {
+                    const updateUrl = versionInfo.updateUrl || 'https://appdison76.github.io/youtube_down/install-page/';
+                    Linking.openURL(updateUrl).catch(err => {
+                      console.error('[App] Failed to open update URL:', err);
+                    });
+                  },
                 },
-              },
-            ],
-            { cancelable: false }
-          );
-          
-          // 자동으로 설치 페이지로 리다이렉트
-          setTimeout(() => {
-            const updateUrl = versionInfo.updateUrl;
-            Linking.openURL(updateUrl).catch(err => {
-              console.error('[App] Failed to open update URL:', err);
-            });
-          }, 1000);
-          
-          setShouldRedirectToInstall(true);
-        } else {
-          console.log('[App] ✅ Version is up to date');
+              ],
+              { cancelable: false }
+            );
+            
+            // 자동으로 설치 페이지로 리다이렉트
+            setTimeout(() => {
+              const updateUrl = versionInfo.updateUrl || 'https://appdison76.github.io/youtube_down/install-page/';
+              Linking.openURL(updateUrl).catch(err => {
+                console.error('[App] Failed to open update URL:', err);
+              });
+            }, 1000);
+            
+            setShouldRedirectToInstall(true);
+          } else {
+            console.log('[App] ✅ Version is up to date');
+          }
         }
       } catch (error) {
         console.error('[App] Error checking version:', error);
@@ -260,5 +242,9 @@ export default function App() {
     return null;
   }
 
-  return <AppNavigator initialUrl={initialUrl} />;
+  return (
+    <LanguageProvider>
+      <AppNavigator initialUrl={initialUrl} />
+    </LanguageProvider>
+  );
 }

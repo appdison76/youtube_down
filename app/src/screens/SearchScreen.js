@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import AdBanner from '../components/AdBanner';
+import LanguageSelector from '../components/LanguageSelector';
 import { addFavorite, removeFavorite, isFavorite, initDatabase } from '../services/database';
 import { downloadVideo, downloadAudio, shareDownloadedFile, saveFileToDevice, getFileInfo, sanitizeFileName, getDownloadedFiles, cleanupIncompleteFiles, getVideoInfo, deleteFileWithMetadata } from '../services/downloadService';
 import * as IntentLauncher from 'expo-intent-launcher';
@@ -46,9 +47,9 @@ export default function SearchScreen({ navigation, route }) {
         visible: true,
         title: '알림',
         message: isVideo 
-          ? '영상 다운로드를 시작합니다. 다운로드가 완료되면 알림이 표시됩니다.'
-          : '음악 다운로드를 시작합니다. 다운로드가 완료되면 알림이 표시됩니다.',
-        subMessage: '이미 다운받은 파일은 재저장 버튼을 누르시면 다시 다운로드 받을 필요가 없습니다.',
+          ? '영상 저장을 시작합니다. 저장이 완료되면 알림이 표시됩니다.'
+          : '음악 저장을 시작합니다. 저장이 완료되면 알림이 표시됩니다.',
+        subMessage: '이미 저장된 파일은 재저장 버튼을 누르시면 다시 저장할 필요가 없습니다.',
         onConfirm: () => {
           setCustomAlert({ visible: false, title: '', message: '', subMessage: '', onConfirm: null });
         }
@@ -58,8 +59,8 @@ export default function SearchScreen({ navigation, route }) {
       Alert.alert(
         '알림',
         isVideo 
-          ? '영상 다운로드를 시작합니다. 다운로드가 완료되면 알림이 표시됩니다.'
-          : '음악 다운로드를 시작합니다. 다운로드가 완료되면 알림이 표시됩니다.'
+          ? '영상 저장을 시작합니다. 저장이 완료되면 알림이 표시됩니다.'
+          : '음악 저장을 시작합니다. 저장이 완료되면 알림이 표시됩니다.'
       );
     }
   };
@@ -120,8 +121,41 @@ export default function SearchScreen({ navigation, route }) {
   const loadDownloadedFiles = useCallback(async () => {
     try {
       const files = await getDownloadedFiles();
-      setDownloadedFiles(files);
-      console.log('[SearchScreen] Loaded downloaded files:', files.length);
+      // 최신순으로 정렬 (downloadedAt 기준, 타입과 무관하게 최신순)
+      const sortedFiles = [...files].sort((a, b) => {
+        // downloadedAt이 있으면 숫자 비교
+        const timeA = a.downloadedAt || 0;
+        const timeB = b.downloadedAt || 0;
+        
+        // 숫자 타입 확인 및 변환
+        const numA = typeof timeA === 'number' ? timeA : (typeof timeA === 'string' ? parseFloat(timeA) : 0);
+        const numB = typeof timeB === 'number' ? timeB : (typeof timeB === 'string' ? parseFloat(timeB) : 0);
+        
+        if (numA && numB) {
+          // 둘 다 downloadedAt이 있으면 숫자 비교 (최신순: 큰 값이 먼저)
+          const dateDiff = numB - numA;
+          
+          // 같은 downloadedAt이면 파일명으로 추가 비교 (안정 정렬 보장)
+          if (dateDiff === 0) {
+            const aStr = a.fileName || '';
+            const bStr = b.fileName || '';
+            return aStr.localeCompare(bStr);
+          }
+          
+          return dateDiff;
+        } else if (numA) {
+          return -1; // a가 downloadedAt이 있으면 먼저
+        } else if (numB) {
+          return 1; // b가 downloadedAt이 있으면 먼저
+        } else {
+          // 둘 다 없으면 파일명으로 정렬 (최신순)
+          const aName = a.fileName || '';
+          const bName = b.fileName || '';
+          return bName.localeCompare(aName);
+        }
+      });
+      setDownloadedFiles(sortedFiles);
+      console.log('[SearchScreen] Loaded downloaded files:', sortedFiles.length);
     } catch (error) {
       console.error('[SearchScreen] Error loading downloaded files:', error);
     }
@@ -531,15 +565,15 @@ export default function SearchScreen({ navigation, route }) {
 
   const handleDownloadVideo = async (item, existingFile = null) => {
     if (!item.url || !item.id) {
-      Alert.alert('오류', '다운로드할 영상 정보가 없습니다.');
+      Alert.alert('오류', '저장할 영상 정보가 없습니다.');
       return;
     }
 
-    // 이미 다운로드 중인 경우 취소 확인
+    // 이미 저장 중인 경우 취소 확인
     if (downloading[item.id]) {
       Alert.alert(
-        '다운로드 중',
-        '이미 다운로드가 진행 중입니다. 취소하시겠습니까?',
+        '저장 중',
+        '이미 저장이 진행 중입니다. 취소하시겠습니까?',
         [
           { text: '아니오', style: 'cancel' },
           {
@@ -605,8 +639,8 @@ export default function SearchScreen({ navigation, route }) {
       const fileSizeText = fileInfo?.size ? `(${(fileInfo.size / (1024 * 1024)).toFixed(2)} MB)` : '';
       
       Alert.alert(
-        '다운로드 완료',
-        `영상 다운로드가 완료되었습니다. ${fileSizeText}`,
+        '저장 완료',
+        `영상 저장이 완료되었습니다. ${fileSizeText}`,
         [
           { text: '취소', style: 'cancel' },
           {
@@ -636,7 +670,7 @@ export default function SearchScreen({ navigation, route }) {
         delete newState[item.id];
         return newState;
       });
-      Alert.alert('오류', error.message || '영상 다운로드 중 오류가 발생했습니다.');
+      Alert.alert('오류', error.message || '영상 저장 중 오류가 발생했습니다.');
     } finally {
       // finally 블록에서 상태 초기화 보장 (에러가 발생해도 실행)
       // 이미 catch에서 처리했지만 이중 보장
@@ -652,7 +686,7 @@ export default function SearchScreen({ navigation, route }) {
     try {
       setDownloading(prev => ({ ...prev, [item.id]: { type: 'video', progress: 0 } }));
       
-      Alert.alert('알림', '영상 다운로드를 시작합니다. 다운로드가 완료되면 알림이 표시됩니다.');
+      Alert.alert('알림', '영상 저장을 시작합니다. 저장이 완료되면 알림이 표시됩니다.');
       
       const fileUri = await downloadVideo(
         item.url,
@@ -672,8 +706,8 @@ export default function SearchScreen({ navigation, route }) {
       });
       
       Alert.alert(
-        '다운로드 완료',
-        '영상 다운로드가 완료되었습니다.',
+        '저장 완료',
+        '영상 저장이 완료되었습니다.',
         [
           { text: '취소', style: 'cancel' },
           {
@@ -689,22 +723,22 @@ export default function SearchScreen({ navigation, route }) {
         delete newState[item.id];
         return newState;
       });
-      Alert.alert('오류', error.message || '영상 다운로드 중 오류가 발생했습니다.');
+      Alert.alert('오류', error.message || '영상 저장 중 오류가 발생했습니다.');
     }
     */
   };
 
   const handleDownloadAudio = async (item, existingFile = null) => {
     if (!item.url || !item.id) {
-      Alert.alert('오류', '다운로드할 음악 정보가 없습니다.');
+      Alert.alert('오류', '저장할 음악 정보가 없습니다.');
       return;
     }
 
-    // 이미 다운로드 중인 경우 취소 확인
+    // 이미 저장 중인 경우 취소 확인
     if (downloading[item.id]) {
       Alert.alert(
-        '다운로드 중',
-        '이미 다운로드가 진행 중입니다. 취소하시겠습니까?',
+        '저장 중',
+        '이미 저장이 진행 중입니다. 취소하시겠습니까?',
         [
           { text: '아니오', style: 'cancel' },
           {
@@ -770,8 +804,8 @@ export default function SearchScreen({ navigation, route }) {
       const fileSizeText = fileInfo?.size ? `(${(fileInfo.size / (1024 * 1024)).toFixed(2)} MB)` : '';
       
       Alert.alert(
-        '다운로드 완료',
-        `음악 다운로드가 완료되었습니다. ${fileSizeText}`,
+        '저장 완료',
+        `음악 저장이 완료되었습니다. ${fileSizeText}`,
         [
           { text: '취소', style: 'cancel' },
           {
@@ -801,7 +835,7 @@ export default function SearchScreen({ navigation, route }) {
         delete newState[item.id];
         return newState;
       });
-      Alert.alert('오류', error.message || '음악 다운로드 중 오류가 발생했습니다.');
+      Alert.alert('오류', error.message || '음악 저장 중 오류가 발생했습니다.');
     } finally {
       // finally 블록에서 상태 초기화 보장 (에러가 발생해도 실행)
       // 이미 catch에서 처리했지만 이중 보장
@@ -817,7 +851,7 @@ export default function SearchScreen({ navigation, route }) {
     try {
       setDownloading(prev => ({ ...prev, [item.id]: { type: 'audio', progress: 0 } }));
       
-      Alert.alert('알림', '음악 다운로드를 시작합니다. 다운로드가 완료되면 알림이 표시됩니다.');
+      Alert.alert('알림', '음악 저장을 시작합니다. 저장이 완료되면 알림이 표시됩니다.');
       
       const fileUri = await downloadAudio(
         item.url,
@@ -837,8 +871,8 @@ export default function SearchScreen({ navigation, route }) {
       });
       
       Alert.alert(
-        '다운로드 완료',
-        '음악 다운로드가 완료되었습니다.',
+        '저장 완료',
+        '음악 저장이 완료되었습니다.',
         [
           { text: '취소', style: 'cancel' },
           {
@@ -854,7 +888,7 @@ export default function SearchScreen({ navigation, route }) {
         delete newState[item.id];
         return newState;
       });
-      Alert.alert('오류', error.message || '음악 다운로드 중 오류가 발생했습니다.');
+      Alert.alert('오류', error.message || '음악 저장 중 오류가 발생했습니다.');
     }
     */
   };
@@ -1077,7 +1111,7 @@ export default function SearchScreen({ navigation, route }) {
         if (!found) {
           Alert.alert(
             '파일을 찾을 수 없음',
-            '파일이 존재하지 않거나 손상되었습니다.\n\n"다시다운" 버튼을 눌러 파일을 다시 다운로드해주세요.',
+            '파일이 존재하지 않거나 손상되었습니다.\n\n"재저장" 버튼을 눌러 파일을 다시 저장해주세요.',
             [{ text: '확인' }]
           );
           return;
@@ -1153,7 +1187,7 @@ export default function SearchScreen({ navigation, route }) {
     setResults(prevResults => prevResults.filter(result => result.id !== item.id));
   };
 
-  const renderVideoItem = ({ item }) => {
+  const renderVideoItem = ({ item, index }) => {
     const isDownloadingVideo = downloading[item.id]?.type === 'video';
     const isDownloadingAudio = downloading[item.id]?.type === 'audio';
     const downloadProgress = downloading[item.id]?.progress || 0;
@@ -1378,7 +1412,7 @@ export default function SearchScreen({ navigation, route }) {
                 <View style={styles.downloadingItem}>
                   <ActivityIndicator size="small" color="#FF0000" />
                   <Text style={styles.downloadingText}>
-                    영상 다운로드 중... {Math.round(downloadProgress * 100)}%
+                    영상 저장 중... {Math.round(downloadProgress * 100)}%
                   </Text>
                 </View>
               )}
@@ -1386,7 +1420,7 @@ export default function SearchScreen({ navigation, route }) {
                 <View style={styles.downloadingItem}>
                   <ActivityIndicator size="small" color="#4CAF50" />
                   <Text style={styles.downloadingText}>
-                    음악 다운로드 중... {Math.round(downloadProgress * 100)}%
+                    음악 저장 중... {Math.round(downloadProgress * 100)}%
                   </Text>
                 </View>
               )}
@@ -1420,7 +1454,7 @@ export default function SearchScreen({ navigation, route }) {
               >
                 <Ionicons name="videocam" size={20} color="#fff" />
                 <Text style={styles.videoButtonText}>
-                  {downloadedVideo ? '다시다운' : '영상다운'}
+                  {downloadedVideo ? '다시저장' : '영상저장'}
                 </Text>
               </TouchableOpacity>
               
@@ -1433,7 +1467,7 @@ export default function SearchScreen({ navigation, route }) {
               >
                 <Ionicons name="musical-notes" size={20} color="#fff" />
                 <Text style={styles.audioButtonText}>
-                  {downloadedAudio ? '다시다운' : '음악다운'}
+                  {downloadedAudio ? '다시저장' : '음악저장'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1463,7 +1497,10 @@ export default function SearchScreen({ navigation, route }) {
               resizeMode="cover"
             />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>유튜브 다운로더</Text>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle}>MeTube</Text>
+          </View>
+          <LanguageSelector />
         </View>
       </SafeAreaView>
 
@@ -1526,60 +1563,68 @@ export default function SearchScreen({ navigation, route }) {
       {/* 다운로드한 파일 섹션 - 항상 고정 위치 */}
       {downloadedFiles.length > 0 && (
         <View style={styles.downloadedFilesSection}>
-          <Text style={styles.downloadedFilesTitle}>다운로드한 파일</Text>
+          <Text style={styles.downloadedFilesTitle}>저장된 파일</Text>
           <FlatList
+            key="downloaded-files-list"
             data={downloadedFiles}
             renderItem={renderDownloadedFileItem}
-            keyExtractor={(item, index) => item.fileUri || index.toString()}
+            keyExtractor={(item, index) => `downloaded-${item.fileUri || item.fileName || index}`}
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.downloadedFilesList}
+            nestedScrollEnabled={true}
           />
         </View>
       )}
 
-      {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#FF0000" />
-          <Text style={styles.loadingText}>영상 정보 가져오는 중...</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={results}
-          renderItem={renderVideoItem}
-          keyExtractor={(item, index) => item.id || index.toString()}
-          ListEmptyComponent={
-            <View style={styles.centerContainer}>
-              <TouchableOpacity 
-                onPress={openYouTubeApp}
-                activeOpacity={0.7}
-              >
-                <Animated.View 
-                  style={[
-                    styles.youtubeIconButton,
-                    { transform: [{ scale: pulseAnim }] }
-                  ]}
+      <View style={styles.resultsContainer}>
+        {loading ? (
+          <View style={styles.centerContainer}>
+            <ActivityIndicator size="large" color="#FF0000" />
+            <Text style={styles.loadingText}>영상 정보 가져오는 중...</Text>
+          </View>
+        ) : (
+          <FlatList
+            key="results-list"
+            data={results}
+            renderItem={renderVideoItem}
+            keyExtractor={(item, index) => `result-${item.id || `index-${index}`}`}
+            removeClippedSubviews={false}
+            maxToRenderPerBatch={10}
+            windowSize={10}
+            ListEmptyComponent={
+              <View style={styles.centerContainer}>
+                <TouchableOpacity 
+                  onPress={openYouTubeApp}
+                  activeOpacity={0.7}
                 >
-                  <Text style={styles.emptyIcon}>📺</Text>
-                  <Text style={styles.iconHintText}>유튜브 영상 가져오기</Text>
-                </Animated.View>
-              </TouchableOpacity>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                <Text style={styles.emptyText}>YouTube 앱에서 공유하기를 사용하세요</Text>
-                <Ionicons name="arrow-redo-outline" size={18} color="#333" style={{ marginLeft: 6 }} />
+                  <Animated.View 
+                    style={[
+                      styles.youtubeIconButton,
+                      { transform: [{ scale: pulseAnim }] }
+                    ]}
+                  >
+                    <Text style={styles.emptyIcon}>📺</Text>
+                    <Text style={styles.iconHintText}>영상 가져오기</Text>
+                  </Animated.View>
+                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={styles.emptyText}>YouTube 앱에서 공유하기를 사용하세요</Text>
+                  <Ionicons name="arrow-redo-outline" size={18} color="#333" style={{ marginLeft: 6 }} />
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={styles.emptySubText}>
+                    또는 YouTube URL을 링크복사 해서{'\n'}검색창에 붙여넣으세요
+                  </Text>
+                  <Ionicons name="copy-outline" size={16} color="#666" style={{ marginLeft: 6 }} />
+                </View>
               </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                <Text style={styles.emptySubText}>
-                  또는 YouTube URL을 링크복사 해서{'\n'}검색창에 붙여넣으세요
-                </Text>
-                <Ionicons name="copy-outline" size={16} color="#666" style={{ marginLeft: 6 }} />
-              </View>
-            </View>
-          }
-          contentContainerStyle={results.length === 0 ? styles.listContentEmpty : styles.listContent}
-          ListFooterComponent={results.length > 0 ? <AdBanner style={{ marginTop: 20 }} /> : null}
-        />
-      )}
+            }
+            contentContainerStyle={results.length === 0 ? styles.listContentEmpty : styles.listContent}
+            ListFooterComponent={results.length > 0 ? <AdBanner style={{ marginTop: 20 }} /> : null}
+          />
+        )}
+      </View>
       
       {/* ✅ 커스텀 Alert 모달 (빨간 글씨 안내 메시지 포함) */}
       <Modal
@@ -1657,6 +1702,12 @@ const styles = StyleSheet.create({
     elevation: 8, // Android
     transform: [{ rotateY: '15deg' }, { perspective: 1000 }],
   },
+  headerTitleContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 12,
+  },
   headerTitle: {
     color: '#fff',
     fontSize: 19,
@@ -1710,6 +1761,9 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  resultsContainer: {
+    flex: 1,
   },
   centerContainer: {
     flex: 1,

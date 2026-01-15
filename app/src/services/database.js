@@ -36,6 +36,24 @@ const getDatabase = async () => {
             author_url TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
           );
+          
+          CREATE TABLE IF NOT EXISTS pins (
+            pin_id TEXT PRIMARY KEY,
+            pin_name TEXT NOT NULL,
+            created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+          );
+          
+          CREATE TABLE IF NOT EXISTS favorites_pins (
+            favorite_id TEXT NOT NULL,
+            pin_id TEXT NOT NULL,
+            PRIMARY KEY (favorite_id, pin_id),
+            FOREIGN KEY (favorite_id) REFERENCES favorites(video_id) ON DELETE CASCADE,
+            FOREIGN KEY (pin_id) REFERENCES pins(pin_id) ON DELETE CASCADE
+          );
+          
+          CREATE INDEX IF NOT EXISTS idx_favorites_added_at ON favorites(created_at);
+          CREATE INDEX IF NOT EXISTS idx_favorites_pins_favorite ON favorites_pins(favorite_id);
+          CREATE INDEX IF NOT EXISTS idx_favorites_pins_pin ON favorites_pins(pin_id);
         `);
         isInitialized = true;
         console.log('[Database] Database initialized');
@@ -113,11 +131,30 @@ export const getFavorites = async () => {
     if (!database) {
       throw new Error('Database not initialized');
     }
-    const result = await database.getAllAsync(
-      `SELECT * FROM favorites ORDER BY created_at DESC;`
-    );
-    console.log('[Database] Favorites retrieved:', result.length);
-    return result;
+    const favorites = await database.getAllAsync(`
+      SELECT 
+        f.video_id,
+        f.title,
+        f.url,
+        f.thumbnail,
+        f.author,
+        f.author_url,
+        f.created_at,
+        GROUP_CONCAT(fp.pin_id) as pin_ids,
+        GROUP_CONCAT(p.pin_name) as pin_names
+      FROM favorites f
+      LEFT JOIN favorites_pins fp ON f.video_id = fp.favorite_id
+      LEFT JOIN pins p ON fp.pin_id = p.pin_id
+      GROUP BY f.video_id
+      ORDER BY f.created_at DESC
+    `);
+    
+    // pin_ids와 pin_names를 배열로 변환
+    return favorites.map(fav => ({
+      ...fav,
+      pin_ids: fav.pin_ids ? fav.pin_ids.split(',') : [],
+      pin_names: fav.pin_names ? fav.pin_names.split(',') : [],
+    }));
   } catch (error) {
     console.error('[Database] Error getting favorites:', error);
     throw error;
@@ -141,5 +178,147 @@ export const isFavorite = async (videoId) => {
     console.error('[Database] Error checking favorite:', error);
     // 오류 발생 시 false 반환 (앱이 계속 작동하도록)
     return false;
+  }
+};
+
+// 핀 목록 가져오기
+export const getPins = async () => {
+  try {
+    const database = await getDatabase();
+    if (!database) {
+      throw new Error('Database not initialized');
+    }
+    const pins = await database.getAllAsync(
+      'SELECT pin_id, pin_name, created_at FROM pins ORDER BY created_at DESC'
+    );
+    return pins;
+  } catch (error) {
+    console.error('[Database] Error getting pins:', error);
+    return [];
+  }
+};
+
+// 핀 생성
+export const createPin = async (pinName) => {
+  try {
+    const database = await getDatabase();
+    if (!database) {
+      throw new Error('Database not initialized');
+    }
+    const pinId = `pin_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    await database.runAsync(
+      'INSERT INTO pins (pin_id, pin_name, created_at) VALUES (?, ?, strftime("%s", "now"))',
+      [pinId, pinName]
+    );
+    console.log('[Database] Pin created:', pinId, pinName);
+    return pinId;
+  } catch (error) {
+    console.error('[Database] Error creating pin:', error);
+    throw error;
+  }
+};
+
+// 핀에 즐겨찾기 할당
+export const assignPinToFavorite = async (videoId, pinDataArray) => {
+  try {
+    const database = await getDatabase();
+    if (!database) {
+      throw new Error('Database not initialized');
+    }
+    
+    // 기존 핀 관계 제거
+    await database.runAsync(
+      'DELETE FROM favorites_pins WHERE favorite_id = ?',
+      [videoId]
+    );
+
+    // 새 핀 관계 추가
+    for (const pinData of pinDataArray) {
+      const { pin_id, pin_name } = pinData;
+      
+      // 핀이 없으면 생성
+      const existingPin = await database.getFirstAsync(
+        'SELECT pin_id FROM pins WHERE pin_id = ?',
+        [pin_id]
+      );
+      
+      if (!existingPin) {
+        await database.runAsync(
+          'INSERT INTO pins (pin_id, pin_name, created_at) VALUES (?, ?, strftime("%s", "now"))',
+          [pin_id, pin_name]
+        );
+      }
+
+      // 관계 추가
+      await database.runAsync(
+        'INSERT OR IGNORE INTO favorites_pins (favorite_id, pin_id) VALUES (?, ?)',
+        [videoId, pin_id]
+      );
+    }
+
+    console.log('[Database] Pins assigned to favorite:', videoId);
+  } catch (error) {
+    console.error('[Database] Error assigning pins:', error);
+    throw error;
+  }
+};
+
+// 즐겨찾기에서 핀 제거
+export const removePinFromFavorite = async (videoId, pinId) => {
+  try {
+    const database = await getDatabase();
+    if (!database) {
+      throw new Error('Database not initialized');
+    }
+    
+    await database.runAsync(
+      'DELETE FROM favorites_pins WHERE favorite_id = ? AND pin_id = ?',
+      [videoId, pinId]
+    );
+
+    console.log('[Database] Pin removed from favorite:', videoId, pinId);
+  } catch (error) {
+    console.error('[Database] Error removing pin from favorite:', error);
+    throw error;
+  }
+};
+
+// 핀 삭제
+export const deletePin = async (pinId) => {
+  try {
+    const database = await getDatabase();
+    if (!database) {
+      throw new Error('Database not initialized');
+    }
+    
+    await database.runAsync(
+      'DELETE FROM pins WHERE pin_id = ?',
+      [pinId]
+    );
+
+    console.log('[Database] Pin deleted:', pinId);
+  } catch (error) {
+    console.error('[Database] Error deleting pin:', error);
+    throw error;
+  }
+};
+
+// 핀 이름 업데이트
+export const updatePinName = async (pinId, newName) => {
+  try {
+    const database = await getDatabase();
+    if (!database) {
+      throw new Error('Database not initialized');
+    }
+    
+    await database.runAsync(
+      'UPDATE pins SET pin_name = ? WHERE pin_id = ?',
+      [newName, pinId]
+    );
+
+    console.log('[Database] Pin name updated:', pinId, newName);
+  } catch (error) {
+    console.error('[Database] Error updating pin name:', error);
+    throw error;
   }
 };

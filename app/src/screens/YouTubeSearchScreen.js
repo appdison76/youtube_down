@@ -20,9 +20,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { searchYouTubeVideos, getYouTubeAutocomplete } from '../services/downloadService';
 import { addFavorite, removeFavorite, isFavorite, initDatabase } from '../services/database';
 import AdBanner from '../components/AdBanner';
+import LanguageSelector from '../components/LanguageSelector';
 
 // 검색 이력 저장 키
 const SEARCH_HISTORY_KEY = 'youtube_search_history';
+const AUTCOMPLETE_ENABLED_KEY = 'youtube_autocomplete_enabled';
 const MAX_HISTORY = 1000; // 최대 1000개 저장
 
 export default function YouTubeSearchScreen({ navigation, route }) {
@@ -33,6 +35,7 @@ export default function YouTubeSearchScreen({ navigation, route }) {
   const [suggestions, setSuggestions] = useState([]); // 자동완성 제안 목록
   const [showSuggestions, setShowSuggestions] = useState(false); // 자동완성 표시 여부
   const [searchHistory, setSearchHistory] = useState([]); // 로컬 검색 이력
+  const [autocompleteEnabled, setAutocompleteEnabled] = useState(true); // 자동완성 활성화 여부
   const autocompleteTimerRef = useRef(null); // 디바운싱 타이머
 
   // 데이터베이스 초기화 및 검색 이력 로드
@@ -43,6 +46,9 @@ export default function YouTubeSearchScreen({ navigation, route }) {
     
     // 검색 이력 로드
     loadSearchHistory();
+    
+    // 자동완성 설정 로드
+    loadAutocompleteSetting();
   }, []);
 
   // 검색 이력 로드
@@ -55,6 +61,28 @@ export default function YouTubeSearchScreen({ navigation, route }) {
       }
     } catch (error) {
       console.error('[YouTubeSearchScreen] Error loading search history:', error);
+    }
+  }, []);
+
+  // 자동완성 설정 로드
+  const loadAutocompleteSetting = useCallback(async () => {
+    try {
+      const enabled = await AsyncStorage.getItem(AUTCOMPLETE_ENABLED_KEY);
+      if (enabled !== null) {
+        setAutocompleteEnabled(enabled === 'true');
+      }
+    } catch (error) {
+      console.error('[YouTubeSearchScreen] Error loading autocomplete setting:', error);
+    }
+  }, []);
+
+  // 자동완성 설정 저장
+  const saveAutocompleteSetting = useCallback(async (enabled) => {
+    try {
+      await AsyncStorage.setItem(AUTCOMPLETE_ENABLED_KEY, enabled.toString());
+      setAutocompleteEnabled(enabled);
+    } catch (error) {
+      console.error('[YouTubeSearchScreen] Error saving autocomplete setting:', error);
     }
   }, []);
 
@@ -146,6 +174,13 @@ export default function YouTubeSearchScreen({ navigation, route }) {
 
   // 자동완성 로직 (하이브리드: 로컬 + 서버)
   useEffect(() => {
+    // 자동완성이 비활성화되어 있으면 실행하지 않음
+    if (!autocompleteEnabled) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
     // 이전 타이머 취소
     if (autocompleteTimerRef.current) {
       clearTimeout(autocompleteTimerRef.current);
@@ -173,6 +208,11 @@ export default function YouTubeSearchScreen({ navigation, route }) {
 
     // 2. 서버에서 실시간 제안 가져오기 (디바운싱 300ms)
     autocompleteTimerRef.current = setTimeout(async () => {
+      // 자동완성이 비활성화되어 있으면 실행하지 않음
+      if (!autocompleteEnabled) {
+        return;
+      }
+
       try {
         const serverSuggestions = await getYouTubeAutocomplete(query);
         
@@ -201,7 +241,7 @@ export default function YouTubeSearchScreen({ navigation, route }) {
         clearTimeout(autocompleteTimerRef.current);
       }
     };
-  }, [searchQuery, searchHistory]);
+  }, [searchQuery, searchHistory, autocompleteEnabled]);
 
   // 검색 실행
   const handleSearch = useCallback(async () => {
@@ -492,7 +532,10 @@ export default function YouTubeSearchScreen({ navigation, route }) {
               resizeMode="cover"
             />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>유튜브 다운로더</Text>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle}>MeTube</Text>
+          </View>
+          <LanguageSelector />
         </View>
       </SafeAreaView>
 
@@ -511,6 +554,16 @@ export default function YouTubeSearchScreen({ navigation, route }) {
             autoCapitalize="none"
             autoCorrect={false}
           />
+          <TouchableOpacity
+            style={styles.autocompleteToggleButton}
+            onPress={() => saveAutocompleteSetting(!autocompleteEnabled)}
+          >
+            <Ionicons 
+              name={autocompleteEnabled ? "bulb" : "bulb-outline"} 
+              size={20} 
+              color={autocompleteEnabled ? "#4CAF50" : "#999"} 
+            />
+          </TouchableOpacity>
           {searchQuery.length > 0 && (
             <TouchableOpacity
               style={styles.clearButton}
@@ -693,6 +746,12 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
   },
+  headerTitleContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 12,
+  },
   headerTitle: {
     color: '#fff',
     fontSize: 19,
@@ -724,6 +783,10 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   clearButton: {
+    marginLeft: 8,
+    padding: 4,
+  },
+  autocompleteToggleButton: {
     marginLeft: 8,
     padding: 4,
   },

@@ -18,9 +18,15 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as FileSystem from 'expo-file-system/legacy';
+import { Audio } from 'expo-av';
 import AdBanner from '../components/AdBanner';
+import MiniPlayer from '../components/MiniPlayer';
+import LanguageSelector from '../components/LanguageSelector';
+import PinManagerModal from '../components/PinManagerModal';
+import PinSelectorModal from '../components/PinSelectorModal';
 import { getDownloadedFiles, deleteFileWithMetadata, getThumbnailCachePath } from '../services/downloadService';
 import { shareDownloadedFile, saveFileToDevice } from '../services/downloadService';
+import { getPlaylists, createPlaylist, updatePlaylist, deletePlaylist, assignFileToPlaylist, getPlaylistsForFile } from '../services/playlistService';
 import MediaStoreModule from '../modules/MediaStoreModule';
 
 // 썸네일 이미지 컴포넌트 (YouTube URL 실패 시 캐시로 폴백)
@@ -53,18 +59,54 @@ export default function DownloadsScreen({ navigation }) {
   const [sortBy, setSortBy] = useState('date-desc'); // 'date-desc' | 'date-asc' | 'title-asc' | 'title-desc' | null
   const [showFilters, setShowFilters] = useState(false); // 필터/정렬 섹션 표시 여부
   const [thumbnailCachePaths, setThumbnailCachePaths] = useState({}); // videoId -> cache path
+  const [playlistFilter, setPlaylistFilter] = useState(null); // null: 전체, playlist_id: 특정 플레이리스트
+  const [playlists, setPlaylists] = useState([]); // 플레이리스트 그룹 목록
+  const [showPlaylistManager, setShowPlaylistManager] = useState(false); // 플레이리스트 관리 모달 표시 여부
+  const [showPlaylistSelector, setShowPlaylistSelector] = useState(false); // 플레이리스트 선택 모달 표시 여부
+  const [selectedFileForPlaylist, setSelectedFileForPlaylist] = useState(null); // 플레이리스트에 추가할 파일
+  const [selectedPlaylistIds, setSelectedPlaylistIds] = useState([]); // 선택된 플레이리스트 ID 목록
+  
+  // ✅ 음악 전체재생 관련 상태
+  const [playlist, setPlaylist] = useState([]); // 재생할 음악 파일 목록
+  const [currentIndex, setCurrentIndex] = useState(0); // 현재 재생 중인 인덱스
+  const [isPlaying, setIsPlaying] = useState(false); // 재생 중 여부
+  const [sound, setSound] = useState(null); // expo-av Sound 객체
+  const soundRef = useRef(null); // sound 객체 참조
+
+  // 플레이리스트 목록 로드
+  const loadPlaylists = useCallback(async () => {
+    try {
+      const playlistsList = await getPlaylists();
+      setPlaylists(playlistsList);
+    } catch (error) {
+      console.error('[DownloadsScreen] Error loading playlists:', error);
+    }
+  }, []);
 
   // 다운로드한 파일 목록 로드
   const loadDownloadedFiles = useCallback(async () => {
     try {
       setLoading(true);
       const files = await getDownloadedFiles();
-      setDownloadedFiles(files);
-      console.log('[DownloadsScreen] Loaded downloaded files:', files.length);
+      
+      // 각 파일의 플레이리스트 정보 로드
+      const filesWithPlaylists = await Promise.all(
+        files.map(async (file) => {
+          const filePlaylists = await getPlaylistsForFile(file.fileUri);
+          return {
+            ...file,
+            playlist_ids: filePlaylists.map(p => p.playlist_id),
+            playlist_names: filePlaylists.map(p => p.playlist_name),
+          };
+        })
+      );
+      
+      setDownloadedFiles(filesWithPlaylists);
+      console.log('[DownloadsScreen] Loaded downloaded files:', filesWithPlaylists.length);
       
       // ✅ 썸네일 캐시 경로 로드
       const cachePaths = {};
-      for (const file of files) {
+      for (const file of filesWithPlaylists) {
         if (file.videoId) {
           const cachePath = await getThumbnailCachePath(file.videoId);
           if (cachePath) {
@@ -81,7 +123,7 @@ export default function DownloadsScreen({ navigation }) {
     }
   }, []);
 
-  // ✅ 검색 및 타입 필터링 및 정렬
+  // ✅ 검색, 타입 필터링 및 정렬
   useEffect(() => {
     let filtered = [...downloadedFiles];
     
@@ -93,6 +135,28 @@ export default function DownloadsScreen({ navigation }) {
     }
     // fileTypeFilter === 'all'이면 모든 파일 표시
     
+    // 플레이리스트 필터링
+    if (playlistFilter) {
+      filtered = filtered.filter(file => {
+        const playlistIds = file.playlist_ids || [];
+        return playlistIds.includes(playlistFilter);
+      });
+      
+      // 필터링 후 결과가 없으면 해당 필터 제거하고 전체로 전환
+      if (filtered.length === 0) {
+        setPlaylistFilter(null);
+        // 전체 필터로 다시 필터링
+        filtered = [...downloadedFiles];
+        // 파일 타입 필터는 유지
+        if (fileTypeFilter === 'video') {
+          filtered = filtered.filter(file => file.isVideo);
+        } else if (fileTypeFilter === 'audio') {
+          filtered = filtered.filter(file => !file.isVideo);
+        }
+      }
+    }
+    // playlistFilter === null이면 전체 표시
+    
     // 검색 필터링
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
@@ -102,30 +166,199 @@ export default function DownloadsScreen({ navigation }) {
       );
     }
     
-    // 정렬
-    if (sortBy) {
-      if (sortBy.startsWith('date')) {
-        // 날짜 정렬 (modifiedTime 기준)
-        filtered.sort((a, b) => {
-          const timeA = a.modifiedTime || 0;
-          const timeB = b.modifiedTime || 0;
-          return sortBy === 'date-desc' ? timeB - timeA : timeA - timeB;
-        });
-      } else if (sortBy.startsWith('title')) {
-        // 제목 정렬
-        filtered.sort((a, b) => {
-          const titleA = (a.title || '').toLowerCase();
-          const titleB = (b.title || '').toLowerCase();
-          const compare = titleA.localeCompare(titleB, 'ko');
-          return sortBy === 'title-asc' ? compare : -compare;
-        });
-      }
+    // ✅ 정렬 적용
+    if (sortBy && sortBy.startsWith('date')) {
+      // 날짜 정렬 (downloadedAt 기준, 타입과 무관하게 최신순)
+      filtered.sort((a, b) => {
+        // downloadedAt이 있으면 숫자 비교
+        const timeA = a.downloadedAt || 0;
+        const timeB = b.downloadedAt || 0;
+        
+        // 숫자 타입 확인 및 변환
+        const numA = typeof timeA === 'number' ? timeA : (typeof timeA === 'string' ? parseFloat(timeA) : 0);
+        const numB = typeof timeB === 'number' ? timeB : (typeof timeB === 'string' ? parseFloat(timeB) : 0);
+        
+        if (numA && numB) {
+          // 둘 다 downloadedAt이 있으면 숫자 비교 (최신순: 큰 값이 먼저)
+          const dateDiff = sortBy === 'date-desc' ? numB - numA : numA - numB;
+          
+          // 같은 downloadedAt이면 타입과 무관하게 원래 순서 유지 (안정 정렬)
+          // 하지만 사용자가 "영상이 항상 마지막"이라고 하니, 같은 시간이면 추가 비교 필요
+          if (dateDiff === 0) {
+            // 같은 downloadedAt이면 파일명으로 추가 비교 (안정 정렬 보장)
+            const aStr = a.fileName || '';
+            const bStr = b.fileName || '';
+            return aStr.localeCompare(bStr);
+          }
+          
+          return dateDiff;
+        } else if (numA) {
+          return -1; // a가 downloadedAt이 있으면 먼저
+        } else if (numB) {
+          return 1; // b가 downloadedAt이 있으면 먼저
+        } else {
+          // 둘 다 없으면 파일명으로 정렬 (fallback)
+          const aStr = a.fileName || '';
+          const bStr = b.fileName || '';
+          return sortBy === 'date-desc' ? bStr.localeCompare(aStr) : aStr.localeCompare(bStr);
+        }
+      });
+    } else if (sortBy && sortBy.startsWith('title')) {
+      // 제목 정렬
+      filtered.sort((a, b) => {
+        const titleA = (a.title || '').toLowerCase();
+        const titleB = (b.title || '').toLowerCase();
+        const compare = titleA.localeCompare(titleB, 'ko');
+        return sortBy === 'title-asc' ? compare : -compare;
+      });
     }
     
     setFilteredFiles(filtered);
-  }, [searchQuery, downloadedFiles, fileTypeFilter, sortBy]);
+    
+    // ✅ 재생 중인 플레이리스트가 필터링 결과와 다르면 업데이트
+    if (playlist.length > 0 && isPlaying) {
+      const audioFiles = filtered.filter(file => !file.isVideo);
+      const currentItem = playlist[currentIndex];
+      const newIndex = audioFiles.findIndex(file => file.fileUri === currentItem?.fileUri);
+      
+      if (newIndex >= 0 && audioFiles.length > 0) {
+        setPlaylist(audioFiles);
+        setCurrentIndex(newIndex);
+      } else if (audioFiles.length === 0 || newIndex < 0) {
+        // 재생 중인 항목이 필터링 결과에 없으면 재생 중지
+        handleStopPlaylist();
+      }
+    }
+  }, [searchQuery, downloadedFiles, fileTypeFilter, sortBy, playlistFilter]);
 
-  // 화면 포커스 시 파일 목록 새로고침
+  // ✅ 음악 전체재생 시작
+  const handlePlayAll = async () => {
+    try {
+      // 재생 중이면 일시정지/재생 토글
+      if (isPlaying && playlist.length > 0) {
+        await handlePlayPause();
+        return;
+      }
+
+      const audioFiles = filteredFiles.filter(file => !file.isVideo);
+      if (audioFiles.length === 0) {
+        Alert.alert('알림', '재생할 음악 파일이 없습니다.');
+        return;
+      }
+
+      // 기존 재생 중지
+      if (soundRef.current) {
+        await soundRef.current.unloadAsync();
+        soundRef.current = null;
+      }
+
+      setPlaylist(audioFiles);
+      setCurrentIndex(0);
+      await playAudioFile(audioFiles[0], 0);
+    } catch (error) {
+      console.error('[DownloadsScreen] Error starting playlist:', error);
+      Alert.alert('오류', '음악 재생을 시작할 수 없습니다.');
+    }
+  };
+
+  // ✅ 오디오 파일 재생
+  const playAudioFile = async (file, index) => {
+    try {
+      // 파일 존재 확인
+      const fileInfo = await FileSystem.getInfoAsync(file.fileUri);
+      if (!fileInfo.exists) {
+        Alert.alert('오류', `파일을 찾을 수 없습니다: ${file.title}`);
+        return;
+      }
+
+      // 기존 sound 정리
+      if (soundRef.current) {
+        await soundRef.current.unloadAsync();
+      }
+
+      // 새로운 sound 로드 및 재생
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: file.fileUri },
+        { shouldPlay: true }
+      );
+
+      soundRef.current = newSound;
+      setSound(newSound);
+      setIsPlaying(true);
+      setCurrentIndex(index);
+
+      // 재생 완료 시 다음 곡 재생
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if (status.didJustFinish && !status.isLooping) {
+          handleNext();
+        }
+      });
+    } catch (error) {
+      console.error('[DownloadsScreen] Error playing audio:', error);
+      Alert.alert('오류', `음악을 재생할 수 없습니다: ${file.title}`);
+    }
+  };
+
+  // ✅ 재생/일시정지
+  const handlePlayPause = async () => {
+    try {
+      if (!soundRef.current) return;
+
+      if (isPlaying) {
+        await soundRef.current.pauseAsync();
+        setIsPlaying(false);
+      } else {
+        await soundRef.current.playAsync();
+        setIsPlaying(true);
+      }
+    } catch (error) {
+      console.error('[DownloadsScreen] Error toggling play/pause:', error);
+    }
+  };
+
+  // ✅ 다음 곡
+  const handleNext = async () => {
+    if (currentIndex < playlist.length - 1) {
+      await playAudioFile(playlist[currentIndex + 1], currentIndex + 1);
+    } else {
+      // 마지막 곡이면 재생 중지
+      handleStopPlaylist();
+    }
+  };
+
+  // ✅ 이전 곡
+  const handlePrevious = async () => {
+    if (currentIndex > 0) {
+      await playAudioFile(playlist[currentIndex - 1], currentIndex - 1);
+    }
+  };
+
+  // ✅ 재생 중지
+  const handleStopPlaylist = async () => {
+    try {
+      if (soundRef.current) {
+        await soundRef.current.unloadAsync();
+        soundRef.current = null;
+      }
+      setSound(null);
+      setIsPlaying(false);
+      setPlaylist([]);
+      setCurrentIndex(0);
+    } catch (error) {
+      console.error('[DownloadsScreen] Error stopping playlist:', error);
+    }
+  };
+
+  // ✅ 컴포넌트 언마운트 시 정리
+  useEffect(() => {
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync().catch(console.error);
+      }
+    };
+  }, []);
+
+  // 화면 포커스 시 파일 목록 및 플레이리스트 새로고침
   // 단, 외부 앱에서 돌아온 직후에는 새로고침하지 않음 (의도치 않은 네비게이션 방지)
   const lastFocusTime = React.useRef(0);
   useFocusEffect(
@@ -134,141 +367,25 @@ export default function DownloadsScreen({ navigation }) {
       // 마지막 포커스로부터 1초 이상 지났을 때만 새로고침
       // (외부 앱에서 빠르게 돌아온 경우는 제외)
       if (now - lastFocusTime.current > 1000) {
+        loadPlaylists();
         loadDownloadedFiles();
       }
       lastFocusTime.current = now;
-    }, [loadDownloadedFiles])
+    }, [loadDownloadedFiles, loadPlaylists])
   );
 
-  // 정렬 버튼 핸들러 (3단계 토글)
-  const handleDateSort = () => {
-    if (sortBy === 'date-desc') {
-      setSortBy('date-asc'); // 오래된순
-    } else if (sortBy === 'date-asc') {
-      setSortBy('date-desc'); // 최신순 (기본값)
-    } else {
-      setSortBy('date-desc'); // 최신순
-    }
-  };
-
-  const handleTitleSort = () => {
-    if (sortBy === 'title-asc') {
-      setSortBy('title-desc'); // 가나다 내림차순
-    } else if (sortBy === 'title-desc') {
-      setSortBy('title-asc'); // 가나다 오름차순
-    } else {
-      setSortBy('title-asc'); // 가나다 오름차순
-    }
-  };
+  // 컴포넌트 마운트 시 플레이리스트 목록 로드
+  useEffect(() => {
+    loadPlaylists();
+  }, [loadPlaylists]);
 
   // 다운로드한 파일 재생 (외부 플레이어로 열기)
   const handlePlayFile = async (file) => {
     try {
       if (Platform.OS === 'android') {
-        // ✅ 공유하기/저장하기와 동일한 방식으로 파일 찾기 (여러 경로 시도)
-        let fileUri = file.fileUri;
-        const fileName = file.fileName;
-        const DOWNLOAD_DIR = `${FileSystem.documentDirectory}downloads/`;
-        
-        console.log('[DownloadsScreen] Playing file:', fileUri, fileName);
-        let fileInfo = await FileSystem.getInfoAsync(fileUri);
-        
+        // 파일 존재 확인
+        const fileInfo = await FileSystem.getInfoAsync(file.fileUri);
         if (!fileInfo.exists) {
-          // 1. URL 디코딩 시도
-          try {
-            const decodedUri = decodeURIComponent(fileUri);
-            if (decodedUri !== fileUri) {
-              console.log('[DownloadsScreen] Trying decoded URI:', decodedUri);
-              fileInfo = await FileSystem.getInfoAsync(decodedUri);
-              if (fileInfo.exists) {
-                fileUri = decodedUri;
-                console.log('[DownloadsScreen] ✅ File found with decoded URI');
-              }
-            }
-          } catch (e) {
-            console.warn('[DownloadsScreen] Could not decode URI:', e);
-          }
-          
-          // 2. file:// 프로토콜 제거 후 시도
-          if (!fileInfo.exists && fileUri.startsWith('file://')) {
-            const withoutProtocol = fileUri.replace('file://', '');
-            console.log('[DownloadsScreen] Trying URI without file:// protocol:', withoutProtocol);
-            fileInfo = await FileSystem.getInfoAsync(withoutProtocol);
-            if (fileInfo.exists) {
-              fileUri = withoutProtocol;
-              console.log('[DownloadsScreen] ✅ File found without file:// protocol');
-            }
-          }
-          
-          // 3. file:// 프로토콜 추가 후 시도
-          if (!fileInfo.exists && !fileUri.startsWith('file://')) {
-            const withProtocol = `file://${fileUri}`;
-            console.log('[DownloadsScreen] Trying URI with file:// protocol:', withProtocol);
-            fileInfo = await FileSystem.getInfoAsync(withProtocol);
-            if (fileInfo.exists) {
-              fileUri = withProtocol;
-              console.log('[DownloadsScreen] ✅ File found with file:// protocol');
-            }
-          }
-          
-          // 4. 파일명으로 경로 재구성 시도 (DOWNLOAD_DIR 사용)
-          if (!fileInfo.exists && fileName) {
-            const reconstructedUri = `${DOWNLOAD_DIR}${fileName}`;
-            if (reconstructedUri !== fileUri && !reconstructedUri.includes(fileUri) && !fileUri.includes(reconstructedUri)) {
-              console.log('[DownloadsScreen] Trying reconstructed URI from fileName:', reconstructedUri);
-              fileInfo = await FileSystem.getInfoAsync(reconstructedUri);
-              if (fileInfo.exists) {
-                fileUri = reconstructedUri;
-                console.log('[DownloadsScreen] ✅ File found with reconstructed URI');
-              }
-            }
-          }
-          
-          // 5. URI에서 파일명 추출하여 재구성 시도
-          if (!fileInfo.exists && fileUri.includes('/')) {
-            const uriParts = fileUri.split('/');
-            const uriFileName = uriParts[uriParts.length - 1];
-            if (uriFileName && uriFileName.includes('.') && uriFileName !== fileName) {
-              let decodedFileName = uriFileName;
-              try {
-                decodedFileName = decodeURIComponent(uriFileName);
-              } catch (e) {
-                // 디코딩 실패해도 원본 사용
-              }
-              
-              const altUri = `${DOWNLOAD_DIR}${decodedFileName}`;
-              if (altUri !== fileUri && altUri !== `${DOWNLOAD_DIR}${fileName}`) {
-                console.log('[DownloadsScreen] Trying alternative URI from path:', altUri);
-                fileInfo = await FileSystem.getInfoAsync(altUri);
-                if (fileInfo.exists) {
-                  fileUri = altUri;
-                  console.log('[DownloadsScreen] ✅ File found with alternative URI from path');
-                }
-              }
-            }
-          }
-          
-          // 6. file:// 프로토콜을 제거한 상태로 재구성 시도
-          if (!fileInfo.exists && fileName) {
-            let cleanUri = fileUri;
-            if (cleanUri.startsWith('file://')) {
-              cleanUri = cleanUri.replace('file://', '');
-            }
-            const cleanReconstructedUri = `${DOWNLOAD_DIR}${fileName}`;
-            
-            if (cleanReconstructedUri !== cleanUri) {
-              console.log('[DownloadsScreen] Trying clean reconstructed URI:', cleanReconstructedUri);
-              fileInfo = await FileSystem.getInfoAsync(cleanReconstructedUri);
-              if (fileInfo.exists) {
-                fileUri = cleanReconstructedUri;
-                console.log('[DownloadsScreen] ✅ File found with clean reconstructed URI');
-              }
-            }
-          }
-        }
-        
-        if (!fileInfo.exists) {
-          console.error('[DownloadsScreen] ❌ File does not exist after all attempts!');
           Alert.alert('오류', '파일을 찾을 수 없습니다.');
           return;
         }
@@ -277,7 +394,7 @@ export default function DownloadsScreen({ navigation }) {
         let mimeType = file.isVideo ? 'video/*' : 'audio/*';
         
         // 파일 확장자에 따라 더 구체적인 MIME 타입 설정
-        const extension = fileName.split('.').pop()?.toLowerCase();
+        const extension = file.fileName.split('.').pop()?.toLowerCase();
         if (extension === 'mp4') {
           mimeType = 'video/mp4';
         } else if (extension === 'm4a') {
@@ -288,13 +405,7 @@ export default function DownloadsScreen({ navigation }) {
         
         // FileProvider를 사용하여 content:// URI 생성
         if (MediaStoreModule && typeof MediaStoreModule.getContentUri === 'function') {
-          // file:// 프로토콜 제거 (네이티브 모듈은 절대 경로를 원함)
-          let normalizedFileUri = fileInfo.uri || fileUri;
-          if (normalizedFileUri.startsWith('file://')) {
-            normalizedFileUri = normalizedFileUri.replace('file://', '');
-          }
-          
-          const contentUri = await MediaStoreModule.getContentUri(normalizedFileUri);
+          const contentUri = await MediaStoreModule.getContentUri(file.fileUri);
           
           // Intent를 사용하여 외부 플레이어로 파일 열기
           await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
@@ -330,6 +441,111 @@ export default function DownloadsScreen({ navigation }) {
     } catch (error) {
       console.error('[DownloadsScreen] Error resaving file:', error);
       Alert.alert('오류', error.message || '파일 저장 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 플레이리스트 관리 핸들러
+  const handlePlaylistCreate = async (playlistName) => {
+    try {
+      await createPlaylist(playlistName);
+      await loadPlaylists();
+      Alert.alert('완료', '플레이리스트 그룹이 생성되었습니다.');
+    } catch (error) {
+      console.error('[DownloadsScreen] Error creating playlist:', error);
+      Alert.alert('오류', '플레이리스트 그룹 생성 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handlePlaylistUpdate = async (playlistId, newPlaylistName) => {
+    try {
+      await updatePlaylist(playlistId, newPlaylistName);
+      await loadPlaylists();
+      await loadDownloadedFiles();
+      Alert.alert('완료', '플레이리스트 그룹 이름이 변경되었습니다.');
+    } catch (error) {
+      console.error('[DownloadsScreen] Error updating playlist:', error);
+      Alert.alert('오류', '플레이리스트 그룹 이름 변경 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handlePlaylistDelete = async (playlistId) => {
+    try {
+      await deletePlaylist(playlistId);
+      if (playlistFilter === playlistId) {
+        setPlaylistFilter(null);
+      }
+      await loadPlaylists();
+      await loadDownloadedFiles();
+      Alert.alert('완료', '플레이리스트 그룹이 삭제되었습니다.');
+    } catch (error) {
+      console.error('[DownloadsScreen] Error deleting playlist:', error);
+      Alert.alert('오류', '플레이리스트 그룹 삭제 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handlePlaylistToggle = (playlistId, isSelected) => {
+    setSelectedPlaylistIds(prev => {
+      if (isSelected) {
+        return [...prev, playlistId];
+      } else {
+        return prev.filter(id => id !== playlistId);
+      }
+    });
+  };
+
+  const handlePlaylistSelect = async () => {
+    if (!selectedFileForPlaylist) return;
+    
+    try {
+      // 플레이리스트 목록을 먼저 새로고침 (새로 생성된 플레이리스트 포함)
+      await loadPlaylists();
+      
+      // 선택된 플레이리스트 ID로 플레이리스트 데이터 배열 생성
+      const playlistDataArray = selectedPlaylistIds.map(playlistId => {
+        const playlist = playlists.find(p => p.playlist_id === playlistId);
+        if (!playlist) {
+          // 플레이리스트를 찾을 수 없으면 데이터베이스에서 직접 조회
+          console.warn('[DownloadsScreen] Playlist not found in local state, ID:', playlistId);
+          return null;
+        }
+        return {
+          playlist_id: playlistId,
+          playlist_name: playlist.playlist_name
+        };
+      }).filter(p => p !== null && p.playlist_name && p.playlist_name.trim() !== ''); // 유효한 것만 필터링
+      
+      if (playlistDataArray.length === 0) {
+        // 선택된 플레이리스트가 없으면 기존 관계만 제거
+        await assignFileToPlaylist(selectedFileForPlaylist.fileUri, []);
+      } else {
+        await assignFileToPlaylist(selectedFileForPlaylist.fileUri, playlistDataArray);
+      }
+      
+      await loadDownloadedFiles();
+      await loadPlaylists();
+      setSelectedFileForPlaylist(null);
+      setSelectedPlaylistIds([]);
+    } catch (error) {
+      console.error('[DownloadsScreen] Error assigning playlists:', error);
+      Alert.alert('오류', '플레이리스트 그룹 할당 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handlePlaylistSelectorCreate = async (playlistName) => {
+    if (!selectedFileForPlaylist) return;
+    
+    try {
+      // 플레이리스트 생성
+      const playlistId = await createPlaylist(playlistName);
+      
+      // 선택된 플레이리스트 목록에 추가
+      setSelectedPlaylistIds(prev => [...prev, playlistId]);
+      
+      // 플레이리스트 목록 새로고침
+      await loadPlaylists();
+    } catch (error) {
+      console.error('[DownloadsScreen] Error creating playlist:', error);
+      Alert.alert('오류', '플레이리스트 그룹 생성 중 오류가 발생했습니다.');
     }
   };
 
@@ -402,6 +618,45 @@ export default function DownloadsScreen({ navigation }) {
   };
 
   // 다운로드한 파일 항목 렌더링
+  // 파일 아이템 클릭 시 SearchScreen으로 이동
+  const handleFileItemPress = (item) => {
+    if (!item.videoId) {
+      Alert.alert('알림', '이 파일의 YouTube URL 정보가 없습니다.');
+      return;
+    }
+
+    try {
+      const youtubeUrl = `https://www.youtube.com/watch?v=${item.videoId}`;
+      console.log('[DownloadsScreen] Navigating to Search with URL:', youtubeUrl);
+      
+      const params = {
+        url: youtubeUrl,
+        timestamp: Date.now(),
+        forceUpdate: true,
+        forceReload: true, // 강제 리로드로 이전 결과 초기화
+      };
+      
+      // Stack Navigator를 통해 Main 스크린의 Search 탭으로 navigate
+      // 구조: Stack.Navigator -> Main (Tab.Navigator) -> Search
+      // Tab Navigator에서 Stack Navigator에 접근하려면 getParent()를 두 번 호출
+      const tabNav = navigation.getParent(); // Tab Navigator
+      const stackNav = tabNav?.getParent(); // Stack Navigator
+      if (stackNav) {
+        // Stack Navigator를 통해 Main -> Search로 navigate
+        stackNav.navigate('Main', {
+          screen: 'Search',
+          params: params,
+        });
+      } else {
+        // fallback: 직접 navigate 시도 (Tab Navigator에서 직접)
+        navigation.navigate('Search', params);
+      }
+    } catch (error) {
+      console.error('[DownloadsScreen] Error navigating to Search:', error);
+      Alert.alert('오류', 'Search 화면으로 이동할 수 없습니다.');
+    }
+  };
+
   const renderFileItem = ({ item }) => {
     // 광고 아이템인 경우
     if (item.type === 'ad') {
@@ -415,7 +670,21 @@ export default function DownloadsScreen({ navigation }) {
     const cacheUri = cachePath ? `file://${cachePath}` : null;
     
     return (
-      <View style={styles.fileItem}>
+      <TouchableOpacity 
+        style={styles.fileItem}
+        onPress={() => handleFileItemPress(item)}
+        activeOpacity={0.8}
+      >
+        {item.playlist_names && item.playlist_names.length > 0 && (
+          <View style={styles.playlistBadgesContainer}>
+            {item.playlist_names.map((playlistName, idx) => (
+              <View key={idx} style={styles.playlistBadge}>
+                <Ionicons name="list" size={12} color="#4CAF50" />
+                <Text style={styles.playlistBadgeText}>{playlistName}</Text>
+              </View>
+            ))}
+          </View>
+        )}
         <View style={styles.fileInfo}>
           <View style={styles.fileThumbnailContainer}>
             {(item.thumbnailUrl || cacheUri) ? (
@@ -455,6 +724,21 @@ export default function DownloadsScreen({ navigation }) {
         </View>
         <View style={styles.fileActions}>
           <TouchableOpacity
+            style={styles.playlistIconButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              setSelectedFileForPlaylist(item);
+              setSelectedPlaylistIds(item.playlist_ids || []);
+              setShowPlaylistSelector(true);
+            }}
+          >
+            <Ionicons 
+              name={(item.playlist_ids && item.playlist_ids.length > 0) ? "list" : "list-outline"} 
+              size={20} 
+              color={(item.playlist_ids && item.playlist_ids.length > 0) ? "#4CAF50" : "#999"} 
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
             style={styles.actionButton}
             onPress={() => handlePlayFile(item)}
           >
@@ -483,7 +767,7 @@ export default function DownloadsScreen({ navigation }) {
             <Text style={[styles.actionButtonText, styles.deleteButtonText]}>삭제</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -507,102 +791,176 @@ export default function DownloadsScreen({ navigation }) {
               resizeMode="cover"
             />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>유튜브 다운로더</Text>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle}>MeTube</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.playlistButton}
+            onPress={() => setShowPlaylistManager(true)}
+          >
+            <Ionicons 
+              name="list" 
+              size={24} 
+              color="#fff" 
+            />
+          </TouchableOpacity>
+          <LanguageSelector />
         </View>
       </SafeAreaView>
 
       {/* 검색 바 */}
-      <View style={styles.searchSection}>
-        <View style={styles.searchContainer}>
-          <Ionicons name="search" size={20} color="#999" style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="파일명으로 검색..."
-            placeholderTextColor="#999"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          {searchQuery.length > 0 && (
+      {!loading && (
+        <View style={styles.searchSection}>
+          <View style={styles.searchContainer}>
+            <Ionicons name="search" size={20} color="#999" style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="파일명으로 검색..."
+              placeholderTextColor="#999"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity
+                style={styles.clearButton}
+                onPress={() => setSearchQuery('')}
+              >
+                <Ionicons name="close-circle" size={20} color="#999" />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
-              style={styles.clearButton}
-              onPress={() => setSearchQuery('')}
+              style={styles.filterToggleButton}
+              onPress={() => setShowFilters(!showFilters)}
             >
-              <Ionicons name="close-circle" size={20} color="#999" />
+              <Ionicons 
+                name={showFilters ? "options" : "options-outline"} 
+                size={20} 
+                color="#666" 
+              />
             </TouchableOpacity>
-          )}
+          </View>
+        </View>
+      )}
+
+      {/* 플레이리스트 필터 버튼 */}
+      {showFilters && !loading && (() => {
+        // 실제로 파일이 있는 플레이리스트만 필터링
+        const playlistsWithFiles = playlists.filter(playlist => {
+          return downloadedFiles.some(file => {
+            const playlistIds = file.playlist_ids || [];
+            return playlistIds.includes(playlist.playlist_id);
+          });
+        });
+        
+        if (playlistsWithFiles.length === 0) return null;
+        
+        return (
+          <View style={styles.filterSection}>
+            <TouchableOpacity
+              style={[
+                styles.playlistFilterButton,
+                playlistFilter === null && styles.filterButtonActive
+              ]}
+              onPress={() => setPlaylistFilter(null)}
+            >
+              <Text style={[
+                styles.filterButtonText,
+                playlistFilter === null && styles.filterButtonTextActive
+              ]}>
+                전체
+              </Text>
+            </TouchableOpacity>
+            {playlistsWithFiles.map((playlist) => (
+              <TouchableOpacity
+                key={playlist.playlist_id}
+                style={[
+                  styles.playlistFilterButton,
+                  playlistFilter === playlist.playlist_id && styles.filterButtonActive
+                ]}
+                onPress={() => setPlaylistFilter(playlist.playlist_id)}
+              >
+                <Ionicons 
+                  name="list" 
+                  size={14} 
+                  color={playlistFilter === playlist.playlist_id ? '#fff' : '#666'} 
+                  style={{ marginRight: 4 }}
+                />
+                <Text 
+                  style={[
+                    styles.filterButtonText,
+                    playlistFilter === playlist.playlist_id && styles.filterButtonTextActive
+                  ]} 
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {playlist.playlist_name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        );
+      })()}
+
+      {/* 파일 타입 필터 버튼 */}
+      {showFilters && !loading && (
+        <View style={styles.filterSection}>
           <TouchableOpacity
-            style={styles.filterToggleButton}
-            onPress={() => setShowFilters(!showFilters)}
+            style={[
+              styles.filterButton,
+              fileTypeFilter === 'all' && styles.filterButtonActive
+            ]}
+            onPress={() => setFileTypeFilter('all')}
+          >
+            <Text style={[
+              styles.filterButtonText,
+              fileTypeFilter === 'all' && styles.filterButtonTextActive
+            ]}>
+              전체
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              fileTypeFilter === 'video' && styles.filterButtonActive
+            ]}
+            onPress={() => setFileTypeFilter('video')}
           >
             <Ionicons 
-              name={showFilters ? "options" : "options-outline"} 
-              size={20} 
-              color="#666" 
+              name="videocam" 
+              size={14} 
+              color={fileTypeFilter === 'video' ? '#fff' : '#666'} 
+              style={{ marginRight: 4 }}
             />
+            <Text style={[
+              styles.filterButtonText,
+              fileTypeFilter === 'video' && styles.filterButtonTextActive
+            ]}>
+              영상
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              fileTypeFilter === 'audio' && styles.filterButtonActive
+            ]}
+            onPress={() => setFileTypeFilter('audio')}
+          >
+            <Ionicons 
+              name="musical-notes" 
+              size={14} 
+              color={fileTypeFilter === 'audio' ? '#fff' : '#666'} 
+              style={{ marginRight: 4 }}
+            />
+            <Text style={[
+              styles.filterButtonText,
+              fileTypeFilter === 'audio' && styles.filterButtonTextActive
+            ]}>
+              음악
+            </Text>
           </TouchableOpacity>
         </View>
-      </View>
-
-      {/* ✅ 파일 타입 필터 버튼 */}
-      {showFilters && (
-        <View style={styles.filterSection}>
-        <TouchableOpacity
-          style={[
-            styles.filterButton,
-            fileTypeFilter === 'all' && styles.filterButtonActive
-          ]}
-          onPress={() => setFileTypeFilter('all')}
-        >
-          <Text style={[
-            styles.filterButtonText,
-            fileTypeFilter === 'all' && styles.filterButtonTextActive
-          ]}>
-            전체
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.filterButton,
-            fileTypeFilter === 'video' && styles.filterButtonActive
-          ]}
-          onPress={() => setFileTypeFilter('video')}
-        >
-          <Ionicons 
-            name="videocam" 
-            size={12} 
-            color={fileTypeFilter === 'video' ? '#fff' : '#666'} 
-            style={{ marginRight: 4 }}
-          />
-          <Text style={[
-            styles.filterButtonText,
-            fileTypeFilter === 'video' && styles.filterButtonTextActive
-          ]}>
-            영상
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.filterButton,
-            fileTypeFilter === 'audio' && styles.filterButtonActive
-          ]}
-          onPress={() => setFileTypeFilter('audio')}
-        >
-          <Ionicons 
-            name="musical-notes" 
-            size={12} 
-            color={fileTypeFilter === 'audio' ? '#fff' : '#666'} 
-            style={{ marginRight: 4 }}
-          />
-          <Text style={[
-            styles.filterButtonText,
-            fileTypeFilter === 'audio' && styles.filterButtonTextActive
-          ]}>
-            음악
-          </Text>
-        </TouchableOpacity>
-      </View>
       )}
 
       {/* 정렬 버튼 */}
@@ -613,7 +971,15 @@ export default function DownloadsScreen({ navigation }) {
               styles.sortButton,
               (sortBy === 'date-desc' || sortBy === 'date-asc') && styles.sortButtonActive
             ]}
-            onPress={handleDateSort}
+            onPress={() => {
+              if (sortBy === 'date-desc') {
+                setSortBy('date-asc');
+              } else if (sortBy === 'date-asc') {
+                setSortBy('date-desc');
+              } else {
+                setSortBy('date-desc');
+              }
+            }}
           >
             <Ionicons 
               name={sortBy === 'date-asc' ? 'arrow-up' : 'arrow-down'} 
@@ -633,7 +999,15 @@ export default function DownloadsScreen({ navigation }) {
               styles.sortButton,
               (sortBy === 'title-asc' || sortBy === 'title-desc') && styles.sortButtonActive
             ]}
-            onPress={handleTitleSort}
+            onPress={() => {
+              if (sortBy === 'title-asc') {
+                setSortBy('title-desc');
+              } else if (sortBy === 'title-desc') {
+                setSortBy('title-asc');
+              } else {
+                setSortBy('title-asc');
+              }
+            }}
           >
             <Ionicons 
               name={sortBy === 'title-desc' ? 'arrow-down' : 'arrow-up'} 
@@ -645,8 +1019,102 @@ export default function DownloadsScreen({ navigation }) {
               styles.sortButtonText,
               (sortBy === 'title-asc' || sortBy === 'title-desc') && styles.sortButtonTextActive
             ]}>
-              제목순
+              제목
             </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* ✅ 음악 전체재생 버튼 (음악 필터일 때만 표시) */}
+      {fileTypeFilter === 'audio' && filteredFiles.filter(f => !f.isVideo).length > 0 && (
+        <View style={styles.playAllSection}>
+          <TouchableOpacity
+            style={styles.playAllButton}
+            onPress={handlePlayAll}
+          >
+            {playlistFilter ? (
+              <View style={styles.playAllButtonInner}>
+                <Ionicons 
+                  name={isPlaying ? "pause-circle" : "play-circle"} 
+                  size={24} 
+                  color="#fff" 
+                  style={{ flexShrink: 0 }}
+                />
+                <Text style={styles.playAllButtonText}>
+                  {(() => {
+                    const selectedPlaylist = playlists.find(p => p.playlist_id === playlistFilter);
+                    const playlistPrefix = selectedPlaylist ? `${selectedPlaylist.playlist_name} ` : '';
+                    
+                    if (isPlaying) {
+                      return `${playlistPrefix}재생 중 (${currentIndex + 1}/${playlist.length})`;
+                    } else {
+                      return `${playlistPrefix}음악 전체재생 (${filteredFiles.filter(f => !f.isVideo).length}곡)`;
+                    }
+                  })()}
+                </Text>
+              </View>
+            ) : (
+              <>
+                <Ionicons 
+                  name={isPlaying ? "pause-circle" : "play-circle"} 
+                  size={24} 
+                  color="#fff" 
+                />
+                <Text style={styles.playAllButtonText}>
+                  {isPlaying 
+                    ? `재생 중 (${currentIndex + 1}/${playlist.length})` 
+                    : `음악 전체재생 (${filteredFiles.filter(f => !f.isVideo).length}곡)`
+                  }
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
+      
+      {/* ✅ 전체 필터일 때 음악 전체재생 버튼 표시 */}
+      {fileTypeFilter === 'all' && filteredFiles.filter(f => !f.isVideo).length > 0 && (
+        <View style={styles.playAllSection}>
+          <TouchableOpacity
+            style={styles.playAllButton}
+            onPress={handlePlayAll}
+          >
+            {playlistFilter ? (
+              <View style={styles.playAllButtonInner}>
+                <Ionicons 
+                  name={isPlaying ? "pause-circle" : "play-circle"} 
+                  size={24} 
+                  color="#fff" 
+                  style={{ flexShrink: 0 }}
+                />
+                <Text style={styles.playAllButtonText}>
+                  {(() => {
+                    const selectedPlaylist = playlists.find(p => p.playlist_id === playlistFilter);
+                    const playlistPrefix = selectedPlaylist ? `${selectedPlaylist.playlist_name} ` : '';
+                    
+                    if (isPlaying) {
+                      return `${playlistPrefix}음악 재생 중 (${currentIndex + 1}/${playlist.length})`;
+                    } else {
+                      return `${playlistPrefix}음악 전체재생 (${filteredFiles.filter(f => !f.isVideo).length}곡)`;
+                    }
+                  })()}
+                </Text>
+              </View>
+            ) : (
+              <>
+                <Ionicons 
+                  name={isPlaying ? "pause-circle" : "play-circle"} 
+                  size={24} 
+                  color="#fff" 
+                />
+                <Text style={styles.playAllButtonText}>
+                  {isPlaying 
+                    ? `음악 재생 중 (${currentIndex + 1}/${playlist.length})` 
+                    : `음악 전체재생 (${filteredFiles.filter(f => !f.isVideo).length}곡)`
+                  }
+                </Text>
+              </>
+            )}
           </TouchableOpacity>
         </View>
       )}
@@ -685,6 +1153,50 @@ export default function DownloadsScreen({ navigation }) {
           contentContainerStyle={filteredFiles.length === 0 ? styles.listContentEmpty : styles.listContent}
         />
       )}
+
+      {/* ✅ MiniPlayer (음악 재생 중일 때만 표시) */}
+      {playlist.length > 0 && (
+        <MiniPlayer
+          isVisible={true}
+          isPlaying={isPlaying}
+          currentItem={playlist[currentIndex]}
+          currentIndex={currentIndex}
+          totalItems={playlist.length}
+          onPlayPause={handlePlayPause}
+          onPrevious={handlePrevious}
+          onNext={handleNext}
+          onClose={handleStopPlaylist}
+        />
+      )}
+
+      {/* 플레이리스트 관리 모달 */}
+      <PinManagerModal
+        visible={showPlaylistManager}
+        onClose={() => setShowPlaylistManager(false)}
+        pins={playlists.map(p => ({ pin_id: p.playlist_id, pin_name: p.playlist_name }))}
+        onPinCreate={handlePlaylistCreate}
+        onPinUpdate={handlePlaylistUpdate}
+        onPinDelete={handlePlaylistDelete}
+        labelType="playlist"
+        files={downloadedFiles}
+      />
+
+      {/* 플레이리스트 선택 모달 */}
+      <PinSelectorModal
+        visible={showPlaylistSelector}
+        onClose={async () => {
+          await handlePlaylistSelect();
+          setShowPlaylistSelector(false);
+          setSelectedFileForPlaylist(null);
+          setSelectedPlaylistIds([]);
+        }}
+        pins={playlists.map(p => ({ pin_id: p.playlist_id, pin_name: p.playlist_name }))}
+        currentPinIds={selectedPlaylistIds}
+        onPinSelect={handlePlaylistToggle}
+        onPinCreate={handlePlaylistSelectorCreate}
+        onPinUpdate={handlePlaylistUpdate}
+        labelType="playlist"
+      />
     </View>
   );
 }
@@ -719,20 +1231,39 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
   },
-  logoIcon3D: {
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 8, // Android
-    transform: [{ rotateY: '15deg' }, { perspective: 1000 }],
+  headerTitleContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 12,
   },
   headerTitle: {
     color: '#fff',
     fontSize: 19,
+    fontWeight: 'bold',
+  },
+  playlistButton: {
+    marginRight: 8,
+    padding: 4,
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playlistBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: '#4CAF50',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  playlistBadgeText: {
+    color: '#fff',
+    fontSize: 10,
     fontWeight: 'bold',
   },
   searchSection: {
@@ -741,6 +1272,51 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
+  },
+  filterSection: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  filterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#f5f5f5',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    flex: 1,
+  },
+  filterButtonActive: {
+    backgroundColor: '#ff6b6b',
+    borderColor: '#ff6b6b',
+  },
+  playlistFilterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#f5f5f5',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  filterButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  filterButtonTextActive: {
+    color: '#fff',
   },
   sortSection: {
     flexDirection: 'row',
@@ -775,38 +1351,43 @@ const styles = StyleSheet.create({
   sortButtonTextActive: {
     color: '#fff',
   },
-  filterSection: {
-    flexDirection: 'row',
+  filterToggleButton: {
+    padding: 4,
+    marginLeft: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 28,
+    height: 28,
+  },
+  playAllSection: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#fff',
+    paddingVertical: 12,
+    backgroundColor: '#f5f5f5',
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
-    gap: 8,
   },
-  filterButton: {
+  playAllButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: '#f5f5f5',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#4CAF50',
   },
-  filterButtonActive: {
-    backgroundColor: '#ff6b6b',
-    borderColor: '#ff6b6b',
+  playAllButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    flexWrap: 'wrap',
   },
-  filterButtonText: {
-    fontSize: 14,
+  playAllButtonText: {
+    fontSize: 16,
     fontWeight: '600',
-    color: '#666',
-  },
-  filterButtonTextActive: {
     color: '#fff',
+    marginLeft: 8,
+    flexShrink: 1,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -824,12 +1405,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
     paddingVertical: 0,
-  },
-  filterToggleButton: {
-    padding: 4,
-    marginLeft: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   clearButton: {
     marginLeft: 8,
@@ -878,6 +1453,26 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  playlistBadgesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 8,
+    gap: 6,
+  },
+  playlistBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e8f5e9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  playlistBadgeText: {
+    fontSize: 11,
+    color: '#4CAF50',
+    fontWeight: '600',
   },
   fileInfo: {
     flexDirection: 'row',
@@ -930,8 +1525,14 @@ const styles = StyleSheet.create({
   },
   fileActions: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'flex-end',
     gap: 12,
+  },
+  playlistIconButton: {
+    padding: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   actionButton: {
     alignItems: 'center',

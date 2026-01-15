@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -14,17 +14,40 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { getFavorites, removeFavorite, initDatabase } from '../services/database';
+import { 
+  getFavorites, 
+  removeFavorite, 
+  initDatabase,
+  getPins,
+  assignPinToFavorite,
+  removePinFromFavorite,
+  deletePin,
+  updatePinName,
+  createPin,
+} from '../services/database';
 import { deleteThumbnailCacheIfUnused } from '../services/downloadService';
 import AdBanner from '../components/AdBanner';
+import PinManagerModal from '../components/PinManagerModal';
+import PinSelectorModal from '../components/PinSelectorModal';
+import { useLanguage } from '../contexts/LanguageContext';
+import LanguageSelector from '../components/LanguageSelector';
+import { translations } from '../locales/translations';
 
 export default function FavoritesScreen({ navigation }) {
+  const { currentLanguage } = useLanguage();
+  const t = translations[currentLanguage];
   const [favorites, setFavorites] = useState([]);
   const [filteredFavorites, setFilteredFavorites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('date-desc'); // 'date-desc' | 'date-asc' | 'title-asc' | 'title-desc' | null
   const [showFilters, setShowFilters] = useState(false); // 필터/정렬 섹션 표시 여부
+  const [pinFilter, setPinFilter] = useState(null); // null: 전체, 'none': 안 묶음, pin_id: 특정 핀
+  const [pins, setPins] = useState([]);
+  const [showPinManager, setShowPinManager] = useState(false);
+  const [showPinSelector, setShowPinSelector] = useState(false);
+  const [selectedItemForPin, setSelectedItemForPin] = useState(null);
+  const [selectedPinIds, setSelectedPinIds] = useState([]); // 선택된 핀 ID 목록
 
   // 즐겨찾기 목록 로드
   const loadFavorites = useCallback(async () => {
@@ -35,9 +58,20 @@ export default function FavoritesScreen({ navigation }) {
       console.log('[FavoritesScreen] Loaded favorites:', favs.length);
     } catch (error) {
       console.error('[FavoritesScreen] Error loading favorites:', error);
-      Alert.alert('오류', '즐겨찾기 목록을 불러오는 중 오류가 발생했습니다.');
+      Alert.alert(t.error, t.favoritesLoadError);
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  // 핀 목록 로드
+  const loadPins = useCallback(async () => {
+    try {
+      const pinsList = await getPins();
+      setPins(pinsList);
+      console.log('[FavoritesScreen] Loaded pins:', pinsList.length);
+    } catch (error) {
+      console.error('[FavoritesScreen] Error loading pins:', error);
     }
   }, []);
 
@@ -45,6 +79,7 @@ export default function FavoritesScreen({ navigation }) {
   useEffect(() => {
     initDatabase().then(() => {
       loadFavorites();
+      loadPins();
     }).catch(error => {
       console.error('[FavoritesScreen] Failed to initialize database', error);
     });
@@ -59,9 +94,33 @@ export default function FavoritesScreen({ navigation }) {
     return unsubscribe;
   }, [navigation, loadFavorites]);
 
-  // 검색 필터링 및 정렬
+  // 핀 목록이 변경될 때 현재 필터가 유효한지 확인
+  useEffect(() => {
+    if (pinFilter && pins.length > 0) {
+      // 현재 필터가 존재하는 핀인지 확인
+      const pinExists = pins.some(pin => pin.pin_id === pinFilter);
+      if (!pinExists) {
+        // 필터가 존재하지 않는 핀을 가리키면 전체로 리셋
+        setPinFilter(null);
+      }
+    } else if (pinFilter && pins.length === 0) {
+      // 핀이 모두 삭제되었으면 필터 리셋
+      setPinFilter(null);
+    }
+  }, [pins, pinFilter]);
+
+  // 검색/필터 및 정렬
   useEffect(() => {
     let filtered = [...favorites];
+    
+    // 핀 필터링
+    if (pinFilter) {
+      filtered = filtered.filter(fav => {
+        const pinIds = fav.pin_ids || (fav.pin_id ? [fav.pin_id] : []);
+        return pinIds.includes(pinFilter);
+      });
+    }
+    // pinFilter === null이면 전체 표시
     
     // 검색 필터링
     if (searchQuery.trim()) {
@@ -92,8 +151,13 @@ export default function FavoritesScreen({ navigation }) {
       }
     }
     
+    // 핀 필터가 선택된 상태에서 해당 핀의 파일이 모두 제거되면 필터 리셋
+    if (pinFilter && filtered.length === 0) {
+      setPinFilter(null);
+    }
+    
     setFilteredFavorites(filtered);
-  }, [searchQuery, favorites, sortBy]);
+  }, [searchQuery, favorites, sortBy, pinFilter]);
 
   // 정렬 버튼 핸들러 (3단계 토글)
   const handleDateSort = () => {
@@ -108,11 +172,11 @@ export default function FavoritesScreen({ navigation }) {
 
   const handleTitleSort = () => {
     if (sortBy === 'title-asc') {
-      setSortBy('title-desc'); // 가나다 내림차순
+      setSortBy('title-desc'); // 가나다 역순
     } else if (sortBy === 'title-desc') {
-      setSortBy('title-asc'); // 가나다 오름차순
+      setSortBy('title-asc'); // 가나다 순
     } else {
-      setSortBy('title-asc'); // 가나다 오름차순
+      setSortBy('title-asc'); // 가나다 순
     }
   };
 
@@ -122,17 +186,128 @@ export default function FavoritesScreen({ navigation }) {
       setFavorites(prev => prev.filter(fav => fav.video_id !== item.video_id));
       console.log('[FavoritesScreen] Favorite removed:', item.video_id);
       
-      // ✅ 썸네일 캐시 스마트 삭제 (다운로드 파일이 없을 때만 삭제)
+      // 썸네일 캐시 스마트 삭제 (다운로드 파일이 없을 때만 삭제)
       await deleteThumbnailCacheIfUnused(item.video_id);
+      
+      // 핀 목록 새로고침
+      loadPins();
     } catch (error) {
       console.error('[FavoritesScreen] Error removing favorite:', error);
-      Alert.alert('오류', '즐겨찾기 삭제 중 오류가 발생했습니다.');
+      Alert.alert(t.error, t.favoritesDeleteError);
+    }
+  };
+
+  // 핀 관리 핸들러
+  const handlePinCreate = async (pinName) => {
+    try {
+      await createPin(pinName);
+      await loadPins();
+      Alert.alert(t.complete, t.bookmarkGroupCreated);
+    } catch (error) {
+      console.error('[FavoritesScreen] Error creating pin:', error);
+      Alert.alert(t.error, t.bookmarkGroupCreateError);
+    }
+  };
+
+  const handlePinUpdate = async (pinId, newPinName) => {
+    try {
+      await updatePinName(pinId, newPinName);
+      await loadPins();
+      await loadFavorites(); // 즐겨찾기 목록도 새로고침 (pin_name 업데이트 반영)
+      Alert.alert(t.complete, t.bookmarkGroupRenamed);
+    } catch (error) {
+      console.error('[FavoritesScreen] Error updating pin:', error);
+      Alert.alert(t.error, t.bookmarkGroupRenameError);
+    }
+  };
+
+  const handlePinDelete = async (pinId) => {
+    try {
+      await deletePin(pinId);
+      // 삭제된 핀이 현재 필터인지 확인하고 먼저 제거
+      if (pinFilter === pinId) {
+        setPinFilter(null);
+      }
+      await loadPins();
+      await loadFavorites(); // 즐겨찾기 목록도 새로고침
+      Alert.alert(t.complete, t.bookmarkGroupDeleted);
+    } catch (error) {
+      console.error('[FavoritesScreen] Error deleting pin:', error);
+      Alert.alert(t.error, t.bookmarkGroupDeleteError);
+    }
+  };
+
+  const handlePinToggle = (pinId, isSelected) => {
+    setSelectedPinIds(prev => {
+      if (isSelected) {
+        return [...prev, pinId];
+      } else {
+        return prev.filter(id => id !== pinId);
+      }
+    });
+  };
+
+  const handlePinSelect = async () => {
+    if (!selectedItemForPin) return;
+    
+    try {
+      // 핀 목록을 먼저 새로고침 (새로 생성된 핀 포함)
+      await loadPins();
+      
+      // 최신 핀 목록 가져오기
+      const latestPins = await getPins();
+      
+      // 선택된 핀 ID로 핀 데이터 배열 생성
+      const pinDataArray = selectedPinIds.map(pinId => {
+        const pin = latestPins.find(p => p.pin_id === pinId);
+        if (!pin) {
+          console.warn('[FavoritesScreen] Pin not found in local state, ID:', pinId);
+          return null;
+        }
+        return {
+          pin_id: pin.pin_id,
+          pin_name: pin.pin_name
+        };
+      }).filter(p => p !== null && p.pin_name && p.pin_name.trim() !== ''); // 유효한 것만 필터링
+      
+      if (pinDataArray.length === 0) {
+        // 선택된 핀이 없으면 기존 관계만 제거
+        await assignPinToFavorite(selectedItemForPin.video_id, []);
+      } else {
+        await assignPinToFavorite(selectedItemForPin.video_id, pinDataArray);
+      }
+      
+      await loadFavorites();
+      await loadPins();
+      setSelectedItemForPin(null);
+      setSelectedPinIds([]);
+    } catch (error) {
+      console.error('[FavoritesScreen] Error assigning pins:', error);
+      Alert.alert(t.error, t.bookmarkGroupAssignError);
+    }
+  };
+
+  const handlePinSelectorCreate = async (pinName) => {
+    if (!selectedItemForPin) return;
+    
+    try {
+      // 핀 생성
+      const pinId = await createPin(pinName);
+      
+      // 선택된 핀 목록에 추가
+      setSelectedPinIds(prev => [...prev, pinId]);
+      
+      // 핀 목록 새로고침
+      await loadPins();
+    } catch (error) {
+      console.error('[FavoritesScreen] Error creating pin:', error);
+      Alert.alert(t.error, t.bookmarkGroupCreateError);
     }
   };
 
   const handleOpenVideo = (item) => {
     if (!item.url) {
-      Alert.alert('오류', 'YouTube URL을 찾을 수 없습니다.');
+      Alert.alert(t.error, t.ytUrlError);
       return;
     }
 
@@ -164,7 +339,7 @@ export default function FavoritesScreen({ navigation }) {
       }
     } catch (error) {
       console.error('[FavoritesScreen] Error navigating to Search:', error);
-      Alert.alert('오류', '영상으로 이동하는 중 오류가 발생했습니다.');
+      Alert.alert(t.error, t.navigateError);
     }
   };
 
@@ -203,38 +378,69 @@ export default function FavoritesScreen({ navigation }) {
     }
     
     return (
-      <TouchableOpacity 
-        style={styles.favoriteItem}
-        onPress={() => handleOpenVideo(item)}
-        activeOpacity={0.8}
-      >
-        {item.thumbnail && (
-          <Image 
-            source={{ uri: item.thumbnail }} 
-            style={styles.favoriteThumbnail}
-            resizeMode="cover"
-          />
+      <View style={styles.favoriteItemWrapper}>
+        {item.pin_names && item.pin_names.length > 0 && (
+          <View style={styles.pinBadgesContainer}>
+            {item.pin_names.map((pinName, idx) => (
+              <View key={idx} style={styles.pinBadge}>
+                <Ionicons name="bookmark" size={12} color="#ff6b6b" />
+                <Text style={styles.pinBadgeText}>{pinName}</Text>
+              </View>
+            ))}
+          </View>
         )}
-        <View style={styles.favoriteContent}>
-          <Text style={styles.favoriteTitle} numberOfLines={2}>
-            {item.title}
-          </Text>
-          {item.author && (
-            <Text style={styles.favoriteAuthor} numberOfLines={1}>
-              {item.author}
-            </Text>
-          )}
-        </View>
-        <TouchableOpacity
-          style={styles.removeButton}
-          onPress={(e) => {
-            e.stopPropagation();
-            handleRemoveFavorite(item);
-          }}
+        <TouchableOpacity 
+          style={styles.favoriteItem}
+          onPress={() => handleOpenVideo(item)}
+          activeOpacity={0.8}
         >
-          <Ionicons name="close-circle" size={24} color="#999" />
+          {item.thumbnail && (
+            <Image 
+              source={{ uri: item.thumbnail }} 
+              style={styles.favoriteThumbnail}
+              resizeMode="cover"
+            />
+          )}
+          <View style={styles.favoriteContent}>
+            <View style={styles.favoriteTitleRow}>
+              <Text style={styles.favoriteTitle} numberOfLines={2}>
+                {item.title}
+              </Text>
+            </View>
+            {item.author && (
+              <Text style={styles.favoriteAuthor} numberOfLines={1}>
+                {item.author}
+              </Text>
+            )}
+          </View>
+          <View style={styles.favoriteActions}>
+          <TouchableOpacity
+            style={styles.pinButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              setSelectedItemForPin(item);
+              setSelectedPinIds(item.pin_ids || []);
+              setShowPinSelector(true);
+            }}
+          >
+            <Ionicons 
+              name={(item.pin_ids && item.pin_ids.length > 0) ? "bookmark" : "bookmark-outline"} 
+              size={20} 
+              color={(item.pin_ids && item.pin_ids.length > 0) ? "#ff6b6b" : "#999"} 
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.removeButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleRemoveFavorite(item);
+            }}
+          >
+            <Ionicons name="close-circle" size={24} color="#999" />
+          </TouchableOpacity>
+        </View>
         </TouchableOpacity>
-      </TouchableOpacity>
+      </View>
     );
   };
 
@@ -258,18 +464,31 @@ export default function FavoritesScreen({ navigation }) {
               resizeMode="cover"
             />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>유튜브 다운로더</Text>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle}>MeTube</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.headerPinButton}
+            onPress={() => setShowPinManager(true)}
+          >
+            <Ionicons 
+              name="bookmark" 
+              size={24} 
+              color="#fff" 
+            />
+          </TouchableOpacity>
+          <LanguageSelector />
         </View>
       </SafeAreaView>
 
-      {/* 검색 바 */}
+      {/* 검색바 */}
       {!loading && (
         <View style={styles.searchSection}>
           <View style={styles.searchContainer}>
             <Ionicons name="search" size={20} color="#999" style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
-              placeholder="제목으로 검색..."
+              placeholder={t.searchPlaceholderFavorites || t.searchPlaceholder}
               placeholderTextColor="#999"
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -298,6 +517,64 @@ export default function FavoritesScreen({ navigation }) {
         </View>
       )}
 
+      {/* 찜하기그룹 필터 버튼 */}
+      {showFilters && !loading && (() => {
+        // 실제로 파일이 있는 핀만 필터링
+        const pinsWithFiles = pins.filter(pin => {
+          return favorites.some(fav => {
+            const pinIds = fav.pin_ids || (fav.pin_id ? [fav.pin_id] : []);
+            return pinIds.includes(pin.pin_id);
+          });
+        });
+        
+        if (pinsWithFiles.length === 0) return null;
+        
+        return (
+          <View style={styles.filterSection}>
+            <TouchableOpacity
+              style={[
+                styles.pinFilterButton,
+                pinFilter === null && styles.filterButtonActive
+              ]}
+              onPress={() => setPinFilter(null)}
+            >
+              <Text style={[
+                styles.filterButtonText,
+                pinFilter === null && styles.filterButtonTextActive
+              ]}>
+                {t.all}
+              </Text>
+            </TouchableOpacity>
+            {pinsWithFiles.map((pin) => (
+              <TouchableOpacity
+                key={pin.pin_id}
+                style={[
+                  styles.pinFilterButton,
+                  pinFilter === pin.pin_id && styles.filterButtonActive
+                ]}
+                onPress={() => setPinFilter(pin.pin_id)}
+              >
+                <Ionicons 
+                  name="bookmark" 
+                  size={14} 
+                  color={pinFilter === pin.pin_id ? '#fff' : '#666'} 
+                  style={{ marginRight: 4 }}
+                />
+                <Text style={[
+                  styles.filterButtonText,
+                  pinFilter === pin.pin_id && styles.filterButtonTextActive
+                ]} 
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                >
+                  {pin.pin_name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        );
+      })()}
+
       {/* 정렬 버튼 */}
       {showFilters && !loading && (
         <View style={styles.sortSection}>
@@ -318,7 +595,7 @@ export default function FavoritesScreen({ navigation }) {
               styles.sortButtonText,
               (sortBy === 'date-desc' || sortBy === 'date-asc') && styles.sortButtonTextActive
             ]}>
-              {sortBy === 'date-desc' ? '최신순' : sortBy === 'date-asc' ? '오래된순' : '최신순'}
+              {sortBy === 'date-desc' ? t.newest : sortBy === 'date-asc' ? t.oldest : t.newest}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -338,7 +615,7 @@ export default function FavoritesScreen({ navigation }) {
               styles.sortButtonText,
               (sortBy === 'title-asc' || sortBy === 'title-desc') && styles.sortButtonTextActive
             ]}>
-              제목순
+              {t.titleSort}
             </Text>
           </TouchableOpacity>
         </View>
@@ -357,16 +634,45 @@ export default function FavoritesScreen({ navigation }) {
             <View style={styles.centerContainer}>
               <Ionicons name="star-outline" size={64} color="#ddd" />
               <Text style={styles.emptyText}>
-                {searchQuery ? '검색 결과가 없습니다' : '즐겨찾기가 없습니다'}
+                {searchQuery ? t.noResults : t.noFavorites}
               </Text>
               <Text style={styles.emptySubText}>
-                {searchQuery ? '다른 검색어를 시도해보세요' : '비디오를 찜하여 저장하세요'}
+                {searchQuery ? t.tryDifferentQuery : t.favoriteHint}
               </Text>
             </View>
           }
           contentContainerStyle={filteredFavorites.length === 0 ? styles.listContentEmpty : styles.listContent}
         />
       )}
+
+      {/* 핀 관리 모달 */}
+      <PinManagerModal
+        visible={showPinManager}
+        onClose={() => setShowPinManager(false)}
+        pins={pins}
+        onPinCreate={handlePinCreate}
+        onPinUpdate={handlePinUpdate}
+        onPinDelete={handlePinDelete}
+        labelType="bookmark"
+        files={favorites}
+      />
+
+      {/* 핀 선택 모달 */}
+      <PinSelectorModal
+        visible={showPinSelector}
+        onClose={async () => {
+          await handlePinSelect();
+          setShowPinSelector(false);
+          setSelectedItemForPin(null);
+          setSelectedPinIds([]);
+        }}
+        pins={pins}
+        currentPinIds={selectedPinIds}
+        onPinSelect={handlePinToggle}
+        onPinCreate={handlePinSelectorCreate}
+        onPinUpdate={handlePinUpdate}
+        labelType="bookmark"
+      />
     </View>
   );
 }
@@ -383,6 +689,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF0000',
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: Platform.OS === 'android' ? 8 : 0,
     paddingBottom: 12,
@@ -401,21 +708,23 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
   },
-  logoIcon3D: {
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 8, // Android
-    transform: [{ rotateY: '15deg' }, { perspective: 1000 }],
+  headerTitleContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 12,
   },
   headerTitle: {
     color: '#fff',
     fontSize: 19,
     fontWeight: 'bold',
+  },
+  headerPinButton: {
+    marginRight: 8,
+    padding: 4,
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   searchSection: {
     padding: 16,
@@ -423,6 +732,51 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
+  },
+  filterSection: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  filterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#f5f5f5',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    flex: 1,
+  },
+  pinFilterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#f5f5f5',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  filterButtonActive: {
+    backgroundColor: '#ff6b6b',
+    borderColor: '#ff6b6b',
+  },
+  filterButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  filterButtonTextActive: {
+    color: '#fff',
   },
   sortSection: {
     flexDirection: 'row',
@@ -500,10 +854,12 @@ const styles = StyleSheet.create({
   listContentEmpty: {
     flexGrow: 1,
   },
+  favoriteItemWrapper: {
+    marginBottom: 12,
+  },
   favoriteItem: {
     backgroundColor: '#f9f9f9',
     borderRadius: 12,
-    marginBottom: 12,
     overflow: 'hidden',
     flexDirection: 'row',
     shadowColor: '#000',
@@ -525,15 +881,51 @@ const styles = StyleSheet.create({
     padding: 12,
     justifyContent: 'center',
   },
+  favoriteTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 4,
+  },
   favoriteTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
-    marginBottom: 4,
+    flex: 1,
+  },
+  pinBadgesContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flexWrap: 'wrap',
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  pinBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff3f3',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    gap: 4,
+  },
+  pinBadgeText: {
+    fontSize: 11,
+    color: '#ff6b6b',
+    fontWeight: '600',
   },
   favoriteAuthor: {
     fontSize: 14,
     color: '#666',
+  },
+  favoriteActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pinButton: {
+    padding: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   removeButton: {
     padding: 12,
