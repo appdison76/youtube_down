@@ -14,6 +14,8 @@ import {
   KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useLanguage } from '../contexts/LanguageContext';
+import { translations } from '../locales/translations';
 
 export default function PinManagerModal({
   visible,
@@ -25,6 +27,8 @@ export default function PinManagerModal({
   labelType = 'bookmark',
   files = [], // 파일 목록 (플레이리스트에 파일이 있는지 확인용)
 }) {
+  const { currentLanguage } = useLanguage();
+  const t = translations[currentLanguage];
   const [editingPinId, setEditingPinId] = useState(null);
   const [editingName, setEditingName] = useState('');
   const [newPinName, setNewPinName] = useState('');
@@ -76,10 +80,11 @@ export default function PinManagerModal({
       );
       
       if (isDuplicate) {
+        const typeName = labelType === 'bookmark' ? t.bookmarkGroupSelect : labelType === 'playlist' ? t.playlistSelect : 'Pin';
         Alert.alert(
-          '중복된 이름',
-          `"${editingName.trim()}" ${labelType === 'bookmark' ? '찜하기그룹' : labelType === 'playlist' ? '플레이리스트' : '핀'} 이름이 이미 존재합니다.`,
-          [{ text: '확인' }]
+          t.duplicateName,
+          t.duplicateNameMessage.replace('{name}', editingName.trim()).replace('{type}', typeName),
+          [{ text: t.ok }]
         );
         return;
       }
@@ -103,10 +108,11 @@ export default function PinManagerModal({
       );
       
       if (isDuplicate) {
+        const typeName = labelType === 'bookmark' ? t.bookmarkGroupSelect : labelType === 'playlist' ? t.playlistSelect : 'Pin';
         Alert.alert(
-          '중복된 이름',
-          `"${newPinName.trim()}" ${labelType === 'bookmark' ? '찜하기그룹' : labelType === 'playlist' ? '플레이리스트' : '핀'} 이름이 이미 존재합니다.`,
-          [{ text: '확인' }]
+          t.duplicateName,
+          t.duplicateNameMessage.replace('{name}', newPinName.trim()).replace('{type}', typeName),
+          [{ text: t.ok }]
         );
         return;
       }
@@ -117,13 +123,14 @@ export default function PinManagerModal({
   };
 
   const handleDelete = (pin) => {
+    const typeName = labelType === 'bookmark' ? t.bookmarkGroupSelect : labelType === 'playlist' ? t.playlistSelect : 'Pin';
     Alert.alert(
-      '삭제 확인',
-      `"${pin.pin_name}" ${labelType === 'bookmark' ? '찜하기그룹' : labelType === 'playlist' ? '플레이리스트' : '핀'}을 삭제하시겠습니까?`,
+      t.deleteConfirm,
+      t.deleteConfirmMessage.replace('{name}', pin.pin_name).replace('{type}', typeName),
       [
-        { text: '취소', style: 'cancel' },
+        { text: t.cancel, style: 'cancel' },
         {
-          text: '삭제',
+          text: t.delete,
           style: 'destructive',
           onPress: () => onPinDelete(pin.pin_id),
         },
@@ -169,7 +176,7 @@ export default function PinManagerModal({
             value={editingName}
             onChangeText={setEditingName}
             autoFocus
-            placeholder={`${labelType === 'bookmark' ? '찜하기그룹' : labelType === 'playlist' ? '플레이리스트' : '핀'} 이름`}
+            placeholder={labelType === 'bookmark' ? t.newBookmarkGroupName : labelType === 'playlist' ? t.newPlaylistName : 'Pin name'}
             onFocus={() => {
               // 포커스 시 스크롤
               setTimeout(() => {
@@ -243,7 +250,7 @@ export default function PinManagerModal({
         ]}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>
-              {labelType === 'bookmark' ? '찜하기그룹 관리' : labelType === 'playlist' ? '플레이리스트 관리' : '핀 관리'}
+              {labelType === 'bookmark' ? t.bookmarkGroupManagement : labelType === 'playlist' ? t.playlistManagement : 'Pin Management'}
             </Text>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
               <Ionicons name="close" size={24} color="#666" />
@@ -256,7 +263,7 @@ export default function PinManagerModal({
               style={styles.createInput}
               value={newPinName}
               onChangeText={setNewPinName}
-              placeholder={`새 ${labelType === 'bookmark' ? '찜하기그룹' : labelType === 'playlist' ? '플레이리스트' : '핀'} 이름`}
+              placeholder={labelType === 'bookmark' ? t.newBookmarkGroupName : labelType === 'playlist' ? t.newPlaylistName : 'New pin name'}
               placeholderTextColor="#999"
             />
             <TouchableOpacity
@@ -294,7 +301,7 @@ export default function PinManagerModal({
                     color="#ddd" 
                   />
                   <Text style={styles.emptyText}>
-                    {labelType === 'bookmark' ? '찜하기그룹이 없습니다' : labelType === 'playlist' ? '플레이리스트가 없습니다' : '핀이 없습니다'}
+                    {labelType === 'bookmark' ? t.bookmarkGroupEmpty : labelType === 'playlist' ? t.playlistEmpty : 'No pins'}
                   </Text>
                 </View>
               }

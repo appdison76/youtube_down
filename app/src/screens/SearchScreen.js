@@ -21,6 +21,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import AdBanner from '../components/AdBanner';
 import LanguageSelector from '../components/LanguageSelector';
+import { useLanguage } from '../contexts/LanguageContext';
+import { translations } from '../locales/translations';
 import { addFavorite, removeFavorite, isFavorite, initDatabase } from '../services/database';
 import { downloadVideo, downloadAudio, shareDownloadedFile, saveFileToDevice, getFileInfo, sanitizeFileName, getDownloadedFiles, cleanupIncompleteFiles, getVideoInfo, deleteFileWithMetadata } from '../services/downloadService';
 import * as IntentLauncher from 'expo-intent-launcher';
@@ -28,6 +30,8 @@ import * as FileSystem from 'expo-file-system/legacy';
 import MediaStoreModule from '../modules/MediaStoreModule';
 
 export default function SearchScreen({ navigation, route }) {
+  const { currentLanguage } = useLanguage();
+  const t = translations[currentLanguage];
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -45,11 +49,11 @@ export default function SearchScreen({ navigation, route }) {
       // 커스텀 모달로 표시
       setCustomAlert({
         visible: true,
-        title: '알림',
+        title: t.notice,
         message: isVideo 
-          ? '영상 저장을 시작합니다. 저장이 완료되면 알림이 표시됩니다.'
-          : '음악 저장을 시작합니다. 저장이 완료되면 알림이 표시됩니다.',
-        subMessage: '이미 저장된 파일은 재저장 버튼을 누르시면 다시 저장할 필요가 없습니다.',
+          ? t.videoSaveStarted
+          : t.musicSaveStarted,
+        subMessage: t.resaveHint,
         onConfirm: () => {
           setCustomAlert({ visible: false, title: '', message: '', subMessage: '', onConfirm: null });
         }
@@ -57,10 +61,10 @@ export default function SearchScreen({ navigation, route }) {
     } else {
       // 기본 Alert 사용
       Alert.alert(
-        '알림',
+        t.notice,
         isVideo 
-          ? '영상 저장을 시작합니다. 저장이 완료되면 알림이 표시됩니다.'
-          : '음악 저장을 시작합니다. 저장이 완료되면 알림이 표시됩니다.'
+          ? t.videoSaveStarted
+          : t.musicSaveStarted
       );
     }
   };
@@ -252,7 +256,7 @@ export default function SearchScreen({ navigation, route }) {
           if (canOpen) {
             await Linking.openURL(videoUrl);
           } else {
-            Alert.alert('오류', '영상을 열 수 없습니다.');
+            Alert.alert(t.error, t.cannotOpenVideo);
           }
         }
       }
@@ -262,7 +266,7 @@ export default function SearchScreen({ navigation, route }) {
       try {
         await Linking.openURL('https://www.youtube.com');
       } catch (webError) {
-        Alert.alert('오류', '영상을 열 수 없습니다.');
+        Alert.alert(t.error, t.cannotOpenVideo);
       }
     }
   }, []);
@@ -559,13 +563,13 @@ export default function SearchScreen({ navigation, route }) {
       }
     } catch (error) {
       console.error('[SearchScreen] Error toggling favorite:', error);
-      Alert.alert('오류', '즐겨찾기 저장 중 오류가 발생했습니다.');
+      Alert.alert(t.error, t.favoriteSaveError);
     }
   };
 
   const handleDownloadVideo = async (item, existingFile = null) => {
     if (!item.url || !item.id) {
-      Alert.alert('오류', '저장할 영상 정보가 없습니다.');
+      Alert.alert(t.error, t.noVideoInfo);
       return;
     }
 
@@ -575,9 +579,9 @@ export default function SearchScreen({ navigation, route }) {
         '저장 중',
         '이미 저장이 진행 중입니다. 취소하시겠습니까?',
         [
-          { text: '아니오', style: 'cancel' },
+          { text: t.no, style: 'cancel' },
           {
-            text: '취소',
+            text: t.cancel,
             style: 'destructive',
             onPress: () => {
               // 다운로드 상태 초기화 (실제 취소는 서비스 레벨에서 처리 어려움)
@@ -639,25 +643,25 @@ export default function SearchScreen({ navigation, route }) {
       const fileSizeText = fileInfo?.size ? `(${(fileInfo.size / (1024 * 1024)).toFixed(2)} MB)` : '';
       
       Alert.alert(
-        '저장 완료',
-        `영상 저장이 완료되었습니다. ${fileSizeText}`,
+        t.saveComplete,
+        `${t.videoSaveComplete} ${fileSizeText}`,
         [
-          { text: '취소', style: 'cancel' },
+          { text: t.cancel, style: 'cancel' },
           {
-            text: '저장하기',
+            text: t.saveButton,
             onPress: async () => {
               try {
                 const fileName = `${item.title || 'video'}.mp4`;
                 await saveFileToDevice(fileUri, fileName, true);
-                Alert.alert('알림', '영상파일이 갤러리에 저장되었습니다.\n\n저장 위치: Movies/Videos');
+                Alert.alert(t.notice, t.videoSavedToGallery);
               } catch (error) {
                 console.error('[SearchScreen] Error saving file:', error);
-                Alert.alert('오류', error.message || '파일 저장 중 오류가 발생했습니다.');
+                Alert.alert(t.error, error.message || t.saveFileError);
               }
             }
           },
           {
-            text: '공유하기',
+            text: t.shareButton,
             onPress: () => shareDownloadedFile(fileUri, `${sanitizeFileName(item.title)}.mp4`, true)
           }
         ]
@@ -670,7 +674,7 @@ export default function SearchScreen({ navigation, route }) {
         delete newState[item.id];
         return newState;
       });
-      Alert.alert('오류', error.message || '영상 저장 중 오류가 발생했습니다.');
+      Alert.alert(t.error, error.message || t.videoSaveError);
     } finally {
       // finally 블록에서 상태 초기화 보장 (에러가 발생해도 실행)
       // 이미 catch에서 처리했지만 이중 보장
@@ -686,7 +690,7 @@ export default function SearchScreen({ navigation, route }) {
     try {
       setDownloading(prev => ({ ...prev, [item.id]: { type: 'video', progress: 0 } }));
       
-      Alert.alert('알림', '영상 저장을 시작합니다. 저장이 완료되면 알림이 표시됩니다.');
+      Alert.alert(t.notice, t.videoSaveStarted);
       
       const fileUri = await downloadVideo(
         item.url,
@@ -706,12 +710,12 @@ export default function SearchScreen({ navigation, route }) {
       });
       
       Alert.alert(
-        '저장 완료',
-        '영상 저장이 완료되었습니다.',
+        t.saveComplete,
+        t.videoSaveComplete,
         [
-          { text: '취소', style: 'cancel' },
+          { text: t.cancel, style: 'cancel' },
           {
-            text: '공유하기',
+            text: t.shareButton,
             onPress: () => shareDownloadedFile(fileUri, `${sanitizeFileName(item.title)}.mp4`, true)
           }
         ]
@@ -723,14 +727,14 @@ export default function SearchScreen({ navigation, route }) {
         delete newState[item.id];
         return newState;
       });
-      Alert.alert('오류', error.message || '영상 저장 중 오류가 발생했습니다.');
+      Alert.alert(t.error, error.message || t.videoSaveError);
     }
     */
   };
 
   const handleDownloadAudio = async (item, existingFile = null) => {
     if (!item.url || !item.id) {
-      Alert.alert('오류', '저장할 음악 정보가 없습니다.');
+      Alert.alert(t.error, t.noMusicInfo);
       return;
     }
 
@@ -740,9 +744,9 @@ export default function SearchScreen({ navigation, route }) {
         '저장 중',
         '이미 저장이 진행 중입니다. 취소하시겠습니까?',
         [
-          { text: '아니오', style: 'cancel' },
+          { text: t.no, style: 'cancel' },
           {
-            text: '취소',
+            text: t.cancel,
             style: 'destructive',
             onPress: () => {
               // 다운로드 상태 초기화 (실제 취소는 서비스 레벨에서 처리 어려움)
@@ -804,25 +808,25 @@ export default function SearchScreen({ navigation, route }) {
       const fileSizeText = fileInfo?.size ? `(${(fileInfo.size / (1024 * 1024)).toFixed(2)} MB)` : '';
       
       Alert.alert(
-        '저장 완료',
-        `음악 저장이 완료되었습니다. ${fileSizeText}`,
+        t.saveComplete,
+        `${t.musicSaveComplete} ${fileSizeText}`,
         [
-          { text: '취소', style: 'cancel' },
+          { text: t.cancel, style: 'cancel' },
           {
-            text: '저장하기',
+            text: t.saveButton,
             onPress: async () => {
               try {
                 const fileName = `${item.title || 'audio'}.m4a`;
                 await saveFileToDevice(fileUri, fileName, false);
-                Alert.alert('알림', '음악파일이 음악 앱에 저장되었습니다.\n\n저장 위치: Music/Audio');
+                Alert.alert(t.notice, t.musicSavedToApp);
               } catch (error) {
                 console.error('[SearchScreen] Error saving file:', error);
-                Alert.alert('오류', error.message || '파일 저장 중 오류가 발생했습니다.');
+                Alert.alert(t.error, error.message || t.saveFileError);
               }
             }
           },
           {
-            text: '공유하기',
+            text: t.shareButton,
             onPress: () => shareDownloadedFile(fileUri, `${item.title || 'audio'}.m4a`, false)
           }
         ]
@@ -835,7 +839,7 @@ export default function SearchScreen({ navigation, route }) {
         delete newState[item.id];
         return newState;
       });
-      Alert.alert('오류', error.message || '음악 저장 중 오류가 발생했습니다.');
+      Alert.alert(t.error, error.message || t.musicSaveError);
     } finally {
       // finally 블록에서 상태 초기화 보장 (에러가 발생해도 실행)
       // 이미 catch에서 처리했지만 이중 보장
@@ -851,7 +855,7 @@ export default function SearchScreen({ navigation, route }) {
     try {
       setDownloading(prev => ({ ...prev, [item.id]: { type: 'audio', progress: 0 } }));
       
-      Alert.alert('알림', '음악 저장을 시작합니다. 저장이 완료되면 알림이 표시됩니다.');
+      Alert.alert(t.notice, t.musicSaveStarted);
       
       const fileUri = await downloadAudio(
         item.url,
@@ -871,12 +875,12 @@ export default function SearchScreen({ navigation, route }) {
       });
       
       Alert.alert(
-        '저장 완료',
-        '음악 저장이 완료되었습니다.',
+        t.saveComplete,
+        t.musicSaveComplete,
         [
-          { text: '취소', style: 'cancel' },
+          { text: t.cancel, style: 'cancel' },
           {
-            text: '공유하기',
+            text: t.shareButton,
             onPress: () => shareDownloadedFile(fileUri, `${sanitizeFileName(item.title)}.mp4`, true)
           }
         ]
@@ -888,14 +892,14 @@ export default function SearchScreen({ navigation, route }) {
         delete newState[item.id];
         return newState;
       });
-      Alert.alert('오류', error.message || '음악 저장 중 오류가 발생했습니다.');
+      Alert.alert(t.error, error.message || t.musicSaveError);
     }
     */
   };
 
   const handleOpenVideo = async (item) => {
     if (!item.url) {
-      Alert.alert('오류', '영상 URL을 찾을 수 없습니다.');
+      Alert.alert(t.error, t.videoUrlNotFound);
       return;
     }
 
@@ -908,11 +912,11 @@ export default function SearchScreen({ navigation, route }) {
       if (canOpen) {
         await Linking.openURL(videoUrl);
       } else {
-        Alert.alert('오류', '영상을 열 수 없습니다.');
+        Alert.alert(t.error, t.cannotOpenVideo);
       }
     } catch (error) {
       console.error('[SearchScreen] Error opening video:', error);
-      Alert.alert('오류', '영상을 열 수 없습니다.');
+      Alert.alert(t.error, t.cannotOpenVideo);
     }
   };
 
@@ -1024,7 +1028,7 @@ export default function SearchScreen({ navigation, route }) {
         
         if (!fileInfo.exists) {
           console.error('[SearchScreen] ❌ File does not exist after all attempts!');
-          Alert.alert('오류', '파일을 찾을 수 없습니다.');
+          Alert.alert(t.error, t.fileNotFound);
           return;
         }
 
@@ -1058,15 +1062,15 @@ export default function SearchScreen({ navigation, route }) {
             flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
           });
         } else {
-          Alert.alert('오류', '파일 재생 기능을 사용할 수 없습니다. 앱을 재빌드해주세요.');
+          Alert.alert(t.error, t.playFileError);
         }
       } else {
-        Alert.alert('알림', 'iOS에서는 이 기능을 지원하지 않습니다.');
+        Alert.alert(t.notice, t.iosNotSupported);
       }
     } catch (error) {
       console.error('[SearchScreen] Error playing file:', error);
       console.error('[SearchScreen] Error details:', JSON.stringify(error, null, 2));
-      Alert.alert('오류', `파일을 재생할 수 없습니다: ${error.message || '알 수 없는 오류'}`);
+      Alert.alert(t.error, t.cannotPlayFile.replace('{error}', error.message || t.unknownError));
     }
   };
 
@@ -1110,9 +1114,9 @@ export default function SearchScreen({ navigation, route }) {
         
         if (!found) {
           Alert.alert(
-            '파일을 찾을 수 없음',
-            '파일이 존재하지 않거나 손상되었습니다.\n\n"재저장" 버튼을 눌러 파일을 다시 저장해주세요.',
-            [{ text: '확인' }]
+            t.fileNotFoundTitle,
+            t.fileNotFoundOrDamaged,
+            [{ text: t.ok }]
           );
           return;
         }
@@ -1123,16 +1127,16 @@ export default function SearchScreen({ navigation, route }) {
       
       await saveFileToDevice(file.fileUri, file.fileName, file.isVideo);
       Alert.alert(
-        '알림',
+        t.notice,
         file.isVideo 
-          ? '영상파일이 갤러리에 저장되었습니다.\n\n저장 위치: Movies/Videos'
-          : '음악파일이 음악 앱에 저장되었습니다.\n\n저장 위치: Music/Audio'
+          ? t.videoSavedToGallery
+          : t.musicSavedToApp
       );
       // 저장 후 파일 목록 새로고침
       loadDownloadedFiles();
     } catch (error) {
       console.error('[SearchScreen] Error resaving file:', error);
-      Alert.alert('오류', error.message || '파일 저장 중 오류가 발생했습니다.');
+      Alert.alert(t.error, error.message || t.saveFileError);
     }
   };
 
@@ -1154,7 +1158,7 @@ export default function SearchScreen({ navigation, route }) {
               {item.title}
             </Text>
             <Text style={styles.downloadedFileSize}>
-              {fileSizeMB} MB • {item.isVideo ? '영상' : '음악'}
+              {fileSizeMB} MB • {item.isVideo ? t.video : t.music}
             </Text>
           </View>
         </View>
@@ -1256,7 +1260,7 @@ export default function SearchScreen({ navigation, route }) {
                 <View style={styles.downloadedActionsRowContainer}>
                   <View style={styles.downloadedActionsRowLabel}>
                     <Ionicons name="videocam" size={16} color="#FF0000" />
-                    <Text style={styles.downloadedActionsRowLabelText}>영상</Text>
+                    <Text style={styles.downloadedActionsRowLabelText}>{t.video}</Text>
                   </View>
                   <View style={styles.downloadedActionsRow}>
                     <TouchableOpacity
@@ -1267,7 +1271,7 @@ export default function SearchScreen({ navigation, route }) {
                       }}
                     >
                       <Ionicons name="play" size={18} color="#FF0000" />
-                      <Text style={[styles.downloadedActionText, { color: '#FF0000' }]}>재생</Text>
+                      <Text style={[styles.downloadedActionText, { color: '#FF0000' }]}>{t.play}</Text>
                     </TouchableOpacity>
                   
                   <TouchableOpacity
@@ -1278,7 +1282,7 @@ export default function SearchScreen({ navigation, route }) {
                     }}
                   >
                     <Ionicons name="share" size={18} color="#2196F3" />
-                    <Text style={[styles.downloadedActionText, { color: '#2196F3' }]}>공유</Text>
+                    <Text style={[styles.downloadedActionText, { color: '#2196F3' }]}>{t.share}</Text>
                   </TouchableOpacity>
                   
                   <TouchableOpacity
@@ -1289,7 +1293,7 @@ export default function SearchScreen({ navigation, route }) {
                     }}
                   >
                     <Ionicons name="save" size={18} color="#FF9800" />
-                    <Text style={[styles.downloadedActionText, { color: '#FF9800' }]}>재저장</Text>
+                    <Text style={[styles.downloadedActionText, { color: '#FF9800' }]}>{t.resave}</Text>
                   </TouchableOpacity>
                   
                   <TouchableOpacity
@@ -1297,12 +1301,12 @@ export default function SearchScreen({ navigation, route }) {
                     onPress={(e) => {
                       e.stopPropagation();
                       Alert.alert(
-                        '파일 삭제',
-                        `"${downloadedVideo.title}" 영상 파일을 삭제하시겠습니까?`,
+                        t.deleteFileTitle,
+                        t.deleteVideoFileMessage.replace('{name}', downloadedVideo.title),
                         [
-                          { text: '취소', style: 'cancel' },
+                          { text: t.cancel, style: 'cancel' },
                           {
-                            text: '삭제',
+                            text: t.delete,
                             style: 'destructive',
                             onPress: async () => {
                               try {
@@ -1310,9 +1314,9 @@ export default function SearchScreen({ navigation, route }) {
                                 // ✅ 메타데이터 정리 및 썸네일 캐시 스마트 삭제
                                 await deleteFileWithMetadata(downloadedVideo.fileName, downloadedVideo.videoId);
                                 loadDownloadedFiles();
-                                Alert.alert('완료', '영상 파일이 삭제되었습니다.');
+                                Alert.alert(t.complete, t.videoFileDeleted);
                               } catch (error) {
-                                Alert.alert('오류', '파일 삭제 중 오류가 발생했습니다.');
+                                Alert.alert(t.error, t.deleteFileError);
                               }
                             }
                           }
@@ -1321,7 +1325,7 @@ export default function SearchScreen({ navigation, route }) {
                     }}
                   >
                     <Ionicons name="trash" size={18} color="#f44336" />
-                    <Text style={[styles.downloadedActionText, styles.deleteActionText]}>삭제</Text>
+                    <Text style={[styles.downloadedActionText, styles.deleteActionText]}>{t.delete}</Text>
                   </TouchableOpacity>
                   </View>
                 </View>
@@ -1332,7 +1336,7 @@ export default function SearchScreen({ navigation, route }) {
                 <View style={styles.downloadedActionsRowContainer}>
                   <View style={styles.downloadedActionsRowLabel}>
                     <Ionicons name="musical-notes" size={16} color="#4CAF50" />
-                    <Text style={[styles.downloadedActionsRowLabelText, { color: '#4CAF50' }]}>음악</Text>
+                    <Text style={[styles.downloadedActionsRowLabelText, { color: '#4CAF50' }]}>{t.music}</Text>
                   </View>
                   <View style={styles.downloadedActionsRow}>
                     <TouchableOpacity
@@ -1343,7 +1347,7 @@ export default function SearchScreen({ navigation, route }) {
                       }}
                     >
                       <Ionicons name="play" size={18} color="#4CAF50" />
-                      <Text style={[styles.downloadedActionText, { color: '#4CAF50' }]}>재생</Text>
+                      <Text style={[styles.downloadedActionText, { color: '#4CAF50' }]}>{t.play}</Text>
                     </TouchableOpacity>
                   
                   <TouchableOpacity
@@ -1354,7 +1358,7 @@ export default function SearchScreen({ navigation, route }) {
                     }}
                   >
                     <Ionicons name="share" size={18} color="#2196F3" />
-                    <Text style={[styles.downloadedActionText, { color: '#2196F3' }]}>공유</Text>
+                    <Text style={[styles.downloadedActionText, { color: '#2196F3' }]}>{t.share}</Text>
                   </TouchableOpacity>
                   
                   <TouchableOpacity
@@ -1365,7 +1369,7 @@ export default function SearchScreen({ navigation, route }) {
                     }}
                   >
                     <Ionicons name="save" size={18} color="#FF9800" />
-                    <Text style={[styles.downloadedActionText, { color: '#FF9800' }]}>재저장</Text>
+                    <Text style={[styles.downloadedActionText, { color: '#FF9800' }]}>{t.resave}</Text>
                   </TouchableOpacity>
                   
                   <TouchableOpacity
@@ -1373,12 +1377,12 @@ export default function SearchScreen({ navigation, route }) {
                     onPress={(e) => {
                       e.stopPropagation();
                       Alert.alert(
-                        '파일 삭제',
-                        `"${downloadedAudio.title}" 음악 파일을 삭제하시겠습니까?`,
+                        t.deleteFileTitle,
+                        t.deleteMusicFileMessage.replace('{name}', downloadedAudio.title),
                         [
-                          { text: '취소', style: 'cancel' },
+                          { text: t.cancel, style: 'cancel' },
                           {
-                            text: '삭제',
+                            text: t.delete,
                             style: 'destructive',
                             onPress: async () => {
                               try {
@@ -1386,9 +1390,9 @@ export default function SearchScreen({ navigation, route }) {
                                 // ✅ 메타데이터 정리 및 썸네일 캐시 스마트 삭제
                                 await deleteFileWithMetadata(downloadedAudio.fileName, downloadedAudio.videoId);
                                 loadDownloadedFiles();
-                                Alert.alert('완료', '음악 파일이 삭제되었습니다.');
+                                Alert.alert(t.complete, t.musicFileDeleted);
                               } catch (error) {
-                                Alert.alert('오류', '파일 삭제 중 오류가 발생했습니다.');
+                                Alert.alert(t.error, t.deleteFileError);
                               }
                             }
                           }
@@ -1397,7 +1401,7 @@ export default function SearchScreen({ navigation, route }) {
                     }}
                   >
                     <Ionicons name="trash" size={18} color="#f44336" />
-                    <Text style={[styles.downloadedActionText, styles.deleteActionText]}>삭제</Text>
+                    <Text style={[styles.downloadedActionText, styles.deleteActionText]}>{t.delete}</Text>
                   </TouchableOpacity>
                   </View>
                 </View>
@@ -1412,7 +1416,7 @@ export default function SearchScreen({ navigation, route }) {
                 <View style={styles.downloadingItem}>
                   <ActivityIndicator size="small" color="#FF0000" />
                   <Text style={styles.downloadingText}>
-                    영상 저장 중... {Math.round(downloadProgress * 100)}%
+                    {t.videoDownloading} {Math.round(downloadProgress * 100)}%
                   </Text>
                 </View>
               )}
@@ -1420,7 +1424,7 @@ export default function SearchScreen({ navigation, route }) {
                 <View style={styles.downloadingItem}>
                   <ActivityIndicator size="small" color="#4CAF50" />
                   <Text style={styles.downloadingText}>
-                    음악 저장 중... {Math.round(downloadProgress * 100)}%
+                    {t.musicDownloading} {Math.round(downloadProgress * 100)}%
                   </Text>
                 </View>
               )}
@@ -1442,7 +1446,7 @@ export default function SearchScreen({ navigation, route }) {
                   size={20} 
                   color={favorites.has(item.id) ? "#FFD700" : "#999"} 
                 />
-                <Text style={styles.buttonText}>찜하기</Text>
+                <Text style={styles.buttonText}>{t.addToFavorites}</Text>
               </TouchableOpacity>
               
               <TouchableOpacity 
@@ -1454,7 +1458,7 @@ export default function SearchScreen({ navigation, route }) {
               >
                 <Ionicons name="videocam" size={20} color="#fff" />
                 <Text style={styles.videoButtonText}>
-                  {downloadedVideo ? '다시저장' : '영상저장'}
+                  {downloadedVideo ? t.resave : t.saveVideo}
                 </Text>
               </TouchableOpacity>
               
@@ -1467,7 +1471,7 @@ export default function SearchScreen({ navigation, route }) {
               >
                 <Ionicons name="musical-notes" size={20} color="#fff" />
                 <Text style={styles.audioButtonText}>
-                  {downloadedAudio ? '다시저장' : '음악저장'}
+                  {downloadedAudio ? t.resave : t.saveMusic}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1510,7 +1514,7 @@ export default function SearchScreen({ navigation, route }) {
           <TextInput
             ref={textInputRef}
             style={styles.searchInput}
-            placeholder="영상 URL 붙여넣기"
+            placeholder={t.videoUrlPlaceholder}
             placeholderTextColor="#999"
             value={query}
             onChangeText={setQuery}
@@ -1556,14 +1560,14 @@ export default function SearchScreen({ navigation, route }) {
           )}
         </View>
         <TouchableOpacity style={styles.searchButton} onPress={handleSearch}>
-          <Text style={styles.searchButtonText}>가져오기</Text>
+          <Text style={styles.searchButtonText}>{t.getVideo}</Text>
         </TouchableOpacity>
       </View>
 
       {/* 다운로드한 파일 섹션 - 항상 고정 위치 */}
       {downloadedFiles.length > 0 && (
         <View style={styles.downloadedFilesSection}>
-          <Text style={styles.downloadedFilesTitle}>저장된 파일</Text>
+          <Text style={styles.downloadedFilesTitle}>{t.savedFiles}</Text>
           <FlatList
             key="downloaded-files-list"
             data={downloadedFiles}
@@ -1581,7 +1585,7 @@ export default function SearchScreen({ navigation, route }) {
         {loading ? (
           <View style={styles.centerContainer}>
             <ActivityIndicator size="large" color="#FF0000" />
-            <Text style={styles.loadingText}>영상 정보 가져오는 중...</Text>
+            <Text style={styles.loadingText}>{t.loadingVideoInfo}</Text>
           </View>
         ) : (
           <FlatList
@@ -1605,16 +1609,16 @@ export default function SearchScreen({ navigation, route }) {
                     ]}
                   >
                     <Text style={styles.emptyIcon}>📺</Text>
-                    <Text style={styles.iconHintText}>영상 가져오기</Text>
+                    <Text style={styles.iconHintText}>{t.getVideoHint}</Text>
                   </Animated.View>
                 </TouchableOpacity>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                  <Text style={styles.emptyText}>영상 앱에서 공유하기를 사용하세요</Text>
+                  <Text style={styles.emptyText}>{t.shareFromVideoApp}</Text>
                   <Ionicons name="arrow-redo-outline" size={18} color="#333" style={{ marginLeft: 6 }} />
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                   <Text style={styles.emptySubText}>
-                    또는 영상 URL을 링크복사 해서{'\n'}검색창에 붙여넣으세요
+                    {t.orCopyVideoUrl}
                   </Text>
                   <Ionicons name="copy-outline" size={16} color="#666" style={{ marginLeft: 6 }} />
                 </View>
@@ -1652,7 +1656,7 @@ export default function SearchScreen({ navigation, route }) {
                 }
               }}
             >
-              <Text style={styles.modalButtonText}>확인</Text>
+              <Text style={styles.modalButtonText}>{t.ok}</Text>
             </TouchableOpacity>
           </View>
         </View>

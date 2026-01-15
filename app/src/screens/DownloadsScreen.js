@@ -29,6 +29,8 @@ import { getDownloadedFiles, deleteFileWithMetadata, getThumbnailCachePath } fro
 import { shareDownloadedFile, saveFileToDevice } from '../services/downloadService';
 import { getPlaylists, createPlaylist, updatePlaylist, deletePlaylist, assignFileToPlaylist, getPlaylistsForFile } from '../services/playlistService';
 import MediaStoreModule from '../modules/MediaStoreModule';
+import { useLanguage } from '../contexts/LanguageContext';
+import { translations } from '../locales/translations';
 
 // 썸네일 이미지 컴포넌트 (영상 URL 실패 시 캐시로 폴백)
 const ThumbnailImage = ({ sourceUri, cacheUri, style }) => {
@@ -52,6 +54,8 @@ const ThumbnailImage = ({ sourceUri, cacheUri, style }) => {
 };
 
 export default function DownloadsScreen({ navigation }) {
+  const { currentLanguage } = useLanguage();
+  const t = translations[currentLanguage];
   const [downloadedFiles, setDownloadedFiles] = useState([]);
   const [filteredFiles, setFilteredFiles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -120,7 +124,7 @@ export default function DownloadsScreen({ navigation }) {
       setThumbnailCachePaths(cachePaths);
     } catch (error) {
       console.error('[DownloadsScreen] Error loading downloaded files:', error);
-      Alert.alert('오류', '다운로드한 파일 목록을 불러오는 중 오류가 발생했습니다.');
+      Alert.alert(t.error, t.loadFilesError);
     } finally {
       setLoading(false);
     }
@@ -256,7 +260,7 @@ export default function DownloadsScreen({ navigation }) {
 
       const audioFiles = filteredFiles.filter(file => !file.isVideo);
       if (audioFiles.length === 0) {
-        Alert.alert('알림', '재생할 음악 파일이 없습니다.');
+        Alert.alert(t.notice, t.noMusicFiles);
         return;
       }
 
@@ -272,7 +276,7 @@ export default function DownloadsScreen({ navigation }) {
       await playAudioFile(audioFiles[0], 0);
     } catch (error) {
       console.error('[DownloadsScreen] Error starting playlist:', error);
-      Alert.alert('오류', '음악 재생을 시작할 수 없습니다.');
+      Alert.alert(t.error, t.playMusicError);
     }
   };
 
@@ -282,7 +286,7 @@ export default function DownloadsScreen({ navigation }) {
       // 파일 존재 확인
       const fileInfo = await FileSystem.getInfoAsync(file.fileUri);
       if (!fileInfo.exists) {
-        Alert.alert('오류', `파일을 찾을 수 없습니다: ${file.title}`);
+        Alert.alert(t.error, t.fileNotFoundWithName.replace('{name}', file.title));
         return;
       }
 
@@ -310,7 +314,7 @@ export default function DownloadsScreen({ navigation }) {
       });
     } catch (error) {
       console.error('[DownloadsScreen] Error playing audio:', error);
-      Alert.alert('오류', `음악을 재생할 수 없습니다: ${file.title}`);
+      Alert.alert(t.error, t.cannotPlayMusic.replace('{name}', file.title));
     }
   };
 
@@ -430,7 +434,7 @@ export default function DownloadsScreen({ navigation }) {
         // 파일 존재 확인
         const fileInfo = await FileSystem.getInfoAsync(file.fileUri);
         if (!fileInfo.exists) {
-          Alert.alert('오류', '파일을 찾을 수 없습니다.');
+          Alert.alert(t.error, t.fileNotFound);
           return;
         }
 
@@ -458,15 +462,15 @@ export default function DownloadsScreen({ navigation }) {
             flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
           });
         } else {
-          Alert.alert('오류', '파일 재생 기능을 사용할 수 없습니다. 앱을 재빌드해주세요.');
+          Alert.alert(t.error, t.playFileError);
         }
       } else {
-        Alert.alert('알림', 'iOS에서는 이 기능을 지원하지 않습니다.');
+        Alert.alert(t.notice, t.iosNotSupported);
       }
     } catch (error) {
       console.error('[DownloadsScreen] Error playing file:', error);
       console.error('[DownloadsScreen] Error details:', JSON.stringify(error, null, 2));
-      Alert.alert('오류', `파일을 재생할 수 없습니다: ${error.message || '알 수 없는 오류'}`);
+      Alert.alert(t.error, t.cannotPlayFile.replace('{error}', error.message || t.unknownError));
     }
   };
 
@@ -475,16 +479,16 @@ export default function DownloadsScreen({ navigation }) {
     try {
       await saveFileToDevice(file.fileUri, file.fileName, file.isVideo);
       Alert.alert(
-        '알림',
+        t.notice,
         file.isVideo 
-          ? '영상파일이 갤러리에 저장되었습니다.\n\n저장 위치: Movies/Videos'
-          : '음악파일이 음악 앱에 저장되었습니다.\n\n저장 위치: Music/Audio'
+          ? t.videoSavedToGallery
+          : t.musicSavedToApp
       );
       // 저장 후 파일 목록 새로고침
       loadDownloadedFiles();
     } catch (error) {
       console.error('[DownloadsScreen] Error resaving file:', error);
-      Alert.alert('오류', error.message || '파일 저장 중 오류가 발생했습니다.');
+      Alert.alert(t.error, error.message || t.saveFileError);
     }
   };
 
@@ -493,10 +497,10 @@ export default function DownloadsScreen({ navigation }) {
     try {
       await createPlaylist(playlistName);
       await loadPlaylists();
-      Alert.alert('완료', '플레이리스트 그룹이 생성되었습니다.');
+      Alert.alert(t.complete, t.playlistGroupCreated);
     } catch (error) {
       console.error('[DownloadsScreen] Error creating playlist:', error);
-      Alert.alert('오류', '플레이리스트 그룹 생성 중 오류가 발생했습니다.');
+      Alert.alert(t.error, t.playlistGroupCreateError);
     }
   };
 
@@ -505,10 +509,10 @@ export default function DownloadsScreen({ navigation }) {
       await updatePlaylist(playlistId, newPlaylistName);
       await loadPlaylists();
       await loadDownloadedFiles();
-      Alert.alert('완료', '플레이리스트 그룹 이름이 변경되었습니다.');
+      Alert.alert(t.complete, t.playlistGroupRenamed);
     } catch (error) {
       console.error('[DownloadsScreen] Error updating playlist:', error);
-      Alert.alert('오류', '플레이리스트 그룹 이름 변경 중 오류가 발생했습니다.');
+      Alert.alert(t.error, t.playlistGroupRenameError);
     }
   };
 
@@ -520,10 +524,10 @@ export default function DownloadsScreen({ navigation }) {
       }
       await loadPlaylists();
       await loadDownloadedFiles();
-      Alert.alert('완료', '플레이리스트 그룹이 삭제되었습니다.');
+      Alert.alert(t.complete, t.playlistGroupDeleted);
     } catch (error) {
       console.error('[DownloadsScreen] Error deleting playlist:', error);
-      Alert.alert('오류', '플레이리스트 그룹 삭제 중 오류가 발생했습니다.');
+      Alert.alert(t.error, t.playlistGroupDeleteError);
     }
   };
 
@@ -571,7 +575,7 @@ export default function DownloadsScreen({ navigation }) {
       setSelectedPlaylistIds([]);
     } catch (error) {
       console.error('[DownloadsScreen] Error assigning playlists:', error);
-      Alert.alert('오류', '플레이리스트 그룹 할당 중 오류가 발생했습니다.');
+      Alert.alert(t.error, t.playlistGroupAssignError);
     }
   };
 
@@ -589,19 +593,19 @@ export default function DownloadsScreen({ navigation }) {
       await loadPlaylists();
     } catch (error) {
       console.error('[DownloadsScreen] Error creating playlist:', error);
-      Alert.alert('오류', '플레이리스트 그룹 생성 중 오류가 발생했습니다.');
+      Alert.alert(t.error, t.playlistGroupCreateError);
     }
   };
 
   // 다운로드한 파일 삭제
   const handleDeleteFile = async (file) => {
-    Alert.alert(
-      '파일 삭제',
-      `"${file.title}" 파일을 삭제하시겠습니까?\n\n삭제 후에는 다시 다운로드해야 합니다.`,
+      Alert.alert(
+      t.deleteFileTitle,
+      t.deleteFileMessage.replace('{name}', file.title),
       [
-        { text: '취소', style: 'cancel' },
+        { text: t.cancel, style: 'cancel' },
         {
-          text: '삭제',
+          text: t.delete,
           style: 'destructive',
           onPress: async () => {
             try {
@@ -618,15 +622,15 @@ export default function DownloadsScreen({ navigation }) {
                 // 파일 목록 새로고침
                 loadDownloadedFiles();
                 
-                Alert.alert('완료', '파일이 삭제되었습니다.');
+                Alert.alert(t.complete, t.fileDeleted);
               } else {
-                Alert.alert('알림', '파일을 찾을 수 없습니다.');
+                Alert.alert(t.notice, t.fileNotFound);
                 // 목록 새로고침 (이미 삭제된 파일일 수 있음)
                 loadDownloadedFiles();
               }
             } catch (error) {
               console.error('[DownloadsScreen] Error deleting file:', error);
-              Alert.alert('오류', error.message || '파일 삭제 중 오류가 발생했습니다.');
+              Alert.alert(t.error, error.message || t.deleteFileError);
             }
           }
         }
@@ -665,7 +669,7 @@ export default function DownloadsScreen({ navigation }) {
   // 파일 아이템 클릭 시 SearchScreen으로 이동
   const handleFileItemPress = (item) => {
     if (!item.videoId) {
-      Alert.alert('알림', '이 파일의 영상 URL 정보가 없습니다.');
+      Alert.alert(t.notice, t.noVideoUrl);
       return;
     }
 
@@ -695,7 +699,7 @@ export default function DownloadsScreen({ navigation }) {
       }
     } catch (error) {
       console.error('[DownloadsScreen] Error navigating to Search:', error);
-      Alert.alert('오류', 'Search 화면으로 이동할 수 없습니다.');
+      Alert.alert(t.error, t.cannotNavigateToSearch);
     }
   };
 
@@ -760,7 +764,7 @@ export default function DownloadsScreen({ navigation }) {
               {item.title}
             </Text>
             <Text style={styles.fileSize}>
-              {fileSizeMB} MB • {item.isVideo ? '영상' : '음악'}
+              {fileSizeMB} MB • {item.isVideo ? t.video : t.music}
             </Text>
           </View>
         </View>
@@ -785,28 +789,28 @@ export default function DownloadsScreen({ navigation }) {
             onPress={() => handlePlayFile(item)}
           >
             <Ionicons name="play" size={24} color={item.isVideo ? "#FF0000" : "#4CAF50"} />
-            <Text style={styles.actionButtonText}>재생</Text>
+            <Text style={styles.actionButtonText}>{t.play}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
             onPress={() => shareDownloadedFile(item.fileUri, item.fileName, item.isVideo)}
           >
             <Ionicons name="share" size={24} color="#2196F3" />
-            <Text style={styles.actionButtonText}>공유</Text>
+            <Text style={styles.actionButtonText}>{t.share}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
             onPress={() => handleResaveFile(item)}
           >
             <Ionicons name="save" size={24} color="#FF9800" />
-            <Text style={styles.actionButtonText}>재저장</Text>
+            <Text style={styles.actionButtonText}>{t.resave}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.actionButton, styles.deleteButton]}
             onPress={() => handleDeleteFile(item)}
           >
             <Ionicons name="trash" size={24} color="#f44336" />
-            <Text style={[styles.actionButtonText, styles.deleteButtonText]}>삭제</Text>
+            <Text style={[styles.actionButtonText, styles.deleteButtonText]}>{t.delete}</Text>
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -857,7 +861,7 @@ export default function DownloadsScreen({ navigation }) {
             <Ionicons name="search" size={20} color="#999" style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
-              placeholder="파일명으로 검색..."
+              placeholder={t.searchFilesPlaceholder}
               placeholderTextColor="#999"
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -911,7 +915,7 @@ export default function DownloadsScreen({ navigation }) {
                 styles.filterButtonText,
                 playlistFilter === null && styles.filterButtonTextActive
               ]}>
-                전체
+                {t.all}
               </Text>
             </TouchableOpacity>
             {playlistsWithFiles.map((playlist) => (
@@ -959,7 +963,7 @@ export default function DownloadsScreen({ navigation }) {
               styles.filterButtonText,
               fileTypeFilter === 'all' && styles.filterButtonTextActive
             ]}>
-              전체
+              {t.all}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -979,7 +983,7 @@ export default function DownloadsScreen({ navigation }) {
               styles.filterButtonText,
               fileTypeFilter === 'video' && styles.filterButtonTextActive
             ]}>
-              영상
+              {t.video}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -999,7 +1003,7 @@ export default function DownloadsScreen({ navigation }) {
               styles.filterButtonText,
               fileTypeFilter === 'audio' && styles.filterButtonTextActive
             ]}>
-              음악
+              {t.music}
             </Text>
           </TouchableOpacity>
         </View>
@@ -1033,7 +1037,7 @@ export default function DownloadsScreen({ navigation }) {
               styles.sortButtonText,
               (sortBy === 'date-desc' || sortBy === 'date-asc') && styles.sortButtonTextActive
             ]}>
-              {sortBy === 'date-desc' ? '최신순' : sortBy === 'date-asc' ? '오래된순' : '최신순'}
+              {sortBy === 'date-desc' ? t.newest : sortBy === 'date-asc' ? t.oldest : t.newest}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -1061,7 +1065,7 @@ export default function DownloadsScreen({ navigation }) {
               styles.sortButtonText,
               (sortBy === 'title-asc' || sortBy === 'title-desc') && styles.sortButtonTextActive
             ]}>
-              제목
+              {t.titleSort}
             </Text>
           </TouchableOpacity>
         </View>
@@ -1089,9 +1093,9 @@ export default function DownloadsScreen({ navigation }) {
                     
                     // 재생 중이고, 현재 필터가 재생 시작 시의 필터와 일치할 때만 "재생 중" 표시
                     if (isPlaying && playingPlaylistFilter === playlistFilter) {
-                      return `${playlistPrefix}재생 중 (${currentIndex + 1}/${playlist.length})`;
+                      return `${playlistPrefix}${t.playing} (${currentIndex + 1}/${playlist.length})`;
                     } else {
-                      return `${playlistPrefix}처음부터 재생 (${filteredFiles.filter(f => !f.isVideo).length}곡)`;
+                      return `${playlistPrefix}${t.playFromStart} (${filteredFiles.filter(f => !f.isVideo).length}${t.songs})`;
                     }
                   })()}
                 </Text>
@@ -1105,8 +1109,8 @@ export default function DownloadsScreen({ navigation }) {
                 />
                 <Text style={styles.playAllButtonText}>
                   {isPlaying && playingPlaylistFilter === playlistFilter
-                    ? `재생 중 (${currentIndex + 1}/${playlist.length})` 
-                    : `처음부터 재생 (${filteredFiles.filter(f => !f.isVideo).length}곡)`
+                    ? `${t.playing} (${currentIndex + 1}/${playlist.length})` 
+                    : `${t.playFromStart} (${filteredFiles.filter(f => !f.isVideo).length}${t.songs})`
                   }
                 </Text>
               </>
@@ -1137,9 +1141,9 @@ export default function DownloadsScreen({ navigation }) {
                     
                     // 재생 중이고, 현재 필터가 재생 시작 시의 필터와 일치할 때만 "재생 중" 표시
                     if (isPlaying && playingPlaylistFilter === playlistFilter) {
-                      return `${playlistPrefix}음악 재생 중 (${currentIndex + 1}/${playlist.length})`;
+                      return `${playlistPrefix}${t.playing} (${currentIndex + 1}/${playlist.length})`;
                     } else {
-                      return `${playlistPrefix}처음부터 재생 (${filteredFiles.filter(f => !f.isVideo).length}곡)`;
+                      return `${playlistPrefix}${t.playFromStart} (${filteredFiles.filter(f => !f.isVideo).length}${t.songs})`;
                     }
                   })()}
                 </Text>
@@ -1153,8 +1157,8 @@ export default function DownloadsScreen({ navigation }) {
                 />
                 <Text style={styles.playAllButtonText}>
                   {isPlaying && playingPlaylistFilter === playlistFilter
-                    ? `음악 재생 중 (${currentIndex + 1}/${playlist.length})` 
-                    : `처음부터 재생 (${filteredFiles.filter(f => !f.isVideo).length}곡)`
+                    ? `${t.playing} (${currentIndex + 1}/${playlist.length})` 
+                    : `${t.playFromStart} (${filteredFiles.filter(f => !f.isVideo).length}${t.songs})`
                   }
                 </Text>
               </>
@@ -1166,7 +1170,7 @@ export default function DownloadsScreen({ navigation }) {
       {loading ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#FF0000" />
-          <Text style={styles.loadingText}>파일 목록을 불러오는 중...</Text>
+          <Text style={styles.loadingText}>{t.loadingFiles}</Text>
         </View>
       ) : (
         <FlatList
@@ -1178,18 +1182,18 @@ export default function DownloadsScreen({ navigation }) {
               <Ionicons name="folder-outline" size={64} color="#ddd" />
               <Text style={styles.emptyText}>
                 {searchQuery 
-                  ? '검색 결과가 없습니다' 
+                  ? t.noSearchResults 
                   : fileTypeFilter === 'video' 
-                    ? '다운로드한 영상이 없습니다'
+                    ? t.noDownloadedVideos
                     : fileTypeFilter === 'audio'
-                      ? '다운로드한 음악이 없습니다'
-                      : '다운로드한 파일이 없습니다'
+                      ? t.noDownloadedMusic
+                      : t.noDownloadedFiles
                 }
               </Text>
               <Text style={styles.emptySubText}>
                 {searchQuery 
-                  ? '다른 검색어를 시도해보세요' 
-                  : '영상을 다운로드해보세요'
+                  ? t.tryDifferentQuery 
+                  : t.tryDownloadVideo
                 }
               </Text>
             </View>

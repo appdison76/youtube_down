@@ -21,6 +21,8 @@ import { searchVideos, getAutocomplete } from '../services/downloadService';
 import { addFavorite, removeFavorite, isFavorite, initDatabase } from '../services/database';
 import AdBanner from '../components/AdBanner';
 import LanguageSelector from '../components/LanguageSelector';
+import { useLanguage } from '../contexts/LanguageContext';
+import { translations } from '../locales/translations';
 
 // 검색 이력 저장 키
 const SEARCH_HISTORY_KEY = 'video_search_history';
@@ -28,6 +30,8 @@ const AUTCOMPLETE_ENABLED_KEY = 'video_autocomplete_enabled';
 const MAX_HISTORY = 1000; // 최대 1000개 저장
 
 export default function VideoSearchScreen({ navigation, route }) {
+  const { currentLanguage } = useLanguage();
+  const t = translations[currentLanguage];
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -246,7 +250,7 @@ export default function VideoSearchScreen({ navigation, route }) {
   // 검색 실행
   const handleSearch = useCallback(async () => {
     if (searchQuery.trim() === '') {
-      Alert.alert('알림', '검색어를 입력해주세요.');
+      Alert.alert(t.notice, t.enterSearchQuery);
       return;
     }
 
@@ -276,12 +280,12 @@ export default function VideoSearchScreen({ navigation, route }) {
       // 제한 초과 에러 처리
       if (error.message && error.message.includes('오늘의 검색 요청 횟수')) {
         Alert.alert(
-          '검색 제한',
-          '오늘의 검색 요청 횟수가 모두 소진되었습니다.\n\n다운로드 화면을 이용하여 영상을 가져오기하세요.',
+          t.searchLimitTitle,
+          t.searchLimitMessage,
           [
-            { text: '취소', style: 'cancel' },
+            { text: t.cancel, style: 'cancel' },
             { 
-              text: '다운로드 화면으로 이동', 
+              text: t.goToDownloadScreen, 
               onPress: () => {
                 // Alert가 완전히 닫힌 후 navigation 호출
                 InteractionManager.runAfterInteractions(() => {
@@ -296,7 +300,7 @@ export default function VideoSearchScreen({ navigation, route }) {
           ]
         );
       } else {
-        Alert.alert('검색 오류', error.message || '검색 중 오류가 발생했습니다.');
+        Alert.alert(t.searchErrorTitle, error.message || t.searchError);
       }
       setLoading(false);
     }
@@ -329,14 +333,14 @@ export default function VideoSearchScreen({ navigation, route }) {
       }
     } catch (error) {
       console.error('[VideoSearchScreen] Error toggling favorite:', error);
-      Alert.alert('오류', '찜하기 처리 중 오류가 발생했습니다.');
+      Alert.alert(t.error, t.bookmarkError);
     }
   };
 
   // 영상 열기
   const openVideo = useCallback(async (item) => {
     if (!item.url) {
-      Alert.alert('오류', '영상 URL을 찾을 수 없습니다.');
+      Alert.alert(t.error, t.videoUrlNotFound);
       return;
     }
 
@@ -380,14 +384,14 @@ export default function VideoSearchScreen({ navigation, route }) {
       await Linking.openURL(videoUrl);
     } catch (error) {
       console.error('[VideoSearchScreen] Error opening video:', error);
-      Alert.alert('오류', '영상을 열 수 없습니다.');
+      Alert.alert(t.error, t.cannotOpenVideo);
     }
   }, []);
 
   // 영상 선택 (다운로드 화면으로 이동)
   const handleSelectVideo = (item) => {
     if (!item.url) {
-      Alert.alert('오류', '영상 URL을 찾을 수 없습니다.');
+      Alert.alert(t.error, t.videoUrlNotFound);
       return;
     }
 
@@ -415,7 +419,7 @@ export default function VideoSearchScreen({ navigation, route }) {
       }
     } catch (error) {
       console.error('[VideoSearchScreen] Error navigating to Search:', error);
-      Alert.alert('오류', '영상으로 이동하는 중 오류가 발생했습니다.');
+      Alert.alert(t.error, t.cannotNavigateToVideo);
     }
   };
 
@@ -545,7 +549,7 @@ export default function VideoSearchScreen({ navigation, route }) {
           <Ionicons name="search" size={20} color="#999" style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="영상 검색어 입력"
+            placeholder={t.videoSearchPlaceholder}
             placeholderTextColor="#999"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -589,12 +593,12 @@ export default function VideoSearchScreen({ navigation, route }) {
           {loading ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
-            <Text style={styles.searchButtonText}>검색하기</Text>
+            <Text style={styles.searchButtonText}>{t.searchButton}</Text>
           )}
         </TouchableOpacity>
         {results.length === 0 && !loading && (
           <Text style={styles.searchHintText}>
-            검색어를 입력하고 검색 버튼을 누르면 영상을 찾을 수 있습니다
+            {t.searchHint}
           </Text>
         )}
       </View>
@@ -630,12 +634,12 @@ export default function VideoSearchScreen({ navigation, route }) {
                       console.error('[VideoSearchScreen] Search error:', error);
                       if (error.message && error.message.includes('오늘의 검색 요청 횟수')) {
                         Alert.alert(
-                          '검색 제한',
-                          '오늘의 검색 요청 횟수가 모두 소진되었습니다.\n\n다운로드 화면을 이용하여 영상을 가져오기하세요.',
+                          t.searchLimitTitle,
+                          t.searchLimitMessage,
                           [
-                            { text: '취소', style: 'cancel' },
+                            { text: t.cancel, style: 'cancel' },
                             { 
-                              text: '다운로드 화면으로 이동', 
+                              text: t.goToDownloadScreen, 
                               onPress: () => {
                                 InteractionManager.runAfterInteractions(() => {
                                   try {
@@ -649,7 +653,7 @@ export default function VideoSearchScreen({ navigation, route }) {
                           ]
                         );
                       } else {
-                        Alert.alert('검색 오류', error.message || '검색 중 오류가 발생했습니다.');
+                        Alert.alert(t.searchErrorTitle, error.message || t.searchError);
                       }
                       setLoading(false);
                     }
@@ -668,7 +672,7 @@ export default function VideoSearchScreen({ navigation, route }) {
                 </Text>
                 {item.isLocal && (
                   <>
-                    <Text style={styles.suggestionLabel}>최근 검색</Text>
+                    <Text style={styles.suggestionLabel}>{t.recentSearches}</Text>
                     <TouchableOpacity
                       style={styles.suggestionDeleteButton}
                       onPress={(e) => {
@@ -691,7 +695,7 @@ export default function VideoSearchScreen({ navigation, route }) {
       {loading && results.length === 0 ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#FF0000" />
-          <Text style={styles.loadingText}>검색 중...</Text>
+          <Text style={styles.loadingText}>{t.searching}</Text>
         </View>
       ) : (
         <FlatList
@@ -702,10 +706,10 @@ export default function VideoSearchScreen({ navigation, route }) {
             <View style={styles.centerContainer}>
               <Ionicons name="search-outline" size={64} color="#ddd" />
               <Text style={styles.emptyText}>
-                {searchQuery ? '검색 결과가 없습니다' : '영상 검색'}
+                {searchQuery ? t.noSearchResults : t.videoSearch}
               </Text>
               <Text style={styles.emptySubText}>
-                {searchQuery ? '다른 검색어를 시도해보세요' : '검색어를 입력하면 영상을 찾을 수 있습니다.\n찜하기 버튼으로 즐겨찾기에 추가하고,\n영상을 선택하면 다운로드 화면으로 이동합니다.'}
+                {searchQuery ? t.tryDifferentQuery : t.searchHintDescription}
               </Text>
             </View>
           }

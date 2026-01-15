@@ -7,11 +7,31 @@ import SearchScreen from '../screens/SearchScreen';
 import FavoritesScreen from '../screens/FavoritesScreen';
 import DownloadsScreen from '../screens/DownloadsScreen';
 import VideoSearchScreen from '../screens/VideoSearchScreen';
+import { useLanguage } from '../contexts/LanguageContext';
+import { translations } from '../locales/translations';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
 function MainTabs() {
+  const { currentLanguage } = useLanguage();
+  const t = translations[currentLanguage];
+  
+  const getTabTitle = (routeName) => {
+    switch (routeName) {
+      case 'VideoSearch':
+        return t.tabSearch;
+      case 'Search':
+        return t.tabSave;
+      case 'Downloads':
+        return t.tabMyFiles;
+      case 'Favorites':
+        return t.tabFavorites;
+      default:
+        return '';
+    }
+  };
+  
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -30,6 +50,7 @@ function MainTabs() {
 
           return <Ionicons name={iconName} size={size} color={color} />;
         },
+        tabBarLabel: getTabTitle(route.name),
         tabBarActiveTintColor: '#FF0000',
         tabBarInactiveTintColor: '#999',
         headerShown: false, // 커스텀 헤더 사용
@@ -38,30 +59,18 @@ function MainTabs() {
       <Tab.Screen 
         name="VideoSearch" 
         component={VideoSearchScreen}
-        options={{
-          title: '검색',
-        }}
       />
       <Tab.Screen 
         name="Search" 
         component={SearchScreen}
-        options={{
-          title: '저장',
-        }}
       />
       <Tab.Screen 
         name="Downloads" 
         component={DownloadsScreen}
-        options={{
-          title: '내 파일',
-        }}
       />
       <Tab.Screen 
         name="Favorites" 
         component={FavoritesScreen}
-        options={{
-          title: '찜하기',
-        }}
       />
     </Tab.Navigator>
   );

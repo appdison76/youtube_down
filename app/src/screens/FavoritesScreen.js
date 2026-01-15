@@ -623,7 +623,7 @@ export default function FavoritesScreen({ navigation }) {
 
       {loading ? (
         <View style={styles.centerContainer}>
-          <Text style={styles.loadingText}>로딩 중...</Text>
+          <Text style={styles.loadingText}>{t.loading}</Text>
         </View>
       ) : (
         <FlatList

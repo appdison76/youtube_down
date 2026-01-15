@@ -11,6 +11,8 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useLanguage } from '../contexts/LanguageContext';
+import { translations } from '../locales/translations';
 
 export default function PinSelectorModal({
   visible,
@@ -22,6 +24,8 @@ export default function PinSelectorModal({
   onPinUpdate,
   labelType = 'bookmark',
 }) {
+  const { currentLanguage } = useLanguage();
+  const t = translations[currentLanguage];
   const [showCreateInput, setShowCreateInput] = useState(false);
   const [newPinName, setNewPinName] = useState('');
 
@@ -38,10 +42,11 @@ export default function PinSelectorModal({
       );
       
       if (isDuplicate) {
+        const typeName = labelType === 'bookmark' ? t.bookmarkGroupSelect : labelType === 'playlist' ? t.playlistSelect : 'Pin';
         Alert.alert(
-          '중복된 이름',
-          `"${newPinName.trim()}" ${labelType === 'bookmark' ? '찜하기그룹' : labelType === 'playlist' ? '플레이리스트' : '핀'} 이름이 이미 존재합니다.`,
-          [{ text: '확인' }]
+          t.duplicateName,
+          t.duplicateNameMessage.replace('{name}', newPinName.trim()).replace('{type}', typeName),
+          [{ text: t.ok }]
         );
         return;
       }
@@ -102,7 +107,7 @@ export default function PinSelectorModal({
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>
-              {labelType === 'bookmark' ? '찜하기그룹 선택' : labelType === 'playlist' ? '플레이리스트 선택' : '핀 선택'}
+              {labelType === 'bookmark' ? t.bookmarkGroupSelect : labelType === 'playlist' ? t.playlistSelect : 'Select Pin'}
             </Text>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
               <Ionicons name="close" size={24} color="#666" />
@@ -116,7 +121,7 @@ export default function PinSelectorModal({
                 style={styles.createInput}
                 value={newPinName}
                 onChangeText={setNewPinName}
-                placeholder={`새 ${labelType === 'bookmark' ? '찜하기그룹' : labelType === 'playlist' ? '플레이리스트' : '핀'} 이름`}
+                placeholder={labelType === 'bookmark' ? t.newBookmarkGroupName : labelType === 'playlist' ? t.newPlaylistName : 'New pin name'}
                 placeholderTextColor="#999"
                 autoFocus
               />
@@ -144,7 +149,7 @@ export default function PinSelectorModal({
             >
               <Ionicons name="add-circle" size={20} color="#FF0000" />
               <Text style={styles.addButtonText}>
-                새 {labelType === 'bookmark' ? '찜하기그룹' : labelType === 'playlist' ? '플레이리스트' : '핀'} 만들기
+                {labelType === 'bookmark' ? t.createNewBookmarkGroup : labelType === 'playlist' ? t.createNewPlaylist : 'Create new pin'}
               </Text>
             </TouchableOpacity>
           )}
@@ -162,10 +167,10 @@ export default function PinSelectorModal({
                   color="#ddd" 
                 />
                 <Text style={styles.emptyText}>
-                  {labelType === 'bookmark' ? '찜하기그룹이 없습니다' : labelType === 'playlist' ? '플레이리스트가 없습니다' : '핀이 없습니다'}
+                  {labelType === 'bookmark' ? t.bookmarkGroupEmpty : labelType === 'playlist' ? t.playlistEmpty : 'No pins'}
                 </Text>
                 <Text style={styles.emptySubText}>
-                  새로 만들기를 눌러 추가하세요
+                  {t.emptyListHint}
                 </Text>
               </View>
             }
