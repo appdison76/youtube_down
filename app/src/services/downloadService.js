@@ -134,6 +134,12 @@ export const getDownloadedFiles = async () => {
             console.warn('[downloadService] Error reading metadata:', error);
           }
           
+          // 메타데이터가 있는 파일만 표시 (다운로드 완료된 파일만)
+          // 메타데이터가 없으면 건너뛰기 (다운로드 중인 파일은 메타데이터가 있어야 함)
+          if (!metadata || Object.keys(metadata).length === 0) {
+            continue;
+          }
+          
           // 파일명: 메타데이터의 displayFileName 우선, 없으면 내부 파일명 사용
           const displayFileName = metadata.displayFileName || fileName;
           
@@ -177,6 +183,7 @@ export const getDownloadedFiles = async () => {
             videoId: metadata.videoId || null,
             thumbnail: metadata.thumbnail || null,
             downloadedAt: fileDate, // 정렬을 위한 날짜 필드 추가
+            status: metadata.status || null, // 다운로드 상태 (downloading, completed, error)
           });
         }
       }
@@ -400,7 +407,7 @@ export const saveFileToDevice = async (fileUri, fileName, isVideo) => {
 };
 
 // 비디오 다운로드
-export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount = 0, videoId = null, thumbnailUrl = null) => {
+export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount = 0, videoId = null, thumbnailUrl = null, shouldResume = false) => {
   const MAX_RETRIES = 3;
   const RETRY_DELAY = 2000;
   let currentFileUri = null;
@@ -412,7 +419,7 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
   try {
     await ensureDirectories();
     
-    console.log('[downloadService] Starting video download:', videoUrl, `(attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
+    console.log('[downloadService] Starting video download:', videoUrl, `(attempt ${retryCount + 1}/${MAX_RETRIES + 1})`, shouldResume ? '(resuming)' : '(new download)');
     console.log('[downloadService] Original video title:', videoTitle);
     
     // 내부 저장소: videoId로 저장 (짧고 안전한 파일명)
@@ -429,16 +436,41 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
     console.log('[downloadService] Display file name:', displayFileName);
     console.log('[downloadService] File URI:', fileUri);
     
-    // 기존 파일 삭제
-    try {
-      const fileInfo = await FileSystem.getInfoAsync(fileUri);
-      if (fileInfo.exists) {
-        console.log('[downloadService] Existing file found, deleting before re-download:', fileUri);
-        await FileSystem.deleteAsync(fileUri, { idempotent: true });
-        console.log('[downloadService] Existing file deleted successfully');
+    // 이어받기가 아닌 경우에만 기존 파일 삭제
+    if (!shouldResume) {
+      try {
+        const fileInfo = await FileSystem.getInfoAsync(fileUri);
+        if (fileInfo.exists) {
+          console.log('[downloadService] Existing file found, deleting before re-download:', fileUri);
+          await FileSystem.deleteAsync(fileUri, { idempotent: true });
+          console.log('[downloadService] Existing file deleted successfully');
+        }
+      } catch (deleteError) {
+        console.warn('[downloadService] Could not delete existing file (may not exist):', deleteError);
       }
-    } catch (deleteError) {
-      console.warn('[downloadService] Could not delete existing file (may not exist):', deleteError);
+    } else {
+      console.log('[downloadService] Resuming download, keeping existing file:', fileUri);
+    }
+    
+    // 다운로드 시작 시 메타데이터에 status: "downloading" 저장
+    try {
+      const downloadTimestamp = Date.now();
+      const metadata = {
+        title: videoTitle,
+        videoId,
+        displayFileName,
+        thumbnail: thumbnailUrl,
+        downloadUrl: videoUrl, // 이어받기 시 필요
+        status: 'downloading',
+        downloadedAt: new Date(downloadTimestamp).toISOString(),
+        downloadedAtTimestamp: downloadTimestamp,
+      };
+      const metadataFileName = `${internalFileName}.json`;
+      const metadataUri = `${METADATA_DIR}${metadataFileName}`;
+      await FileSystem.writeAsStringAsync(metadataUri, JSON.stringify(metadata));
+      console.log('[downloadService] Metadata saved with status: downloading');
+    } catch (metadataError) {
+      console.warn('[downloadService] Error saving initial metadata (non-critical):', metadataError);
     }
     
     // 예상 파일 크기 가져오기 (참고용)
@@ -695,13 +727,15 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
             await downloadThumbnail(videoId, thumbnailUrl);
           }
           
-          // 메타데이터 저장 (내부 파일명 기준)
+          // 메타데이터 저장 (내부 파일명 기준) - status를 completed로 업데이트
           const downloadTimestamp = Date.now(); // 밀리초 단위 타임스탬프
           const metadata = {
             title: videoTitle,
             videoId,
             displayFileName, // 외부 저장소용 원래 파일명 저장
             thumbnail: thumbnailUrl,
+            downloadUrl: videoUrl,
+            status: 'completed', // 다운로드 완료
             downloadedAt: new Date(downloadTimestamp).toISOString(), // ISO 문자열로 저장
             downloadedAtTimestamp: downloadTimestamp, // 숫자 타임스탬프도 저장 (정렬용)
           };
@@ -710,7 +744,7 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
           const metadataUri = `${METADATA_DIR}${metadataFileName}`;
           
           await FileSystem.writeAsStringAsync(metadataUri, JSON.stringify(metadata));
-          console.log('[downloadService] Metadata saved for video:', internalFileName);
+          console.log('[downloadService] Metadata saved for video with status: completed:', internalFileName);
               } catch (error) {
           console.error('[downloadService] Error saving thumbnail/metadata (non-critical):', error);
           // 썸네일/메타데이터 저장 실패는 다운로드 성공을 막지 않음
@@ -736,16 +770,12 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
       progressInterval = null;
     }
     
+    // 에러 발생 시 파일 삭제하지 않고 메타데이터에 status: "downloading" 유지 (이어받기 가능하도록)
+    // 파일은 보존하여 나중에 이어받기 가능하도록 함
     if (currentFileUri) {
-      try {
-        const fileInfo = await FileSystem.getInfoAsync(currentFileUri);
-        if (fileInfo.exists) {
-          console.log('[downloadService] Deleting incomplete file due to error:', currentFileUri);
-          await FileSystem.deleteAsync(currentFileUri, { idempotent: true });
-        }
-      } catch (deleteError) {
-        console.warn('[downloadService] Could not delete incomplete file:', deleteError);
-      }
+      console.log('[downloadService] Error occurred, keeping file for resume:', currentFileUri);
+      // 메타데이터에 status: "downloading" 유지 (이미 저장되어 있음)
+      // 필요시 status를 "error"로 업데이트할 수 있지만, 이어받기를 위해 "downloading" 유지
     }
     
     const isRetryableError = 
@@ -760,7 +790,7 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
       console.log(`[downloadService] Retryable error detected, retrying... (${retryCount + 1}/${MAX_RETRIES})`);
       await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
       currentFileUri = null;
-      return downloadVideo(videoUrl, videoTitle, onProgress, retryCount + 1, videoId, thumbnailUrl);
+      return downloadVideo(videoUrl, videoTitle, onProgress, retryCount + 1, videoId, thumbnailUrl, shouldResume);
     }
     
     throw error;
@@ -773,7 +803,7 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
 };
 
 // 오디오 다운로드
-export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount = 0, videoId = null, thumbnailUrl = null) => {
+export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount = 0, videoId = null, thumbnailUrl = null, shouldResume = false) => {
   const MAX_RETRIES = 3;
   const RETRY_DELAY = 2000;
   let currentFileUri = null;
@@ -785,7 +815,7 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
   try {
     await ensureDirectories();
     
-    console.log('[downloadService] Starting audio download:', videoUrl, `(attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
+    console.log('[downloadService] Starting audio download:', videoUrl, `(attempt ${retryCount + 1}/${MAX_RETRIES + 1})`, shouldResume ? '(resuming)' : '(new download)');
     console.log('[downloadService] Original audio title:', videoTitle);
     
     // 내부 저장소: videoId로 저장 (짧고 안전한 파일명)
@@ -802,16 +832,41 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
     console.log('[downloadService] Display file name:', displayFileName);
     console.log('[downloadService] File URI:', fileUri);
     
-    // 기존 파일 삭제
-    try {
-      const fileInfo = await FileSystem.getInfoAsync(fileUri);
-      if (fileInfo.exists) {
-        console.log('[downloadService] Existing file found, deleting before re-download:', fileUri);
-        await FileSystem.deleteAsync(fileUri, { idempotent: true });
-        console.log('[downloadService] Existing file deleted successfully');
+    // 이어받기가 아닌 경우에만 기존 파일 삭제
+    if (!shouldResume) {
+      try {
+        const fileInfo = await FileSystem.getInfoAsync(fileUri);
+        if (fileInfo.exists) {
+          console.log('[downloadService] Existing file found, deleting before re-download:', fileUri);
+          await FileSystem.deleteAsync(fileUri, { idempotent: true });
+          console.log('[downloadService] Existing file deleted successfully');
+        }
+      } catch (deleteError) {
+        console.warn('[downloadService] Could not delete existing file (may not exist):', deleteError);
       }
-    } catch (deleteError) {
-      console.warn('[downloadService] Could not delete existing file (may not exist):', deleteError);
+    } else {
+      console.log('[downloadService] Resuming download, keeping existing file:', fileUri);
+    }
+    
+    // 다운로드 시작 시 메타데이터에 status: "downloading" 저장
+    try {
+      const downloadTimestamp = Date.now();
+      const metadata = {
+        title: videoTitle,
+        videoId,
+        displayFileName,
+        thumbnail: thumbnailUrl,
+        downloadUrl: videoUrl, // 이어받기 시 필요
+        status: 'downloading',
+        downloadedAt: new Date(downloadTimestamp).toISOString(),
+        downloadedAtTimestamp: downloadTimestamp,
+      };
+      const metadataFileName = `${internalFileName}.json`;
+      const metadataUri = `${METADATA_DIR}${metadataFileName}`;
+      await FileSystem.writeAsStringAsync(metadataUri, JSON.stringify(metadata));
+      console.log('[downloadService] Metadata saved with status: downloading');
+    } catch (metadataError) {
+      console.warn('[downloadService] Error saving initial metadata (non-critical):', metadataError);
     }
     
     // 예상 파일 크기 가져오기 (참고용)
@@ -963,13 +1018,15 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
             await downloadThumbnail(videoId, thumbnailUrl);
           }
           
-          // 메타데이터 저장 (내부 파일명 기준)
+          // 메타데이터 저장 (내부 파일명 기준) - status를 completed로 업데이트
           const downloadTimestamp = Date.now(); // 밀리초 단위 타임스탬프
           const metadata = {
             title: videoTitle,
             videoId,
             displayFileName, // 외부 저장소용 원래 파일명 저장
             thumbnail: thumbnailUrl,
+            downloadUrl: videoUrl,
+            status: 'completed', // 다운로드 완료
             downloadedAt: new Date(downloadTimestamp).toISOString(), // ISO 문자열로 저장
             downloadedAtTimestamp: downloadTimestamp, // 숫자 타임스탬프도 저장 (정렬용)
           };
@@ -978,7 +1035,7 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
           const metadataUri = `${METADATA_DIR}${metadataFileName}`;
           
           await FileSystem.writeAsStringAsync(metadataUri, JSON.stringify(metadata));
-          console.log('[downloadService] Metadata saved for audio:', internalFileName);
+          console.log('[downloadService] Metadata saved for audio with status: completed:', internalFileName);
               } catch (error) {
           console.error('[downloadService] Error saving thumbnail/metadata (non-critical):', error);
           // 썸네일/메타데이터 저장 실패는 다운로드 성공을 막지 않음
@@ -1004,16 +1061,12 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
       progressInterval = null;
     }
     
+    // 에러 발생 시 파일 삭제하지 않고 메타데이터에 status: "downloading" 유지 (이어받기 가능하도록)
+    // 파일은 보존하여 나중에 이어받기 가능하도록 함
     if (currentFileUri) {
-      try {
-        const fileInfo = await FileSystem.getInfoAsync(currentFileUri);
-        if (fileInfo.exists) {
-          console.log('[downloadService] Deleting incomplete file due to error:', currentFileUri);
-          await FileSystem.deleteAsync(currentFileUri, { idempotent: true });
-        }
-      } catch (deleteError) {
-        console.warn('[downloadService] Could not delete incomplete file:', deleteError);
-      }
+      console.log('[downloadService] Error occurred, keeping file for resume:', currentFileUri);
+      // 메타데이터에 status: "downloading" 유지 (이미 저장되어 있음)
+      // 필요시 status를 "error"로 업데이트할 수 있지만, 이어받기를 위해 "downloading" 유지
     }
     
     const isRetryableError = 
@@ -1028,7 +1081,7 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
       console.log(`[downloadService] Retryable error detected, retrying... (${retryCount + 1}/${MAX_RETRIES})`);
       await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
       currentFileUri = null;
-      return downloadAudio(videoUrl, videoTitle, onProgress, retryCount + 1, videoId, thumbnailUrl);
+      return downloadAudio(videoUrl, videoTitle, onProgress, retryCount + 1, videoId, thumbnailUrl, shouldResume);
     }
     
     throw error;
@@ -1037,6 +1090,100 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
       clearInterval(progressInterval);
       progressInterval = null;
     }
+  }
+};
+
+// 이어받기 함수 (resume download)
+export const resumeDownload = async (videoId, isVideo = true, onProgress = null) => {
+  try {
+    await ensureDirectories();
+    
+    // 내부 파일명 생성
+    const extension = isVideo ? '.mp4' : '.m4a';
+    const internalFileName = `${videoId}${extension}`;
+    const fileUri = `${DOWNLOAD_DIR}${internalFileName}`;
+    const metadataFileName = `${internalFileName}.json`;
+    const metadataUri = `${METADATA_DIR}${metadataFileName}`;
+    
+    // 메타데이터 읽기
+    let metadata = {};
+    try {
+      const metadataInfo = await FileSystem.getInfoAsync(metadataUri);
+      if (metadataInfo.exists) {
+        const metadataContent = await FileSystem.readAsStringAsync(metadataUri);
+        metadata = JSON.parse(metadataContent);
+      } else {
+        throw new Error('메타데이터를 찾을 수 없습니다.');
+      }
+    } catch (error) {
+      console.error('[downloadService] Error reading metadata for resume:', error);
+      throw new Error('이어받기할 수 없습니다. 메타데이터를 찾을 수 없습니다.');
+    }
+    
+    // status 확인
+    if (metadata.status !== 'downloading') {
+      throw new Error('이어받기할 수 없습니다. 다운로드가 완료되었거나 상태가 올바르지 않습니다.');
+    }
+    
+    // downloadUrl 확인
+    if (!metadata.downloadUrl) {
+      throw new Error('이어받기할 수 없습니다. 다운로드 URL을 찾을 수 없습니다.');
+    }
+    
+    // 파일 존재 확인
+    const fileInfo = await FileSystem.getInfoAsync(fileUri);
+    if (!fileInfo.exists || fileInfo.size === 0) {
+      throw new Error('이어받기할 수 없습니다. 파일이 존재하지 않거나 크기가 0입니다.');
+    }
+    
+    console.log('[downloadService] Resuming download:', fileUri, 'Current size:', fileInfo.size, 'bytes');
+    
+    // createDownloadResumable으로 이어받기
+    const downloadResumable = FileSystem.createDownloadResumable(
+      metadata.downloadUrl,
+      fileUri,
+      {},
+      (downloadProgress) => {
+        if (downloadProgress.totalBytesExpectedToWrite > 0) {
+          const progress = downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite;
+          if (onProgress) {
+            onProgress(progress);
+          }
+        }
+      }
+    );
+    
+    // resumeAsync() 호출
+    const result = await downloadResumable.resumeAsync();
+    
+    if (result && result.uri) {
+      // 다운로드 완료 확인
+      let finalFileInfo = await FileSystem.getInfoAsync(result.uri);
+      
+      if (!finalFileInfo.exists || finalFileInfo.size === 0) {
+        throw new Error('이어받기가 완료되지 않았습니다.');
+      }
+      
+      // 메타데이터 업데이트 (status: "completed")
+      const downloadTimestamp = Date.now();
+      metadata.status = 'completed';
+      metadata.downloadedAt = new Date(downloadTimestamp).toISOString();
+      metadata.downloadedAtTimestamp = downloadTimestamp;
+      
+      await FileSystem.writeAsStringAsync(metadataUri, JSON.stringify(metadata));
+      console.log('[downloadService] Resume completed, metadata updated to completed');
+      
+      if (onProgress) {
+        onProgress(1.0);
+      }
+      
+      return { uri: result.uri, fileName: metadata.displayFileName };
+    } else {
+      throw new Error('이어받기가 완료되지 않았습니다.');
+    }
+  } catch (error) {
+    console.error('[downloadService] Error resuming download:', error);
+    throw error;
   }
 };
 

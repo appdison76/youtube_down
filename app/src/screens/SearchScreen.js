@@ -24,7 +24,7 @@ import LanguageSelector from '../components/LanguageSelector';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../locales/translations';
 import { addFavorite, removeFavorite, isFavorite, initDatabase } from '../services/database';
-import { downloadVideo, downloadAudio, shareDownloadedFile, saveFileToDevice, getFileInfo, sanitizeFileName, getDownloadedFiles, cleanupIncompleteFiles, getVideoInfo, deleteFileWithMetadata, getThumbnailCachePath } from '../services/downloadService';
+import { downloadVideo, downloadAudio, resumeDownload, shareDownloadedFile, saveFileToDevice, getFileInfo, sanitizeFileName, getDownloadedFiles, cleanupIncompleteFiles, getVideoInfo, deleteFileWithMetadata, getThumbnailCachePath } from '../services/downloadService';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as FileSystem from 'expo-file-system/legacy';
 import MediaStoreModule from '../modules/MediaStoreModule';
@@ -224,13 +224,11 @@ export default function SearchScreen({ navigation, route }) {
       if (nextAppState === 'active') {
         console.log('[SearchScreen] App became active');
         
-        // ✅ 다운로드 상태 초기화 (사용자가 "다시다운" 버튼을 누를 수 있도록)
-        setDownloading({});
-        
         // ✅ 파일 목록 새로고침 (UI 업데이트)
+        // 스트리밍이므로 자동 이어받기 불가능, 파일 목록만 새로고침
         loadDownloadedFiles();
         
-        // 앱이 활성화될 때 불완전한 파일 정리
+        // 앱이 활성화될 때 불완전한 파일 정리 (크기가 0인 파일만)
         cleanupIncompleteFiles().catch(error => {
           console.error('[SearchScreen] Error cleaning up incomplete files:', error);
         });
@@ -632,32 +630,35 @@ export default function SearchScreen({ navigation, route }) {
       return;
     }
 
+    // 스트리밍이므로 이어받기 불가능, 항상 처음부터 다운로드
+    const shouldResume = false;
+
     try {
       setDownloading(prev => ({ ...prev, [item.id]: { type: 'video', progress: 0 } }));
       
-      // ✅ 커스텀 Alert 표시 (이미 다운로드된 파일이 있으면 안내 메시지 포함)
+      // 새로 다운로드 (영상받기 또는 다시받기)
       showDownloadAlert(!!existingFile, true);
-      
       const downloadResult = await downloadVideo(
-        item.url,
-        item.title,
-        (progress) => {
-          // 다운로드 중인지 확인 (취소되었을 수 있음)
-          setDownloading(prev => {
-            if (!prev[item.id]) {
-              // 이미 취소되었으면 업데이트하지 않음
-              return prev;
-            }
-            return {
-              ...prev,
-              [item.id]: { type: 'video', progress }
-            };
-          });
-        },
-        0, // retryCount
-        item.id, // videoId
-        item.thumbnail // thumbnailUrl
-      );
+          item.url,
+          item.title,
+          (progress) => {
+            // 다운로드 중인지 확인 (취소되었을 수 있음)
+            setDownloading(prev => {
+              if (!prev[item.id]) {
+                // 이미 취소되었으면 업데이트하지 않음
+                return prev;
+              }
+              return {
+                ...prev,
+                [item.id]: { type: 'video', progress }
+              };
+            });
+          },
+          0, // retryCount
+          item.id, // videoId
+          item.thumbnail, // thumbnailUrl
+          false // shouldResume (기존 파일 삭제 후 새로 다운로드)
+        );
       
       const fileUri = downloadResult.uri;
       const fileName = downloadResult.fileName;
@@ -799,32 +800,35 @@ export default function SearchScreen({ navigation, route }) {
       return;
     }
 
+    // 스트리밍이므로 이어받기 불가능, 항상 처음부터 다운로드
+    const shouldResume = false;
+
     try {
       setDownloading(prev => ({ ...prev, [item.id]: { type: 'audio', progress: 0 } }));
       
-      // ✅ 커스텀 Alert 표시 (이미 다운로드된 파일이 있으면 안내 메시지 포함)
+      // 새로 다운로드 (음악받기 또는 다시받기)
       showDownloadAlert(!!existingFile, false);
-      
       const downloadResult = await downloadAudio(
-        item.url,
-        item.title,
-        (progress) => {
-          // 다운로드 중인지 확인 (취소되었을 수 있음)
-          setDownloading(prev => {
-            if (!prev[item.id]) {
-              // 이미 취소되었으면 업데이트하지 않음
-              return prev;
-            }
-            return {
-              ...prev,
-              [item.id]: { type: 'audio', progress }
-            };
-          });
-        },
-        0, // retryCount
-        item.id, // videoId
-        item.thumbnail // thumbnailUrl
-      );
+          item.url,
+          item.title,
+          (progress) => {
+            // 다운로드 중인지 확인 (취소되었을 수 있음)
+            setDownloading(prev => {
+              if (!prev[item.id]) {
+                // 이미 취소되었으면 업데이트하지 않음
+                return prev;
+              }
+              return {
+                ...prev,
+                [item.id]: { type: 'audio', progress }
+              };
+            });
+          },
+          0, // retryCount
+          item.id, // videoId
+          item.thumbnail, // thumbnailUrl
+          false // shouldResume (기존 파일 삭제 후 새로 다운로드)
+        );
       
       const fileUri = downloadResult.uri;
       const fileName = downloadResult.fileName;
@@ -1295,8 +1299,17 @@ export default function SearchScreen({ navigation, route }) {
     const downloadProgress = downloading[item.id]?.progress || 0;
     const isDownloading = isDownloadingVideo || isDownloadingAudio;
     
-    // ✅ 해당 영상의 다운로드된 파일 찾기 (제목 기반 매칭)
+    // ✅ 해당 영상의 다운로드된 파일 찾기 (videoId 우선, 없으면 제목 기반 매칭)
     const findDownloadedFile = (isVideo) => {
+      // videoId로 먼저 찾기
+      if (item.id) {
+        const foundById = downloadedFiles.find(file => 
+          file.videoId === item.id && file.isVideo === isVideo
+        );
+        if (foundById) return foundById;
+      }
+      
+      // videoId로 못 찾으면 제목 기반 매칭
       if (!item.title) return null;
       
       const sanitizedTitle = sanitizeFileName(item.title || (isVideo ? 'video' : 'audio'), 195);
@@ -1313,6 +1326,21 @@ export default function SearchScreen({ navigation, route }) {
     const downloadedVideo = findDownloadedFile(true);
     const downloadedAudio = findDownloadedFile(false);
     const hasDownloadedFiles = downloadedVideo || downloadedAudio;
+    
+    // 버튼 표시 로직: 스트리밍이므로 이어받기 불가능, 항상 '다시받기'
+    const getVideoButtonText = () => {
+      if (isDownloadingVideo) return '다운로드 중...';
+      if (!downloadedVideo) return t.saveVideo; // '영상받기'
+      // 스트리밍이므로 이어받기 불가능, status와 무관하게 '다시받기'
+      return t.redownload; // '다시받기'
+    };
+    
+    const getAudioButtonText = () => {
+      if (isDownloadingAudio) return '다운로드 중...';
+      if (!downloadedAudio) return t.saveMusic; // '음악받기'
+      // 스트리밍이므로 이어받기 불가능, status와 무관하게 '다시받기'
+      return t.redownload; // '다시받기'
+    };
     
     return (
       <TouchableOpacity 
@@ -1556,7 +1584,7 @@ export default function SearchScreen({ navigation, route }) {
               >
                 <Ionicons name="videocam" size={20} color="#fff" />
                 <Text style={styles.videoButtonText}>
-                  {downloadedVideo ? t.resave : t.saveVideo}
+                  {getVideoButtonText()}
                 </Text>
               </TouchableOpacity>
               
@@ -1569,7 +1597,7 @@ export default function SearchScreen({ navigation, route }) {
               >
                 <Ionicons name="musical-notes" size={20} color="#fff" />
                 <Text style={styles.audioButtonText}>
-                  {downloadedAudio ? t.resave : t.saveMusic}
+                  {getAudioButtonText()}
                 </Text>
               </TouchableOpacity>
             </View>

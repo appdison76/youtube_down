@@ -786,28 +786,40 @@ export default function DownloadsScreen({ navigation }) {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => handlePlayFile(item)}
+            onPress={(e) => {
+              e.stopPropagation();
+              handlePlayFile(item);
+            }}
           >
             <Ionicons name="play" size={24} color={item.isVideo ? "#FF0000" : "#4CAF50"} />
             <Text style={styles.actionButtonText}>{t.play}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => shareDownloadedFile(item.fileUri, item.fileName, item.isVideo)}
+            onPress={(e) => {
+              e.stopPropagation();
+              shareDownloadedFile(item.fileUri, item.fileName, item.isVideo);
+            }}
           >
             <Ionicons name="share" size={24} color="#2196F3" />
             <Text style={styles.actionButtonText}>{t.share}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => handleResaveFile(item)}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleResaveFile(item);
+            }}
           >
             <Ionicons name="save" size={24} color="#FF9800" />
             <Text style={styles.actionButtonText}>{t.resave}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.actionButton, styles.deleteButton]}
-            onPress={() => handleDeleteFile(item)}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleDeleteFile(item);
+            }}
           >
             <Ionicons name="trash" size={24} color="#f44336" />
             <Text style={[styles.actionButtonText, styles.deleteButtonText]}>{t.delete}</Text>
