@@ -24,10 +24,31 @@ import LanguageSelector from '../components/LanguageSelector';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../locales/translations';
 import { addFavorite, removeFavorite, isFavorite, initDatabase } from '../services/database';
-import { downloadVideo, downloadAudio, shareDownloadedFile, saveFileToDevice, getFileInfo, sanitizeFileName, getDownloadedFiles, cleanupIncompleteFiles, getVideoInfo, deleteFileWithMetadata } from '../services/downloadService';
+import { downloadVideo, downloadAudio, shareDownloadedFile, saveFileToDevice, getFileInfo, sanitizeFileName, getDownloadedFiles, cleanupIncompleteFiles, getVideoInfo, deleteFileWithMetadata, getThumbnailCachePath } from '../services/downloadService';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as FileSystem from 'expo-file-system/legacy';
 import MediaStoreModule from '../modules/MediaStoreModule';
+
+// 썸네일 이미지 컴포넌트 (영상 URL 실패 시 캐시로 폴백)
+const ThumbnailImage = ({ sourceUri, cacheUri, style }) => {
+  const [imageUri, setImageUri] = React.useState(sourceUri || cacheUri);
+  
+  const handleError = () => {
+    // 영상 URL 로드 실패 시 캐시로 폴백
+    if (imageUri !== cacheUri && cacheUri) {
+      setImageUri(cacheUri);
+    }
+  };
+  
+  return (
+    <Image
+      source={{ uri: imageUri }}
+      style={style}
+      resizeMode="cover"
+      onError={handleError}
+    />
+  );
+};
 
 export default function SearchScreen({ navigation, route }) {
   const { currentLanguage } = useLanguage();
@@ -38,6 +59,7 @@ export default function SearchScreen({ navigation, route }) {
   const [favorites, setFavorites] = useState(new Set()); // 즐겨찾기 ID Set
   const [downloading, setDownloading] = useState({}); // 다운로드 중인 항목 { videoId: { type: 'video'|'audio', progress: 0-1 } }
   const [downloadedFiles, setDownloadedFiles] = useState([]); // 다운로드한 파일 목록
+  const [thumbnailCachePaths, setThumbnailCachePaths] = useState({}); // videoId -> cache path
   const [customAlert, setCustomAlert] = useState({ visible: false, title: '', message: '', subMessage: '', onConfirm: null });
   const textInputRef = useRef(null);
   const lastProcessedUrl = useRef(null);
@@ -160,6 +182,19 @@ export default function SearchScreen({ navigation, route }) {
       });
       setDownloadedFiles(sortedFiles);
       console.log('[SearchScreen] Loaded downloaded files:', sortedFiles.length);
+      
+      // ✅ 썸네일 캐시 경로 로드
+      const cachePaths = {};
+      for (const file of sortedFiles) {
+        if (file.videoId) {
+          const cachePath = await getThumbnailCachePath(file.videoId);
+          if (cachePath) {
+            cachePaths[file.videoId] = cachePath;
+          }
+        }
+      }
+      setThumbnailCachePaths(cachePaths);
+      console.log('[SearchScreen] Loaded thumbnail cache paths:', Object.keys(cachePaths).length);
     } catch (error) {
       console.error('[SearchScreen] Error loading downloaded files:', error);
     }
@@ -1144,15 +1179,65 @@ export default function SearchScreen({ navigation, route }) {
   const renderDownloadedFileItem = ({ item, index }) => {
     const fileSizeMB = (item.size / (1024 * 1024)).toFixed(2);
     
+    // ✅ 썸네일 표시: 온라인에서는 영상 URL 우선, 실패 시 캐시 사용
+    const cachePath = item.videoId ? thumbnailCachePaths[item.videoId] : null;
+    const cacheUri = cachePath ? `file://${cachePath}` : null;
+    // getDownloadedFiles는 thumbnail 필드를 반환하지만, DownloadsScreen과의 일관성을 위해 thumbnailUrl로도 확인
+    const thumbnailUrl = item.thumbnailUrl || item.thumbnail || null;
+    
+    // ✅ 카드 클릭 핸들러
+    const handleDownloadedFileItemPress = () => {
+      if (!item.videoId) {
+        Alert.alert(t.notice, t.noVideoUrl);
+        return;
+      }
+
+      try {
+        const videoUrl = `https://www.youtube.com/watch?v=${item.videoId}`;
+        console.log('[SearchScreen] Setting URL from downloaded file:', videoUrl);
+        
+        // 같은 화면이므로 processSharedUrl을 호출하여 URL 설정
+        processSharedUrl(videoUrl, Date.now(), true, true);
+      } catch (error) {
+        console.error('[SearchScreen] Error setting URL from downloaded file:', error);
+        Alert.alert(t.error, t.cannotNavigateToSearch);
+      }
+    };
+    
     return (
-      <View style={[styles.downloadedFileItem, index === 0 && styles.downloadedFileItemFirst]}>
+      <TouchableOpacity 
+        style={[styles.downloadedFileItem, index === 0 && styles.downloadedFileItemFirst]}
+        onPress={handleDownloadedFileItemPress}
+        activeOpacity={0.8}
+      >
         <View style={styles.downloadedFileInfo}>
-          <Ionicons 
-            name={item.isVideo ? "videocam" : "musical-notes"} 
-            size={24} 
-            color={item.isVideo ? "#FF0000" : "#4CAF50"} 
-            style={styles.downloadedFileIcon}
-          />
+          <View style={styles.downloadedFileThumbnailContainer}>
+            {(thumbnailUrl || cacheUri) ? (
+              <ThumbnailImage
+                sourceUri={thumbnailUrl}
+                cacheUri={cacheUri}
+                style={styles.downloadedFileThumbnail}
+              />
+            ) : (
+              <View style={[styles.downloadedFileThumbnail, styles.downloadedFileThumbnailPlaceholder]}>
+                <Ionicons 
+                  name={item.isVideo ? "videocam" : "musical-notes"} 
+                  size={24} 
+                  color={item.isVideo ? "#FF0000" : "#4CAF50"} 
+                />
+              </View>
+            )}
+            {/* ✅ 썸네일 위에 아이콘 오버레이 */}
+            {(thumbnailUrl || cacheUri) && (
+              <View style={styles.downloadedFileThumbnailIcon}>
+                <Ionicons 
+                  name={item.isVideo ? "videocam" : "musical-notes"} 
+                  size={14} 
+                  color={item.isVideo ? "#FF0000" : "#4CAF50"} 
+                />
+              </View>
+            )}
+          </View>
           <View style={styles.downloadedFileDetails}>
             <Text style={styles.downloadedFileName} numberOfLines={1}>
               {item.title}
@@ -1165,24 +1250,33 @@ export default function SearchScreen({ navigation, route }) {
         <View style={styles.downloadedFileActions}>
           <TouchableOpacity
             style={styles.downloadedFileActionButton}
-            onPress={() => handlePlayFile(item)}
+            onPress={(e) => {
+              e.stopPropagation(); // 카드 클릭 이벤트 전파 방지
+              handlePlayFile(item);
+            }}
           >
             <Ionicons name="play" size={20} color={item.isVideo ? "#FF0000" : "#4CAF50"} />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.downloadedFileActionButton}
-            onPress={() => shareDownloadedFile(item.fileUri, item.fileName, item.isVideo)}
+            onPress={(e) => {
+              e.stopPropagation(); // 카드 클릭 이벤트 전파 방지
+              shareDownloadedFile(item.fileUri, item.fileName, item.isVideo);
+            }}
           >
             <Ionicons name="share" size={20} color="#2196F3" />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.downloadedFileActionButton}
-            onPress={() => handleResaveFile(item)}
+            onPress={(e) => {
+              e.stopPropagation(); // 카드 클릭 이벤트 전파 방지
+              handleResaveFile(item);
+            }}
           >
             <Ionicons name="save" size={20} color="#FF9800" />
           </TouchableOpacity>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -1981,8 +2075,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  downloadedFileIcon: {
+  downloadedFileThumbnailContainer: {
+    width: 60,
+    height: 45,
     marginRight: 12,
+    position: 'relative',
+  },
+  downloadedFileThumbnail: {
+    width: 60,
+    height: 45,
+    borderRadius: 8,
+    backgroundColor: '#ddd',
+  },
+  downloadedFileThumbnailPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  downloadedFileThumbnailIcon: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   downloadedFileDetails: {
     flex: 1,
