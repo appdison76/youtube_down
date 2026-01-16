@@ -638,7 +638,7 @@ export default function SearchScreen({ navigation, route }) {
       // ✅ 커스텀 Alert 표시 (이미 다운로드된 파일이 있으면 안내 메시지 포함)
       showDownloadAlert(!!existingFile, true);
       
-      const fileUri = await downloadVideo(
+      const downloadResult = await downloadVideo(
         item.url,
         item.title,
         (progress) => {
@@ -658,6 +658,9 @@ export default function SearchScreen({ navigation, route }) {
         item.id, // videoId
         item.thumbnail // thumbnailUrl
       );
+      
+      const fileUri = downloadResult.uri;
+      const fileName = downloadResult.fileName;
       
       // 다운로드가 완료되었는지 확인 (취소되지 않았는지)
       setDownloading(prev => {
@@ -686,7 +689,6 @@ export default function SearchScreen({ navigation, route }) {
             text: t.saveButton,
             onPress: async () => {
               try {
-                const fileName = `${item.title || 'video'}.mp4`;
                 await saveFileToDevice(fileUri, fileName, true);
                 Alert.alert(t.notice, t.videoSavedToGallery);
               } catch (error) {
@@ -697,7 +699,7 @@ export default function SearchScreen({ navigation, route }) {
           },
           {
             text: t.shareButton,
-            onPress: () => shareDownloadedFile(fileUri, `${sanitizeFileName(item.title)}.mp4`, true)
+            onPress: () => shareDownloadedFile(fileUri, fileName, true)
           }
         ]
       );
@@ -803,7 +805,7 @@ export default function SearchScreen({ navigation, route }) {
       // ✅ 커스텀 Alert 표시 (이미 다운로드된 파일이 있으면 안내 메시지 포함)
       showDownloadAlert(!!existingFile, false);
       
-      const fileUri = await downloadAudio(
+      const downloadResult = await downloadAudio(
         item.url,
         item.title,
         (progress) => {
@@ -823,6 +825,9 @@ export default function SearchScreen({ navigation, route }) {
         item.id, // videoId
         item.thumbnail // thumbnailUrl
       );
+      
+      const fileUri = downloadResult.uri;
+      const fileName = downloadResult.fileName;
       
       // 다운로드가 완료되었는지 확인 (취소되지 않았는지)
       setDownloading(prev => {
@@ -851,7 +856,6 @@ export default function SearchScreen({ navigation, route }) {
             text: t.saveButton,
             onPress: async () => {
               try {
-                const fileName = `${item.title || 'audio'}.m4a`;
                 await saveFileToDevice(fileUri, fileName, false);
                 Alert.alert(t.notice, t.musicSavedToApp);
               } catch (error) {
@@ -862,7 +866,7 @@ export default function SearchScreen({ navigation, route }) {
           },
           {
             text: t.shareButton,
-            onPress: () => shareDownloadedFile(fileUri, `${item.title || 'audio'}.m4a`, false)
+            onPress: () => shareDownloadedFile(fileUri, fileName, false)
           }
         ]
       );

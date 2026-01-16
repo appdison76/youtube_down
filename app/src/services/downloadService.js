@@ -119,8 +119,8 @@ export const getDownloadedFiles = async () => {
         const isAudio = fileName.endsWith('.m4a') || fileName.endsWith('.mp3');
         
         if (isVideo || isAudio) {
-          // 메타데이터 파일 읽기
-          const metadataFileName = fileName.replace(/\.[^.]+$/, '.json');
+          // 메타데이터 파일 읽기 (확장자 포함: {videoId}.mp4.json 또는 {videoId}.m4a.json)
+          const metadataFileName = `${fileName}.json`;
           const metadataUri = `${METADATA_DIR}${metadataFileName}`;
           let metadata = {};
           
@@ -134,8 +134,13 @@ export const getDownloadedFiles = async () => {
             console.warn('[downloadService] Error reading metadata:', error);
           }
           
+          // 파일명: 메타데이터의 displayFileName 우선, 없으면 내부 파일명 사용
+          const displayFileName = metadata.displayFileName || fileName;
+          
           // 파일명에서 제목 추출 (확장자 제거)
-          const title = metadata.title || fileName.replace(/\.[^.]+$/, '').replace(/_/g, ' ');
+          const title = metadata.title || (displayFileName.includes('.') 
+            ? displayFileName.replace(/\.[^.]+$/, '').replace(/_/g, ' ')
+            : displayFileName.replace(/_/g, ' '));
           
           // 날짜 정보: 메타데이터의 downloadedAtTimestamp 우선, 없으면 downloadedAt, 없으면 파일 수정 시간 사용
           let fileDate = null;
@@ -165,7 +170,7 @@ export const getDownloadedFiles = async () => {
           
           files.push({
             fileUri,
-            fileName,
+            fileName: displayFileName, // 외부 저장소용 원래 파일명 사용 (사용자에게 보여줄 파일명)
             title,
             size: fileInfo.size,
             isVideo,
@@ -410,12 +415,18 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
     console.log('[downloadService] Starting video download:', videoUrl, `(attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
     console.log('[downloadService] Original video title:', videoTitle);
     
-    const baseFileName = sanitizeFileName(videoTitle || 'video', 195);
-    const fileName = `${baseFileName}.mp4`;
-    const fileUri = `${DOWNLOAD_DIR}${fileName}`;
+    // 내부 저장소: videoId로 저장 (짧고 안전한 파일명)
+    const internalFileName = videoId 
+      ? `${videoId}.mp4`  // videoId가 있으면 videoId 사용
+      : `${sanitizeFileName(videoTitle || 'video', 195)}.mp4`; // 없으면 제목 사용
+    const fileUri = `${DOWNLOAD_DIR}${internalFileName}`;
     currentFileUri = fileUri;
     
-    console.log('[downloadService] Generated file name:', fileName);
+    // 외부 저장소용 원래 파일명 (사용자에게 보여줄 파일명)
+    const displayFileName = `${sanitizeFileName(videoTitle || 'video', 195)}.mp4`;
+    
+    console.log('[downloadService] Internal file name:', internalFileName);
+    console.log('[downloadService] Display file name:', displayFileName);
     console.log('[downloadService] File URI:', fileUri);
     
     // 기존 파일 삭제
@@ -677,28 +688,29 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
       console.log('[downloadService] Video downloaded:', result.uri, 'Size:', (fileInfo.size / (1024 * 1024)).toFixed(2), 'MB');
       
       // 다운로드 완료 후 썸네일 다운로드 및 메타데이터 저장
-      if (videoId && fileName) {
+      if (videoId && internalFileName) {
         try {
           // 썸네일 다운로드 및 캐시 저장
           if (thumbnailUrl) {
             await downloadThumbnail(videoId, thumbnailUrl);
           }
           
-          // 메타데이터 저장
+          // 메타데이터 저장 (내부 파일명 기준)
           const downloadTimestamp = Date.now(); // 밀리초 단위 타임스탬프
           const metadata = {
             title: videoTitle,
             videoId,
+            displayFileName, // 외부 저장소용 원래 파일명 저장
             thumbnail: thumbnailUrl,
             downloadedAt: new Date(downloadTimestamp).toISOString(), // ISO 문자열로 저장
             downloadedAtTimestamp: downloadTimestamp, // 숫자 타임스탬프도 저장 (정렬용)
           };
           
-          const metadataFileName = fileName.replace(/\.[^.]+$/, '.json');
+          const metadataFileName = `${internalFileName}.json`; // 확장자 포함: {videoId}.mp4.json
           const metadataUri = `${METADATA_DIR}${metadataFileName}`;
           
           await FileSystem.writeAsStringAsync(metadataUri, JSON.stringify(metadata));
-          console.log('[downloadService] Metadata saved for video:', fileName);
+          console.log('[downloadService] Metadata saved for video:', internalFileName);
               } catch (error) {
           console.error('[downloadService] Error saving thumbnail/metadata (non-critical):', error);
           // 썸네일/메타데이터 저장 실패는 다운로드 성공을 막지 않음
@@ -710,7 +722,9 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
       if (onProgress) {
         onProgress(1.0);
       }
-      return result.uri;
+      
+      // ✅ {uri, fileName} 형태로 반환 (fileName은 외부 저장소용 원래 파일명)
+      return { uri: result.uri, fileName: displayFileName };
     } else {
       throw new Error('다운로드가 완료되지 않았습니다.');
     }
@@ -774,12 +788,18 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
     console.log('[downloadService] Starting audio download:', videoUrl, `(attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
     console.log('[downloadService] Original audio title:', videoTitle);
     
-    const baseFileName = sanitizeFileName(videoTitle || 'audio', 195);
-    const fileName = `${baseFileName}.m4a`;
-    const fileUri = `${DOWNLOAD_DIR}${fileName}`;
+    // 내부 저장소: videoId로 저장 (짧고 안전한 파일명)
+    const internalFileName = videoId 
+      ? `${videoId}.m4a`  // videoId가 있으면 videoId 사용
+      : `${sanitizeFileName(videoTitle || 'audio', 195)}.m4a`; // 없으면 제목 사용
+    const fileUri = `${DOWNLOAD_DIR}${internalFileName}`;
     currentFileUri = fileUri;
     
-    console.log('[downloadService] Generated file name:', fileName);
+    // 외부 저장소용 원래 파일명 (사용자에게 보여줄 파일명)
+    const displayFileName = `${sanitizeFileName(videoTitle || 'audio', 195)}.m4a`;
+    
+    console.log('[downloadService] Internal file name:', internalFileName);
+    console.log('[downloadService] Display file name:', displayFileName);
     console.log('[downloadService] File URI:', fileUri);
     
     // 기존 파일 삭제
@@ -936,29 +956,30 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
       console.log('[downloadService] Audio downloaded:', result.uri, 'Size:', (fileInfo.size / (1024 * 1024)).toFixed(2), 'MB');
       
       // 다운로드 완료 후 썸네일 다운로드 및 메타데이터 저장
-      if (videoId && fileName) {
+      if (videoId && internalFileName) {
         try {
           // 썸네일 다운로드 및 캐시 저장
           if (thumbnailUrl) {
             await downloadThumbnail(videoId, thumbnailUrl);
           }
           
-          // 메타데이터 저장
+          // 메타데이터 저장 (내부 파일명 기준)
           const downloadTimestamp = Date.now(); // 밀리초 단위 타임스탬프
           const metadata = {
             title: videoTitle,
             videoId,
+            displayFileName, // 외부 저장소용 원래 파일명 저장
             thumbnail: thumbnailUrl,
             downloadedAt: new Date(downloadTimestamp).toISOString(), // ISO 문자열로 저장
             downloadedAtTimestamp: downloadTimestamp, // 숫자 타임스탬프도 저장 (정렬용)
           };
           
-          const metadataFileName = fileName.replace(/\.[^.]+$/, '.json');
+          const metadataFileName = `${internalFileName}.json`; // 확장자 포함: {videoId}.m4a.json
           const metadataUri = `${METADATA_DIR}${metadataFileName}`;
           
           await FileSystem.writeAsStringAsync(metadataUri, JSON.stringify(metadata));
-          console.log('[downloadService] Metadata saved for audio:', fileName);
-        } catch (error) {
+          console.log('[downloadService] Metadata saved for audio:', internalFileName);
+              } catch (error) {
           console.error('[downloadService] Error saving thumbnail/metadata (non-critical):', error);
           // 썸네일/메타데이터 저장 실패는 다운로드 성공을 막지 않음
         }
@@ -969,7 +990,9 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
       if (onProgress) {
         onProgress(1.0);
       }
-      return result.uri;
+      
+      // ✅ {uri, fileName} 형태로 반환 (fileName은 외부 저장소용 원래 파일명)
+      return { uri: result.uri, fileName: displayFileName };
     } else {
       throw new Error('다운로드가 완료되지 않았습니다.');
     }
@@ -1020,8 +1043,8 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
 // 파일 메타데이터 삭제
 export const deleteFileWithMetadata = async (fileName, videoId) => {
   try {
-    // 메타데이터 파일 삭제
-    const metadataFileName = fileName.replace(/\.[^.]+$/, '.json');
+    // 메타데이터 파일 삭제 (확장자 포함: {videoId}.mp4.json 또는 {videoId}.m4a.json)
+    const metadataFileName = `${fileName}.json`;
     const metadataUri = `${METADATA_DIR}${metadataFileName}`;
     
     try {
