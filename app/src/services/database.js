@@ -150,11 +150,22 @@ export const getFavorites = async () => {
     `);
     
     // pin_ids와 pin_names를 배열로 변환
-    return favorites.map(fav => ({
-      ...fav,
-      pin_ids: fav.pin_ids ? fav.pin_ids.split(',') : [],
-      pin_names: fav.pin_names ? fav.pin_names.split(',') : [],
-    }));
+    return favorites.map(fav => {
+      let pin_ids = fav.pin_ids ? fav.pin_ids.split(',') : [];
+      let pin_names = fav.pin_names ? fav.pin_names.split(',') : [];
+      
+      // 핵심 수정: pin_names가 비어있으면 pin_ids도 비워야 함 (삭제된 핀 제거)
+      // 삭제된 핀의 경우 pin_ids는 있지만 pin_names가 NULL이므로 동기화 필요
+      if (pin_names.length === 0) {
+        pin_ids = [];
+      }
+      
+      return {
+        ...fav,
+        pin_ids,
+        pin_names,
+      };
+    });
   } catch (error) {
     console.error('[Database] Error getting favorites:', error);
     throw error;
