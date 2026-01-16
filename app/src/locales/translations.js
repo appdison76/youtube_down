@@ -126,7 +126,7 @@ export const translations = {
     fileNotFoundOrDamaged: '파일이 존재하지 않거나 손상되었습니다.\n\n"재저장" 버튼을 눌러 파일을 다시 저장해주세요.',
     videoDownloading: '영상 저장 중...',
     musicDownloading: '음악 저장 중...',
-    resave: '다시저장',
+    resave: '재저장',
     resume: '이어받기',
     redownload: '다시받기',
     saveVideo: '영상받기',
