@@ -13,7 +13,10 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": ["audio"]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -31,7 +34,12 @@
         "READ_MEDIA_VIDEO",
         "READ_MEDIA_AUDIO"
       ],
-      "package": "com.appdison76.app"
+      "package": "com.appdison76.app",
+      "config": {
+        "audio": {
+          "staysActiveInBackground": true
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"

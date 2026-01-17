@@ -283,6 +283,13 @@ export default function DownloadsScreen({ navigation }) {
   // ✅ 오디오 파일 재생
   const playAudioFile = async (file, index) => {
     try {
+      // 백그라운드 오디오 재생 활성화 (재생 시작 전 확인)
+      await Audio.setAudioModeAsync({
+        staysActiveInBackground: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+      });
+
       // 파일 존재 확인
       const fileInfo = await FileSystem.getInfoAsync(file.fileUri);
       if (!fileInfo.exists) {
@@ -422,9 +429,18 @@ export default function DownloadsScreen({ navigation }) {
     }, [loadDownloadedFiles, loadPlaylists])
   );
 
-  // 컴포넌트 마운트 시 플레이리스트 목록 로드
+  // 컴포넌트 마운트 시 플레이리스트 목록 로드 및 백그라운드 오디오 설정
   useEffect(() => {
     loadPlaylists();
+    
+    // 백그라운드 오디오 재생 활성화
+    Audio.setAudioModeAsync({
+      staysActiveInBackground: true,
+      playsInSilentModeIOS: true,
+      shouldDuckAndroid: true,
+    }).catch(error => {
+      console.error('[DownloadsScreen] Error setting audio mode:', error);
+    });
   }, [loadPlaylists]);
 
   // 다운로드한 파일 재생 (외부 플레이어로 열기)
