@@ -806,46 +806,48 @@ export default function DownloadsScreen({ navigation }) {
               color={(item.playlist_ids && item.playlist_ids.length > 0) ? "#4CAF50" : "#999"} 
             />
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={(e) => {
-              e.stopPropagation();
-              handlePlayFile(item);
-            }}
-          >
-            <Ionicons name="play" size={24} color={item.isVideo ? "#FF0000" : "#4CAF50"} />
-            <Text style={styles.actionButtonText}>{t.play}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={(e) => {
-              e.stopPropagation();
-              shareDownloadedFile(item.fileUri, item.fileName, item.isVideo);
-            }}
-          >
-            <Ionicons name="share" size={24} color="#2196F3" />
-            <Text style={styles.actionButtonText}>{t.share}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={(e) => {
-              e.stopPropagation();
-              handleResaveFile(item);
-            }}
-          >
-            <Ionicons name="save" size={24} color="#FF9800" />
-            <Text style={styles.actionButtonText}>{t.resave}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.deleteButton]}
-            onPress={(e) => {
-              e.stopPropagation();
-              handleDeleteFile(item);
-            }}
-          >
-            <Ionicons name="trash" size={24} color="#f44336" />
-            <Text style={[styles.actionButtonText, styles.deleteButtonText]}>{t.delete}</Text>
-          </TouchableOpacity>
+          <View style={styles.actionButtonsGroup}>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={(e) => {
+                e.stopPropagation();
+                handlePlayFile(item);
+              }}
+            >
+              <Ionicons name="play" size={24} color={item.isVideo ? "#FF0000" : "#4CAF50"} />
+              <Text style={styles.actionButtonText}>{t.play}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={(e) => {
+                e.stopPropagation();
+                shareDownloadedFile(item.fileUri, item.fileName, item.isVideo);
+              }}
+            >
+              <Ionicons name="share" size={24} color="#2196F3" />
+              <Text style={styles.actionButtonText}>{t.share}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleResaveFile(item);
+              }}
+            >
+              <Ionicons name="save" size={24} color="#FF9800" />
+              <Text style={styles.actionButtonText}>{t.resave}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.deleteButton]}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleDeleteFile(item);
+              }}
+            >
+              <Ionicons name="trash" size={24} color="#f44336" />
+              <Text style={[styles.actionButtonText, styles.deleteButtonText]}>{t.delete}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </TouchableOpacity>
     );
@@ -1608,13 +1610,19 @@ const styles = StyleSheet.create({
   fileActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     gap: 12,
   },
   playlistIconButton: {
     padding: 8,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  actionButtonsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flexShrink: 1,
   },
   actionButton: {
     alignItems: 'center',
