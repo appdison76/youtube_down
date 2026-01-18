@@ -234,6 +234,11 @@ export default function DownloadsScreen({ navigation }) {
       return;
     }
     
+    // 영상 필터일 때는 재생 관련 로직 건너뛰기 (음악 재생 유지)
+    if (isPlaying && fileTypeFilter === 'video') {
+      return;
+    }
+    
     if (playlist.length > 0 && isPlaying && !isPlaylistFilterChanged) {
       const audioFiles = filtered.filter(file => !file.isVideo);
       const currentItem = playlist[currentIndex];
@@ -244,6 +249,7 @@ export default function DownloadsScreen({ navigation }) {
         setCurrentIndex(newIndex);
       } else if (audioFiles.length === 0 || newIndex < 0) {
         // 재생 중인 항목이 필터링 결과에 없으면 재생 중지
+        // 단, 영상 필터일 때는 재생 유지 (위에서 이미 return됨)
         handleStopPlaylist();
       }
     }
