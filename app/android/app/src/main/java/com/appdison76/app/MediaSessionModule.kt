@@ -28,8 +28,6 @@ class MediaSessionModule(reactContext: ReactApplicationContext) : ReactContextBa
   private val CHANNEL_ID = "audio-playback"
   private val NOTIFICATION_ID = 1
   private val executor = Executors.newSingleThreadExecutor()
-  private var canGoNext: Boolean = true
-  private var canGoPrevious: Boolean = true
 
   companion object {
     @Volatile
@@ -189,10 +187,6 @@ class MediaSessionModule(reactContext: ReactApplicationContext) : ReactContextBa
         return
       }
       
-      // 상태 저장 (MediaButtonReceiver에서 확인용)
-      this.canGoNext = canGoNext
-      this.canGoPrevious = canGoPrevious
-      
       val state = if (isPlaying) {
         PlaybackStateCompat.STATE_PLAYING
       } else {
@@ -224,9 +218,6 @@ class MediaSessionModule(reactContext: ReactApplicationContext) : ReactContextBa
       promise.reject("UPDATE_ERROR", e.message, e)
     }
   }
-  
-  fun getCanGoNext(): Boolean = canGoNext
-  fun getCanGoPrevious(): Boolean = canGoPrevious
 
   @ReactMethod
   fun showNotification(promise: Promise) {

@@ -35,9 +35,9 @@ class MediaButtonReceiver : BroadcastReceiver() {
       }
 
       try {
-        // MediaSessionModule에서 canGoNext와 canGoPrevious 확인
-        val canGoNext = mediaSessionModule?.getCanGoNext() ?: true
-        val canGoPrevious = mediaSessionModule?.getCanGoPrevious() ?: true
+        // playbackState의 actions를 직접 확인
+        val playbackState = mediaSession.controller.playbackState
+        val availableActions = playbackState?.actions ?: 0L
         
         when (keyEvent.keyCode) {
           KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
@@ -59,9 +59,9 @@ class MediaButtonReceiver : BroadcastReceiver() {
             mediaSession.controller.transportControls.pause()
           }
           KeyEvent.KEYCODE_MEDIA_NEXT -> {
-            // canGoNext 확인
-            if (!canGoNext) {
-              Log.d(TAG, "Next action not available (canGoNext=false), ignoring")
+            // ACTION_SKIP_TO_NEXT가 사용 가능한지 확인
+            if (availableActions and PlaybackStateCompat.ACTION_SKIP_TO_NEXT == 0L) {
+              Log.d(TAG, "Next action not available, ignoring")
               return
             }
             Log.d(TAG, "Next button pressed")
@@ -69,9 +69,9 @@ class MediaButtonReceiver : BroadcastReceiver() {
             mediaSession.controller.transportControls.skipToNext()
           }
           KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
-            // canGoPrevious 확인
-            if (!canGoPrevious) {
-              Log.d(TAG, "Previous action not available (canGoPrevious=false), ignoring")
+            // ACTION_SKIP_TO_PREVIOUS가 사용 가능한지 확인
+            if (availableActions and PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS == 0L) {
+              Log.d(TAG, "Previous action not available, ignoring")
               return
             }
             Log.d(TAG, "Previous button pressed")
