@@ -26,6 +26,7 @@
     "expo-linking": "~8.0.11",
     "expo-localization": "~17.0.8",
     "expo-media-library": "^18.2.1",
+    "expo-media-session-module": "file:./packages/expo-media-session-module",
     "expo-media-store-module": "file:./packages/expo-media-store-module",
     "expo-notifications": "~0.32.16",
     "expo-sharing": "^14.0.8",

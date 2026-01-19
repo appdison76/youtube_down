@@ -277,11 +277,11 @@ export default function PinManagerModal({
 
           {/* 플레이리스트 목록 */}
           <View style={styles.flatListContainer}>
-            <FlatList
+          <FlatList
               ref={flatListRef}
-              data={pins}
-              renderItem={renderPinItem}
-              keyExtractor={(item) => item.pin_id.toString()}
+            data={pins}
+            renderItem={renderPinItem}
+            keyExtractor={(item) => item.pin_id.toString()}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="on-drag"
               onScrollToIndexFailed={(info) => {
@@ -293,20 +293,20 @@ export default function PinManagerModal({
                   }
                 });
               }}
-              ListEmptyComponent={
-                <View style={styles.emptyContainer}>
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
                   <Ionicons 
                     name={labelType === 'playlist' ? 'list-outline' : 'bookmark-outline'} 
                     size={48} 
                     color="#ddd" 
                   />
-                  <Text style={styles.emptyText}>
+                <Text style={styles.emptyText}>
                     {labelType === 'bookmark' ? t.bookmarkGroupEmpty : labelType === 'playlist' ? t.playlistEmpty : 'No pins'}
-                  </Text>
-                </View>
-              }
-              contentContainerStyle={pins.length === 0 ? styles.emptyList : styles.listContent}
-            />
+                </Text>
+              </View>
+            }
+            contentContainerStyle={pins.length === 0 ? styles.emptyList : styles.listContent}
+          />
           </View>
         </View>
       </View>

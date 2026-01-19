@@ -54,7 +54,7 @@ const ensureThumbnailCacheDir = async () => {
       await FileSystem.makeDirectoryAsync(THUMBNAIL_CACHE_DIR, { intermediates: true });
       console.log('[downloadService] Thumbnail cache directory created');
         }
-      } catch (error) {
+    } catch (error) {
     console.error('[downloadService] Error ensuring thumbnail cache directory:', error);
   }
 };
@@ -90,7 +90,7 @@ export const getFileInfo = async (fileUri) => {
       };
     }
     return { exists: false, size: 0, uri: fileUri };
-    } catch (error) {
+      } catch (error) {
     console.error('[downloadService] Error getting file info:', error);
     return { exists: false, size: 0, uri: fileUri };
   }
@@ -130,7 +130,7 @@ export const getDownloadedFiles = async () => {
               const metadataContent = await FileSystem.readAsStringAsync(metadataUri);
               metadata = JSON.parse(metadataContent);
             }
-          } catch (error) {
+    } catch (error) {
             console.warn('[downloadService] Error reading metadata:', error);
           }
           
@@ -236,10 +236,10 @@ export const cleanupIncompleteFiles = async () => {
           console.log('[downloadService] Cleaned up incomplete file:', fileName);
         } catch (error) {
           console.warn('[downloadService] Error deleting incomplete file:', error);
+          }
         }
       }
-    }
-  } catch (error) {
+    } catch (error) {
     console.error('[downloadService] Error cleaning up incomplete files:', error);
   }
 };
@@ -293,7 +293,7 @@ export const shareDownloadedFile = async (fileUri, fileName, isVideo) => {
       // 상대 경로인 경우 절대 경로로 변환
       if (fileUri.startsWith('/')) {
         shareUri = `file://${fileUri}`;
-      } else {
+    } else {
         shareUri = `file://${DOWNLOAD_DIR}${fileUri}`;
       }
     }
@@ -350,7 +350,7 @@ export const saveFileToDevice = async (fileUri, fileName, isVideo) => {
     // file:// 추가/제거
     if (fileUri.startsWith('file://')) {
       pathsToTry.push(fileUri.replace('file://', ''));
-    } else {
+      } else {
       pathsToTry.push(`file://${fileUri}`);
     }
     
@@ -575,7 +575,7 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
             clearInterval(progressInterval);
             progressInterval = null;
           }
-        } else {
+      } else {
           // Content-Length가 없으면 다운로드된 바이트로 추정 진행률 계산
           const downloadedMB = downloadProgress.totalBytesWritten / (1024 * 1024);
           let estimatedProgress;
@@ -745,7 +745,7 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
           
           await FileSystem.writeAsStringAsync(metadataUri, JSON.stringify(metadata));
           console.log('[downloadService] Metadata saved for video with status: completed:', internalFileName);
-              } catch (error) {
+    } catch (error) {
           console.error('[downloadService] Error saving thumbnail/metadata (non-critical):', error);
           // 썸네일/메타데이터 저장 실패는 다운로드 성공을 막지 않음
         }
@@ -1050,10 +1050,10 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
       
       // ✅ {uri, fileName} 형태로 반환 (fileName은 외부 저장소용 원래 파일명)
       return { uri: result.uri, fileName: displayFileName };
-    } else {
+      } else {
       throw new Error('다운로드가 완료되지 않았습니다.');
-    }
-  } catch (error) {
+      }
+    } catch (error) {
     console.error('[downloadService] Error downloading audio:', error);
     
     if (progressInterval) {

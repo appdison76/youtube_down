@@ -188,4 +188,7 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+
+    // MediaSession support
+    implementation "androidx.media:media:1.6.0"
 }

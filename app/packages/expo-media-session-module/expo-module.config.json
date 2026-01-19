@@ -1,0 +1,14 @@
+{
+  "platforms": ["android"],
+  "ios": {
+    "modules": []
+  },
+  "android": {
+    "modules": [
+      "com.appdison76.mediasession.MediaSessionModule"
+    ]
+  }
+}
+
+
+
