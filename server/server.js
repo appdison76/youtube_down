@@ -37,7 +37,8 @@ app.post('/api/video-info', async (req, res) => {
     console.log('[Server] Getting video info for:', url);
     
     // yt-dlp를 사용하여 영상 정보 가져오기
-    const { stdout } = await execAsync(`python3 -m yt_dlp --dump-json --no-warnings "${url}"`);
+    // YouTube 봇 감지 우회를 위한 옵션 추가
+    const { stdout } = await execAsync(`python3 -m yt_dlp --dump-json --no-warnings --extractor-args "youtube:player_client=ios" --user-agent "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1" "${url}"`);
     const info = JSON.parse(stdout);
     
     // 파일 크기 정보 추출 (filesize, filesize_approx, filesize_estimate 순으로 시도)
@@ -90,10 +91,11 @@ app.get('/api/download/video', async (req, res) => {
       '--merge-output-format', 'mp4',
       '--no-warnings',
       '--progress',
-      '--extractor-args', 'youtube:player_client=android',
+      '--extractor-args', 'youtube:player_client=ios',
       '--retries', '3',
       '--fragment-retries', '3',
-      '--user-agent', 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36',
+      '--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+      '--no-check-certificate',
       '-o', '-',
       url
     ], {
@@ -238,10 +240,11 @@ app.get('/api/download/audio', async (req, res) => {
       '-f', 'bestaudio/best[height<=480]/best',
       '--no-warnings',
       '--progress',
-      '--extractor-args', 'youtube:player_client=android',
+      '--extractor-args', 'youtube:player_client=ios',
       '--retries', '3',
       '--fragment-retries', '3',
-      '--user-agent', 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36',
+      '--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+      '--no-check-certificate',
       '--no-playlist',
       '-o', '-',
       url
