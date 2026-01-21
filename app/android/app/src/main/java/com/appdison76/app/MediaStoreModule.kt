@@ -1,6 +1,8 @@
 package com.appdison76.app
 
 import android.content.ContentValues
+import android.content.Intent
+import android.content.ClipData
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
@@ -270,6 +272,58 @@ class MediaStoreModule(reactContext: ReactApplicationContext) : ReactContextBase
       Log.e("MediaStoreModule", "Exception message: ${e.message}")
       Log.e("MediaStoreModule", "Exception stack trace:", e)
       promise.reject("SAVE_ERROR", "Failed to save file: ${e.message}", e)
+    }
+  }
+
+  @ReactMethod
+  fun shareContentUri(contentUri: String, mimeType: String, fileName: String, promise: Promise) {
+    try {
+      val context = reactApplicationContext ?: run {
+        Log.e("MediaStoreModule", "❌ React context is null!")
+        promise.reject("CONTEXT_ERROR", "React context is null", null)
+        return
+      }
+
+      val currentActivity = context.currentActivity
+      if (currentActivity == null) {
+        Log.e("MediaStoreModule", "❌ Current activity is null!")
+        promise.reject("CONTEXT_ERROR", "Current activity is null", null)
+        return
+      }
+
+      Log.d("MediaStoreModule", "Sharing content URI: $contentUri, mimeType: $mimeType, fileName: $fileName")
+
+      val uri = Uri.parse(contentUri)
+
+      // Intent 생성
+      val shareIntent = Intent(Intent.ACTION_SEND).apply {
+        type = mimeType
+        putExtra(Intent.EXTRA_STREAM, uri)
+        putExtra(Intent.EXTRA_SUBJECT, fileName)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        // ClipData를 사용하여 URI 권한을 명시적으로 부여
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+          clipData = ClipData.newUri(context.contentResolver, "Media", uri)
+        }
+      }
+
+      // Chooser 생성 (작은 공유창 → 더보기 → 큰 공유창)
+      val chooserIntent = Intent.createChooser(shareIntent, fileName).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        // Chooser Intent에도 ClipData를 추가하여 권한 전달
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+          clipData = ClipData.newUri(context.contentResolver, "Media", uri)
+        }
+      }
+
+      currentActivity.startActivity(chooserIntent)
+
+      Log.d("MediaStoreModule", "Share intent started successfully")
+      promise.resolve(true)
+    } catch (e: Exception) {
+      Log.e("MediaStoreModule", "Error sharing content URI", e)
+      promise.reject("SHARE_ERROR", "Failed to share file: ${e.message}", e)
     }
   }
 }

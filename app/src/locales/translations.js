@@ -141,6 +141,7 @@ export const translations = {
     tabSearch: '검색',
     tabSave: '저장',
     tabMyFiles: '내 파일',
+    tabLocalFiles: '내폰',
     tabFavorites: '찜하기',
     
     // 플레이리스트/찜하기그룹 모달
@@ -303,6 +304,7 @@ export const translations = {
     tabSearch: 'Search',
     tabSave: 'Save',
     tabMyFiles: 'My Files',
+    tabLocalFiles: 'My Phone',
     tabFavorites: 'Favorites',
     
     // Playlist/Bookmark Group modals
@@ -465,6 +467,7 @@ export const translations = {
     tabSearch: '検索',
     tabSave: '保存',
     tabMyFiles: 'マイファイル',
+    tabLocalFiles: 'マイフォン',
     tabFavorites: 'お気に入り',
     
     // プレイリスト/ブックマークグループモーダル
@@ -627,6 +630,7 @@ export const translations = {
     tabSearch: '搜索',
     tabSave: '保存',
     tabMyFiles: '我的文件',
+    tabLocalFiles: '我的手机',
     tabFavorites: '收藏',
     
     // 播放列表/书签组模态框

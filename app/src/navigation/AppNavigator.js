@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import SearchScreen from '../screens/SearchScreen';
 import FavoritesScreen from '../screens/FavoritesScreen';
 import DownloadsScreen from '../screens/DownloadsScreen';
+import LocalFilesScreen from '../screens/LocalFilesScreen';
 import VideoSearchScreen from '../screens/VideoSearchScreen';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../locales/translations';
@@ -25,6 +26,8 @@ function MainTabs() {
         return t.tabSave;
       case 'Downloads':
         return t.tabMyFiles;
+      case 'LocalFiles':
+        return t.tabLocalFiles;
       case 'Favorites':
         return t.tabFavorites;
       default:
@@ -46,6 +49,8 @@ function MainTabs() {
             iconName = focused ? 'star' : 'star-outline';
           } else if (route.name === 'Downloads') {
             iconName = focused ? 'folder' : 'folder-outline';
+          } else if (route.name === 'LocalFiles') {
+            iconName = focused ? 'phone-portrait' : 'phone-portrait-outline';
           }
 
           return <Ionicons name={iconName} size={size} color={color} />;
@@ -71,6 +76,10 @@ function MainTabs() {
       <Tab.Screen 
         name="Favorites" 
         component={FavoritesScreen}
+      />
+      <Tab.Screen 
+        name="LocalFiles" 
+        component={LocalFilesScreen}
       />
     </Tab.Navigator>
   );

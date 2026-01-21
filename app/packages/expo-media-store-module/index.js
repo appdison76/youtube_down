@@ -1,5 +1,7 @@
 // This file is required for Expo module compatibility
-export default {};
+import { requireNativeModule } from 'expo-modules-core';
+
+export default requireNativeModule('MediaStoreModule');
 
 
 
