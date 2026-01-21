@@ -10,6 +10,27 @@ const execAsync = promisify(exec);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// YouTube player_client 설정 (환경 변수로 변경 가능)
+// 가능한 값: android, ios, web, tv_embedded, web_embedded
+// 기본값: android (봇 감지 우회를 위해)
+const YOUTUBE_PLAYER_CLIENT = process.env.YOUTUBE_PLAYER_CLIENT || 'android';
+
+// User-Agent 설정 (player_client에 맞게)
+const getUserAgent = (client) => {
+  switch (client) {
+    case 'android':
+      return 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
+    case 'ios':
+      return 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1';
+    case 'web':
+      return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+    default:
+      return 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
+  }
+};
+
+console.log(`[Server] Using YouTube player_client: ${YOUTUBE_PLAYER_CLIENT}`);
+
 // 미들웨어
 app.use(cors());
 app.use(express.json());
@@ -37,8 +58,9 @@ app.post('/api/video-info', async (req, res) => {
     console.log('[Server] Getting video info for:', url);
     
     // yt-dlp를 사용하여 영상 정보 가져오기
-    // YouTube 봇 감지 우회를 위한 옵션 추가
-    const { stdout } = await execAsync(`python3 -m yt_dlp --dump-json --no-warnings --extractor-args "youtube:player_client=ios" --user-agent "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1" "${url}"`);
+    // YouTube 봇 감지 우회를 위한 옵션 추가 (환경 변수로 설정 가능)
+    const userAgent = getUserAgent(YOUTUBE_PLAYER_CLIENT);
+    const { stdout } = await execAsync(`python3 -m yt_dlp --dump-json --no-warnings --extractor-args "youtube:player_client=${YOUTUBE_PLAYER_CLIENT}" --user-agent "${userAgent}" "${url}"`);
     const info = JSON.parse(stdout);
     
     // 파일 크기 정보 추출 (filesize, filesize_approx, filesize_estimate 순으로 시도)
@@ -85,16 +107,18 @@ app.get('/api/download/video', async (req, res) => {
     // spawn을 사용하여 더 세밀한 제어 가능
     // 비디오와 오디오가 합쳐진 파일을 다운로드 (best[ext=mp4]는 이미 합쳐진 비디오)
     // stdout으로 출력할 때는 합치기가 어려우므로, 이미 합쳐진 비디오를 우선 선택
+    // YouTube 봇 감지 우회를 위해 환경 변수로 설정된 player_client 사용
+    const userAgent = getUserAgent(YOUTUBE_PLAYER_CLIENT);
     const ytdlpProcess = spawn('python3', [
       '-m', 'yt_dlp',
       '-f', 'best/bestvideo+bestaudio',
       '--merge-output-format', 'mp4',
       '--no-warnings',
       '--progress',
-      '--extractor-args', 'youtube:player_client=ios',
+      '--extractor-args', `youtube:player_client=${YOUTUBE_PLAYER_CLIENT}`,
       '--retries', '3',
       '--fragment-retries', '3',
-      '--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+      '--user-agent', userAgent,
       '--no-check-certificate',
       '-o', '-',
       url
@@ -243,15 +267,17 @@ app.get('/api/download/audio', async (req, res) => {
       formatSelector = 'bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio/best[height<=480]/best';
     }
     
+    // YouTube 봇 감지 우회를 위해 환경 변수로 설정된 player_client 사용
+    const userAgent = getUserAgent(YOUTUBE_PLAYER_CLIENT);
     const ytdlpProcess = spawn('python3', [
       '-m', 'yt_dlp',
       '-f', formatSelector,
       '--no-warnings',
       '--progress',
-      '--extractor-args', 'youtube:player_client=ios',
+      '--extractor-args', `youtube:player_client=${YOUTUBE_PLAYER_CLIENT}`,
       '--retries', '3',
       '--fragment-retries', '3',
-      '--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+      '--user-agent', userAgent,
       '--no-check-certificate',
       '--no-playlist',
       '-o', '-',
