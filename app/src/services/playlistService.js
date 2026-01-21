@@ -189,6 +189,12 @@ export const getPlaylistsForFile = async (fileUri) => {
     if (!database) {
       throw new Error('Database not initialized');
     }
+    if (!fileUri) {
+      console.warn('[PlaylistService] getPlaylistsForFile called with empty fileUri');
+      return [];
+    }
+    
+    // getAllAsync는 SQL 문자열과 파라미터 배열을 받음
     const playlists = await database.getAllAsync(
       `SELECT p.playlist_id, p.playlist_name 
        FROM playlists p
@@ -196,12 +202,14 @@ export const getPlaylistsForFile = async (fileUri) => {
        WHERE fp.file_uri = ?`,
       [fileUri]
     );
-    return playlists.map(p => ({
+    
+    return (playlists || []).map(p => ({
       playlist_id: p.playlist_id,
       playlist_name: p.playlist_name,
     }));
   } catch (error) {
     console.error('[PlaylistService] Error getting playlists for file:', error);
+    // 오류 발생 시 빈 배열 반환 (앱이 계속 작동하도록)
     return [];
   }
 };

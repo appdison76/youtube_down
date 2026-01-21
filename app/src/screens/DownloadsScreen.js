@@ -84,6 +84,7 @@ export default function DownloadsScreen({ navigation }) {
   const [playingPlaylistFilter, setPlayingPlaylistFilter] = useState(null); // 재생 시작 시의 playlistFilter 저장
   const playlistRef = useRef([]); // 플레이리스트 ref (백그라운드에서도 접근 가능)
   const currentIndexRef = useRef(0); // currentIndex ref
+  const isPlayingRef = useRef(false); // 재생 중인지 확인하는 ref (race condition 방지)
 
   // 플레이리스트 목록 로드
   const loadPlaylists = useCallback(async () => {
@@ -313,6 +314,12 @@ export default function DownloadsScreen({ navigation }) {
 
   // ✅ 오디오 파일 재생
   const playAudioFile = async (file, index) => {
+    // 이미 재생 중이면 무시 (race condition 방지)
+    if (isPlayingRef.current) {
+      console.log('[DownloadsScreen] Already playing, ignoring request');
+      return;
+    }
+    
     const previousFileIndex = currentIndex;
     const previousFile = playlist[previousFileIndex];
     
@@ -356,6 +363,9 @@ export default function DownloadsScreen({ navigation }) {
           console.warn('[DownloadsScreen] Error unloading previous sound:', unloadError);
         }
       }
+      
+      // 이전 재생 정리 완료 후 플래그 설정 (race condition 방지)
+      isPlayingRef.current = true;
 
       // 새로운 sound 로드 및 재생
       console.log('[DownloadsScreen] Loading new sound from:', file.fileUri);
@@ -399,11 +409,16 @@ export default function DownloadsScreen({ navigation }) {
 
       // 재생 완료 시 다음 곡 재생
       newSound.setOnPlaybackStatusUpdate((status) => {
+        // 재생이 실제로 시작되었을 때 플래그 해제 (다음 곡으로 넘어갈 수 있도록)
+        if (status.isPlaying && isPlayingRef.current) {
+          isPlayingRef.current = false;
+        }
         if (status.didJustFinish && !status.isLooping) {
           handleNext();
         }
       });
     } catch (error) {
+      isPlayingRef.current = false; // 오류 발생 시에도 플래그 해제
       console.error('[DownloadsScreen] Error playing audio:', error);
       
       // 오류 발생 시 이전 곡의 알림 유지
@@ -542,6 +557,12 @@ export default function DownloadsScreen({ navigation }) {
 
   // ✅ 다음 곡
   const handleNext = async () => {
+    // 재생 중이면 무시 (race condition 방지)
+    if (isPlayingRef.current) {
+      console.log('[DownloadsScreen] handleNext: Already playing, ignoring');
+      return;
+    }
+    
     // ref에서 최신 값 가져오기 (백그라운드에서도 접근 가능)
     const currentPlaylist = playlistRef.current.length > 0 ? playlistRef.current : playlist;
     const currentFileIndex = currentIndexRef.current >= 0 ? currentIndexRef.current : currentIndex;
@@ -659,6 +680,12 @@ export default function DownloadsScreen({ navigation }) {
 
   // ✅ 이전 곡
   const handlePrevious = async () => {
+    // 재생 중이면 무시 (race condition 방지)
+    if (isPlayingRef.current) {
+      console.log('[DownloadsScreen] handlePrevious: Already playing, ignoring');
+      return;
+    }
+    
     // ref에서 최신 값 가져오기
     const currentPlaylist = playlistRef.current.length > 0 ? playlistRef.current : playlist;
     const currentFileIndex = currentIndexRef.current >= 0 ? currentIndexRef.current : currentIndex;

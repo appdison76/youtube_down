@@ -1,6 +1,75 @@
 import * as MediaLibrary from 'expo-media-library';
 import { Platform } from 'react-native';
 
+// 전체 미디어 파일 개수 확인 (모든 페이지 순회)
+export const getLocalFilesCount = async () => {
+  try {
+    if (Platform.OS !== 'android') {
+      return { audio: 0, video: 0, total: 0 };
+    }
+
+    const { status } = await MediaLibrary.getPermissionsAsync();
+    if (status !== 'granted') {
+      return { audio: 0, video: 0, total: 0 };
+    }
+
+    // 각 타입별로 모든 페이지를 순회하여 전체 개수 확인
+    let audioCount = 0;
+    let videoCount = 0;
+    let audioCursor = null;
+    let videoCursor = null;
+    let audioHasMore = true;
+    let videoHasMore = true;
+
+    // Audio 파일 개수 확인
+    while (audioHasMore) {
+      const audioResult = await MediaLibrary.getAssetsAsync({
+        mediaType: MediaLibrary.MediaType.audio,
+        first: 1000, // 한 번에 1000개씩 가져오기
+        after: audioCursor,
+        sortBy: MediaLibrary.SortBy.modificationTime,
+      });
+      audioCount += audioResult.assets.length;
+      audioHasMore = audioResult.hasNextPage;
+      audioCursor = audioResult.endCursor;
+      console.log('[localFileService] Audio count so far:', audioCount, 'hasMore:', audioHasMore);
+    }
+
+    // Video 파일 개수 확인
+    while (videoHasMore) {
+      const videoResult = await MediaLibrary.getAssetsAsync({
+        mediaType: MediaLibrary.MediaType.video,
+        first: 1000, // 한 번에 1000개씩 가져오기
+        after: videoCursor,
+        sortBy: MediaLibrary.SortBy.modificationTime,
+      });
+      videoCount += videoResult.assets.length;
+      videoHasMore = videoResult.hasNextPage;
+      videoCursor = videoResult.endCursor;
+      console.log('[localFileService] Video count so far:', videoCount, 'hasMore:', videoHasMore);
+    }
+
+    const totalCount = audioCount + videoCount;
+
+    console.log('[localFileService] Total files count (all pages):', {
+      audio: audioCount,
+      video: videoCount,
+      total: totalCount,
+    });
+
+    return {
+      audio: audioCount,
+      video: videoCount,
+      total: totalCount,
+      audioHasNext: false,
+      videoHasNext: false,
+    };
+  } catch (error) {
+    console.error('[localFileService] Error getting files count:', error);
+    return { audio: 0, video: 0, total: 0 };
+  }
+};
+
 // 로컬 음악 파일 가져오기 (페이지네이션 지원)
 export const getLocalAudioFiles = async (options = {}) => {
   try {
@@ -140,27 +209,47 @@ export const getLocalAllFiles = async (options = {}) => {
       after = null,
     } = options;
 
+    // 각 타입별로 first만큼 가져오기 (합쳐서 정렬 후 필요한 만큼만 반환)
+    // 이렇게 하면 audio/video 비율이 맞지 않아도 정확한 개수를 가져올 수 있음
+    const fetchSize = first; // first만큼만 가져오기
+
+    // MediaLibrary.getAssetsAsync는 기본적으로 MediaStore에 등록된 모든 미디어를 가져옵니다
+    // album 파라미터를 지정하지 않으면 모든 앨범의 파일을 가져옵니다
+    // 하지만 일부 파일(특히 카메라로 찍은 영상)이 MediaStore에 등록되지 않았을 수 있습니다
     const [audioResult, videoResult] = await Promise.all([
       MediaLibrary.getAssetsAsync({
         mediaType: MediaLibrary.MediaType.audio,
-        first: Math.floor(first / 2),
+        first: fetchSize,
         after: after?.audio || null,
         sortBy: MediaLibrary.SortBy.modificationTime,
+        // album을 지정하지 않으면 모든 앨범의 파일을 가져옵니다
       }),
       MediaLibrary.getAssetsAsync({
         mediaType: MediaLibrary.MediaType.video,
-        first: Math.floor(first / 2),
+        first: fetchSize,
         after: after?.video || null,
         sortBy: MediaLibrary.SortBy.modificationTime,
+        // album을 지정하지 않으면 모든 앨범의 파일을 가져옵니다
       }),
     ]);
+    
+    console.log('[localFileService] getLocalAllFiles fetched:', {
+      audio: audioResult.assets.length,
+      video: videoResult.assets.length,
+      audioHasNext: audioResult.hasNextPage,
+      videoHasNext: videoResult.hasNextPage,
+    });
 
+    // 모든 asset 합치기
     const allAssets = [
       ...audioResult.assets.map(a => ({ ...a, mediaType: MediaLibrary.MediaType.audio })),
       ...videoResult.assets.map(a => ({ ...a, mediaType: MediaLibrary.MediaType.video })),
     ].sort((a, b) => (b.modificationTime || 0) - (a.modificationTime || 0));
 
-    const files = await Promise.all(allAssets.slice(0, first).map(async (asset) => {
+    // first 개수만큼만 반환
+    const selectedAssets = allAssets.slice(0, first);
+
+    const files = await Promise.all(selectedAssets.map(async (asset) => {
       const fileName = asset.filename;
       const isVideo = asset.mediaType === MediaLibrary.MediaType.video;
       const isAudio = asset.mediaType === MediaLibrary.MediaType.audio;
@@ -232,9 +321,28 @@ export const getLocalAllFiles = async (options = {}) => {
       };
     }));
 
+    // 다음 페이지가 있는지 확인
+    // 각 타입별로 hasNextPage가 있으면 다음 페이지가 있음
+    // 또는 selectedAssets.length가 first와 같고, 각 타입별로 더 가져올 수 있으면 다음 페이지가 있음
+    const hasNextPage = audioResult.hasNextPage || videoResult.hasNextPage;
+    
+    console.log('[localFileService] getLocalAllFiles result:', {
+      requested: first,
+      fetched: {
+        audio: audioResult.assets.length,
+        video: videoResult.assets.length,
+        total: allAssets.length,
+      },
+      returned: files.length,
+      hasNextPage,
+      audioHasNext: audioResult.hasNextPage,
+      videoHasNext: videoResult.hasNextPage,
+      after: after ? 'provided' : 'null',
+    });
+
     return {
       files,
-      hasNextPage: audioResult.hasNextPage || videoResult.hasNextPage,
+      hasNextPage,
       endCursor: {
         audio: audioResult.endCursor,
         video: videoResult.endCursor,

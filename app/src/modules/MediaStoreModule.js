@@ -1,14 +1,21 @@
+import { requireNativeModule } from 'expo-modules-core';
 import { NativeModules } from 'react-native';
 
-// 레거시 RN 모듈 사용 (MediaStorePackage를 통해 등록됨)
-const MediaStoreModule = NativeModules.MediaStoreModule;
-
-// 디버깅
-if (MediaStoreModule) {
-  console.log('[MediaStoreModule] Loaded via NativeModules');
-  console.log('[MediaStoreModule] Methods:', Object.keys(MediaStoreModule));
-} else {
-  console.warn('[MediaStoreModule] Not available!');
+let MediaStoreModule = null;
+try {
+  MediaStoreModule = requireNativeModule('MediaStoreModule');
+  console.log('[MediaStoreModule] Loaded via requireNativeModule');
+  if (MediaStoreModule) {
+    console.log('[MediaStoreModule] Methods:', Object.keys(MediaStoreModule));
+  }
+} catch (error) {
+  console.warn('[MediaStoreModule] Failed to load via requireNativeModule, trying NativeModules:', error);
+  MediaStoreModule = NativeModules.MediaStoreModule;
+  if (MediaStoreModule) {
+    console.log('[MediaStoreModule] Loaded via NativeModules, Methods:', Object.keys(MediaStoreModule));
+  } else {
+    console.warn('[MediaStoreModule] Not available!');
+  }
 }
 
 export default MediaStoreModule;

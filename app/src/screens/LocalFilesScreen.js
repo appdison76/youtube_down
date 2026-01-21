@@ -16,7 +16,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
@@ -26,7 +25,7 @@ import MiniPlayer from '../components/MiniPlayer';
 import LanguageSelector from '../components/LanguageSelector';
 import PinManagerModal from '../components/PinManagerModal';
 import PinSelectorModal from '../components/PinSelectorModal';
-import { getLocalAudioFiles, getLocalVideoFiles, getLocalAllFiles, deleteLocalFile } from '../services/localFileService';
+import { getLocalAudioFiles, getLocalVideoFiles, getLocalAllFiles, deleteLocalFile, getLocalFilesCount } from '../services/localFileService';
 import { getPlaylists, createPlaylist, updatePlaylist, deletePlaylist, assignFileToPlaylist, getPlaylistsForFile } from '../services/playlistService';
 import mediaSessionService from '../services/mediaSessionService';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -67,6 +66,7 @@ export default function LocalFilesScreen({ navigation }) {
   const prevPlaylistFilterRef = useRef(null); // 이전 playlistFilter 값 저장
   const [playingPlaylistFilter, setPlayingPlaylistFilter] = useState(null);
   const [hasPermission, setHasPermission] = useState(null); // null: 확인 중, true: 있음, false: 없음
+  const isPlayingRef = useRef(false); // 재생 중인지 확인하는 ref (race condition 방지)
 
   // 권한 체크
   const checkPermission = useCallback(async () => {
@@ -119,6 +119,8 @@ export default function LocalFilesScreen({ navigation }) {
   // 로컬 파일 목록 로드 (페이지네이션)
   const loadLocalFiles = useCallback(async (reset = false) => {
     try {
+      console.log('[LocalFilesScreen] loadLocalFiles called, reset:', reset);
+      
       if (reset) {
         setLoading(true);
         setLocalFiles([]);
@@ -128,7 +130,9 @@ export default function LocalFilesScreen({ navigation }) {
 
       // 권한 체크
       const hasPerm = await checkPermission();
+      console.log('[LocalFilesScreen] loadLocalFiles - permission check:', hasPerm);
       if (!hasPerm) {
+        console.warn('[LocalFilesScreen] loadLocalFiles - no permission, returning');
         setLoading(false);
         return;
       }
@@ -138,8 +142,29 @@ export default function LocalFilesScreen({ navigation }) {
         after: reset ? null : (endCursorRef.current || null),
       };
 
+      console.log('[LocalFilesScreen] loadLocalFiles - calling getLocalAllFiles with options:', options);
       // 항상 모든 파일을 로드 (fileTypeFilter는 UI 필터링에만 사용)
       const result = await getLocalAllFiles(options);
+      console.log('[LocalFilesScreen] loadLocalFiles - getLocalAllFiles result:', {
+        filesCount: result.files.length,
+        hasNextPage: result.hasNextPage,
+      });
+
+      // 전체 파일 개수 확인 (첫 페이지 또는 리셋 시에만)
+      if (reset || localFiles.length === 0) {
+        const totalCount = await getLocalFilesCount();
+        console.log('[LocalFilesScreen] Total files on device:', totalCount);
+        console.log('[LocalFilesScreen] Current loaded files:', localFiles.length);
+      }
+
+      console.log('[LocalFilesScreen] loadLocalFiles result:', {
+        reset,
+        filesCount: result.files.length,
+        hasNextPage: result.hasNextPage,
+        endCursor: result.endCursor,
+        currentTotal: reset ? 0 : localFiles.length,
+        newTotal: reset ? result.files.length : localFiles.length + result.files.length,
+      });
 
       setHasNextPage(result.hasNextPage);
       setEndCursor(result.endCursor);
@@ -326,7 +351,9 @@ export default function LocalFilesScreen({ navigation }) {
         const hasPerm = await checkPermission();
         console.log('[LocalFilesScreen] Initial permission check result:', hasPerm);
         if (hasPerm) {
-          loadLocalFiles(true);
+          // 전체 파일 개수 확인 및 로그 출력
+          const count = await getLocalFilesCount();
+          console.log('[LocalFilesScreen] Total files on device:', count);
         }
       } catch (error) {
         console.error('[LocalFilesScreen] Error in initPermission:', error);
@@ -365,6 +392,12 @@ export default function LocalFilesScreen({ navigation }) {
 
   // 오디오 파일 재생
   const playAudioFile = async (file, index) => {
+    // 이미 재생 중이면 무시 (race condition 방지)
+    if (isPlayingRef.current) {
+      console.log('[LocalFilesScreen] Already playing, ignoring request');
+      return;
+    }
+    
     try {
       await Audio.setAudioModeAsync({
         staysActiveInBackground: true,
@@ -374,6 +407,7 @@ export default function LocalFilesScreen({ navigation }) {
 
       await mediaSessionService.ensureInitialized();
 
+      // 이전 재생 정리
       if (soundRef.current) {
         try {
           await soundRef.current.unloadAsync();
@@ -381,9 +415,23 @@ export default function LocalFilesScreen({ navigation }) {
           console.warn('[LocalFilesScreen] Error unloading previous sound:', unloadError);
         }
       }
+      
+      // 이전 재생 정리 완료 후 플래그 설정 (race condition 방지)
+      isPlayingRef.current = true;
 
+      // localFileService에서 이미 content:// URI를 반환하므로 그대로 사용
+      // file:// URI는 사용하지 않음 (Scoped Storage 제한)
+      let playUri = file.fileUri;
+      if (playUri.startsWith('file://')) {
+        // file:// URI가 감지되면 (이상한 경우) 원래 fileUri 사용
+        // localFileService에서 이미 content:// URI를 반환하므로 이 경우는 발생하지 않아야 함
+        console.warn('[LocalFilesScreen] file:// URI detected in file.fileUri, this should not happen');
+        playUri = file.fileUri; // 그래도 원래 값 사용 (fallback)
+      }
+
+      console.log('[LocalFilesScreen] Playing audio from URI:', playUri);
       const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: file.fileUri },
+        { uri: playUri },
         { shouldPlay: true }
       );
 
@@ -406,13 +454,37 @@ export default function LocalFilesScreen({ navigation }) {
       await mediaSessionService.updatePlaybackState(true, canGoNext, canGoPrevious);
 
       newSound.setOnPlaybackStatusUpdate((status) => {
+        // 재생이 실제로 시작되었을 때 플래그 해제 (다음 곡으로 넘어갈 수 있도록)
+        if (status.isPlaying && isPlayingRef.current) {
+          isPlayingRef.current = false;
+        }
         if (status.didJustFinish && !status.isLooping) {
           handleNext();
         }
       });
     } catch (error) {
+      isPlayingRef.current = false; // 오류 발생 시에도 플래그 해제
       console.error('[LocalFilesScreen] Error playing audio:', error);
-      Alert.alert(t.error, t.cannotPlayFile?.replace('{error}', error.message || t.unknownError) || '재생할 수 없습니다.');
+      
+      // UnrecognizedInputFormatException 등 ExoPlayer 오류인 경우 외부 플레이어로 폴백
+      if (error.message && (
+        error.message.includes('UnrecognizedInputFormatException') ||
+        error.message.includes('extractors') ||
+        error.message.includes('could read the stream')
+      )) {
+        console.log('[LocalFilesScreen] ExoPlayer format error, trying external player for:', file.title);
+        try {
+          await handlePlayFile(file);
+        } catch (externalPlayerError) {
+          console.error('[LocalFilesScreen] External player also failed:', externalPlayerError);
+          Alert.alert(
+            t.error, 
+            `내부 플레이어와 외부 플레이어 모두 재생에 실패했습니다.\n\n파일: ${file.title}\n오류: ${error.message || t.unknownError}`
+          );
+        }
+      } else {
+        Alert.alert(t.error, t.cannotPlayFile?.replace('{error}', error.message || t.unknownError) || '재생할 수 없습니다.');
+      }
       throw error;
     }
   };
@@ -499,6 +571,12 @@ export default function LocalFilesScreen({ navigation }) {
 
   // 다음 곡
   const handleNext = async () => {
+    // 재생 중이면 무시 (race condition 방지)
+    if (isPlayingRef.current) {
+      console.log('[LocalFilesScreen] handleNext: Already playing, ignoring');
+      return;
+    }
+    
     const currentPlaylist = playlistRef.current.length > 0 ? playlistRef.current : playlist;
     const currentFileIndex = currentIndexRef.current >= 0 ? currentIndexRef.current : currentIndex;
     
@@ -510,6 +588,12 @@ export default function LocalFilesScreen({ navigation }) {
 
   // 이전 곡
   const handlePrevious = async () => {
+    // 재생 중이면 무시 (race condition 방지)
+    if (isPlayingRef.current) {
+      console.log('[LocalFilesScreen] handlePrevious: Already playing, ignoring');
+      return;
+    }
+    
     const currentPlaylist = playlistRef.current.length > 0 ? playlistRef.current : playlist;
     const currentFileIndex = currentIndexRef.current >= 0 ? currentIndexRef.current : currentIndex;
     
@@ -573,12 +657,18 @@ export default function LocalFilesScreen({ navigation }) {
         }
         
         // content:// URI로 외부 플레이어 열기
+        // MediaStoreModule.openContentUri를 사용하여 권한을 제대로 부여
         console.log('[LocalFilesScreen] Opening with content:// URI:', fileUri);
-        await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
-          data: fileUri,
-          type: mimeType,
-          flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
-        });
+        if (MediaStoreModule && typeof MediaStoreModule.openContentUri === 'function') {
+          await MediaStoreModule.openContentUri(fileUri, mimeType);
+        } else {
+          // MediaStoreModule이 없으면 IntentLauncher 사용 (fallback)
+          await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+            data: fileUri,
+            type: mimeType,
+            flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
+          });
+        }
       } else {
         // iOS 처리
         if (file.isVideo) {
@@ -787,9 +877,19 @@ export default function LocalFilesScreen({ navigation }) {
 
   // 더 많은 파일 로드
   const loadMoreFiles = useCallback(() => {
+    console.log('[LocalFilesScreen] loadMoreFiles called:', {
+      loadingMore,
+      hasNextPage,
+      endCursor: endCursorRef.current,
+    });
     if (!loadingMore && hasNextPage) {
       setLoadingMore(true);
       loadLocalFiles(false);
+    } else {
+      console.log('[LocalFilesScreen] loadMoreFiles skipped:', {
+        loadingMore,
+        hasNextPage,
+      });
     }
   }, [loadingMore, hasNextPage, loadLocalFiles]);
 

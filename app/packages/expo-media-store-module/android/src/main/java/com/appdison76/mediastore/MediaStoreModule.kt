@@ -7,20 +7,64 @@ import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import android.util.Log
+import androidx.core.content.FileProvider
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.Promise
 import java.io.File
 import java.io.FileInputStream
 import java.io.OutputStream
+import java.net.URLDecoder
 
 class MediaStoreModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("MediaStoreModule")
 
-    Function("saveToMediaStore") { fileUri: String, fileName: String, isVideo: Boolean, promise: Promise ->
+    AsyncFunction("getContentUri") { fileUri: String, promise: Promise ->
       try {
-        val context = appContext.reactContext ?: return@Function promise.reject("CONTEXT_ERROR", "React context is null", null)
+        val context = appContext.reactContext ?: return@AsyncFunction promise.reject("CONTEXT_ERROR", "React context is null", null)
+        
+        Log.d("MediaStoreModule", "========== getContentUri called ==========")
+        Log.d("MediaStoreModule", "fileUri: $fileUri")
+        
+        // file:// URI에서 실제 경로 추출
+        var filePath = fileUri
+        if (filePath.startsWith("file://")) {
+          filePath = filePath.replace("file://", "")
+        }
+        
+        // URL 디코딩
+        try {
+          filePath = URLDecoder.decode(filePath, "UTF-8")
+        } catch (e: Exception) {
+          Log.w("MediaStoreModule", "Could not decode file path: ${e.message}")
+        }
+        
+        val file = File(filePath)
+        
+        if (!file.exists()) {
+          Log.e("MediaStoreModule", "❌ File does not exist: ${file.absolutePath}")
+          return@AsyncFunction promise.reject("FILE_NOT_FOUND", "File does not exist: ${file.absolutePath}", null)
+        }
+        
+        // FileProvider를 사용하여 content:// URI 생성
+        val contentUri = FileProvider.getUriForFile(
+          context,
+          "${context.packageName}.fileprovider",
+          file
+        )
+        
+        Log.d("MediaStoreModule", "✅ Content URI created: $contentUri")
+        promise.resolve(contentUri.toString())
+      } catch (e: Exception) {
+        Log.e("MediaStoreModule", "❌ Error getting content URI", e)
+        promise.reject("URI_ERROR", "Failed to get content URI: ${e.message}", e)
+      }
+    }
+
+    AsyncFunction("saveToMediaStore") { fileUri: String, fileName: String, isVideo: Boolean, promise: Promise ->
+      try {
+        val context = appContext.reactContext ?: return@AsyncFunction promise.reject("CONTEXT_ERROR", "React context is null", null)
         
         Log.d("MediaStoreModule", "Saving file: $fileUri, fileName: $fileName, isVideo: $isVideo")
         
@@ -32,7 +76,7 @@ class MediaStoreModule : Module() {
         }
         
         if (!sourceFile.exists()) {
-          return@Function promise.reject("FILE_NOT_FOUND", "Source file does not exist: ${sourceFile.absolutePath}", null)
+          return@AsyncFunction promise.reject("FILE_NOT_FOUND", "Source file does not exist: ${sourceFile.absolutePath}", null)
         }
         
         Log.d("MediaStoreModule", "Source file exists: ${sourceFile.absolutePath}, size: ${sourceFile.length()}")
@@ -89,7 +133,7 @@ class MediaStoreModule : Module() {
         val mediaUri = resolver.insert(collection, contentValues)
         
         if (mediaUri == null) {
-          return@Function promise.reject("INSERT_FAILED", "Failed to create media entry in MediaStore", null)
+          return@AsyncFunction promise.reject("INSERT_FAILED", "Failed to create media entry in MediaStore", null)
         }
         
         Log.d("MediaStoreModule", "Media URI created: $mediaUri")
@@ -102,7 +146,7 @@ class MediaStoreModule : Module() {
           if (outputStream == null) {
             inputStream.close()
             resolver.delete(mediaUri, null, null)
-            return@Function promise.reject("OUTPUT_STREAM_ERROR", "Failed to open output stream", null)
+            return@AsyncFunction promise.reject("OUTPUT_STREAM_ERROR", "Failed to open output stream", null)
           }
           
           val buffer = ByteArray(8192)
@@ -139,9 +183,9 @@ class MediaStoreModule : Module() {
       }
     }
 
-    Function("shareContentUri") { contentUri: String, mimeType: String, fileName: String, promise: Promise ->
+    AsyncFunction("shareContentUri") { contentUri: String, mimeType: String, fileName: String, promise: Promise ->
       try {
-        val context = appContext.reactContext ?: return@Function promise.reject("CONTEXT_ERROR", "React context is null", null)
+        val context = appContext.reactContext ?: return@AsyncFunction promise.reject("CONTEXT_ERROR", "React context is null", null)
         
         Log.d("MediaStoreModule", "Sharing content URI: $contentUri, mimeType: $mimeType, fileName: $fileName")
         
@@ -183,6 +227,43 @@ class MediaStoreModule : Module() {
       } catch (e: Exception) {
         Log.e("MediaStoreModule", "Error sharing content URI", e)
         promise.reject("SHARE_ERROR", "Failed to share file: ${e.message}", e)
+      }
+    }
+
+    AsyncFunction("openContentUri") { contentUri: String, mimeType: String, promise: Promise ->
+      try {
+        val context = appContext.reactContext ?: return@AsyncFunction promise.reject("CONTEXT_ERROR", "React context is null", null)
+        
+        Log.d("MediaStoreModule", "Opening content URI: $contentUri, mimeType: $mimeType")
+        
+        val uri = Uri.parse(contentUri)
+        
+        // Intent 생성 (외부 플레이어로 열기)
+        val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+          setDataAndType(uri, mimeType)
+          addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+          // ClipData를 사용하여 URI 권한을 더 명확하게 부여
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+            clipData = ClipData.newUri(context.contentResolver, "media", uri)
+          }
+        }
+        viewIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        
+        // Activity 가져오기
+        val activity = appContext.activityProvider?.currentActivity
+        if (activity != null) {
+          activity.startActivity(viewIntent)
+          Log.d("MediaStoreModule", "View intent started successfully via Activity")
+        } else {
+          // Activity가 없으면 Context에서 시작 (FLAG_ACTIVITY_NEW_TASK 필요)
+          context.startActivity(viewIntent)
+          Log.d("MediaStoreModule", "View intent started successfully via Context")
+        }
+        
+        promise.resolve(true)
+      } catch (e: Exception) {
+        Log.e("MediaStoreModule", "Error opening content URI", e)
+        promise.reject("OPEN_ERROR", "Failed to open file: ${e.message}", e)
       }
     }
   }
