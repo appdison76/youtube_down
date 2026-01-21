@@ -233,11 +233,19 @@ app.get('/api/download/audio', async (req, res) => {
     // yt-dlp를 사용하여 오디오 다운로드 및 스트리밍
     // Railway 서버 환경을 고려한 더 유연한 포맷 선택
     // Railway의 클라우드 IP는 YouTube에서 제한을 받을 수 있어 여러 폴백 옵션 제공
-    // 1순위: bestaudio (오디오 전용), 2순위: best[height<=480] (저화질 비디오+오디오), 3순위: best (최고 품질)
-    // 이렇게 하면 Railway 서버에서도 안정적으로 작동함
+    // 1순위: bestaudio (오디오 전용), 2순위: bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio (다양한 오디오 포맷)
+    // 3순위: best[height<=480] (저화질 비디오+오디오), 4순위: best (최고 품질)
+    // quality 파라미터에 따라 포맷 선택 (highestaudio 또는 bestaudio)
+    let formatSelector = 'bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio/best[height<=480]/best';
+    if (quality === 'highestaudio') {
+      formatSelector = 'bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio/best[height<=480]/best';
+    } else {
+      formatSelector = 'bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio/best[height<=480]/best';
+    }
+    
     const ytdlpProcess = spawn('python3', [
       '-m', 'yt_dlp',
-      '-f', 'bestaudio/best[height<=480]/best',
+      '-f', formatSelector,
       '--no-warnings',
       '--progress',
       '--extractor-args', 'youtube:player_client=ios',
