@@ -129,6 +129,10 @@ app.get('/api/download/video', async (req, res) => {
     let hasStarted = false;
     let isCompleted = false;
     let clientDisconnected = false;
+    let isWaitingForDrain = false; // drain 이벤트 대기 중인지 확인하는 플래그
+    
+    // MaxListeners 경고 방지
+    res.setMaxListeners(20);
     
     ytdlpProcess.stdout.on('data', (chunk) => {
       if (!res.headersSent) {
@@ -138,10 +142,11 @@ app.get('/api/download/video', async (req, res) => {
       if (!res.destroyed && !clientDisconnected) {
         try {
           const canContinue = res.write(chunk);
-          // 버퍼가 가득 차면 drain 이벤트를 기다림
-          if (!canContinue) {
+          // 버퍼가 가득 차면 drain 이벤트를 기다림 (이미 대기 중이면 추가하지 않음)
+          if (!canContinue && !isWaitingForDrain) {
+            isWaitingForDrain = true;
             res.once('drain', () => {
-              // 버퍼가 비워지면 계속 진행
+              isWaitingForDrain = false; // drain 완료 후 플래그 해제
             });
           }
         } catch (error) {
@@ -289,6 +294,10 @@ app.get('/api/download/audio', async (req, res) => {
     let hasStarted = false;
     let isCompleted = false;
     let clientDisconnected = false;
+    let isWaitingForDrain = false; // drain 이벤트 대기 중인지 확인하는 플래그
+    
+    // MaxListeners 경고 방지
+    res.setMaxListeners(20);
     
     ytdlpProcess.stdout.on('data', (chunk) => {
       if (!res.headersSent) {
@@ -298,10 +307,11 @@ app.get('/api/download/audio', async (req, res) => {
       if (!res.destroyed && !clientDisconnected) {
         try {
           const canContinue = res.write(chunk);
-          // 버퍼가 가득 차면 drain 이벤트를 기다림
-          if (!canContinue) {
+          // 버퍼가 가득 차면 drain 이벤트를 기다림 (이미 대기 중이면 추가하지 않음)
+          if (!canContinue && !isWaitingForDrain) {
+            isWaitingForDrain = true;
             res.once('drain', () => {
-              // 버퍼가 비워지면 계속 진행
+              isWaitingForDrain = false; // drain 완료 후 플래그 해제
             });
           }
         } catch (error) {
