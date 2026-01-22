@@ -13,6 +13,7 @@ class MediaSessionService {
     this.onNext = null;
     this.onPrevious = null;
     this.onStop = null;
+    this.onSeek = null;
     this.eventEmitter = null;
     this.isInitialized = false;
     this.initializationPromise = null;
@@ -21,18 +22,20 @@ class MediaSessionService {
     this.nextListener = null;
     this.previousListener = null;
     this.stopListener = null;
+    this.seekListener = null;
   }
 
   /**
    * 재생 콜백 설정
    */
-  setCallbacks({ onPlayPause, onPlay, onPause, onNext, onPrevious, onStop }) {
+  setCallbacks({ onPlayPause, onPlay, onPause, onNext, onPrevious, onStop, onSeek }) {
     this.onPlayPause = onPlayPause;
     this.onPlay = onPlay;
     this.onPause = onPause;
     this.onNext = onNext;
     this.onPrevious = onPrevious;
     this.onStop = onStop;
+    this.onSeek = onSeek;
   }
 
   /**
@@ -118,6 +121,15 @@ class MediaSessionService {
             console.warn('[MediaSessionService] onStop callback not set');
           }
         });
+        
+        this.seekListener = DeviceEventEmitter.addListener('seek', (data) => {
+          console.log('[MediaSessionService] Event received: seek', data);
+          if (this.onSeek && data?.position != null) {
+            this.onSeek(data.position);
+          } else {
+            console.warn('[MediaSessionService] onSeek callback not set or position missing');
+          }
+        });
       } catch (error) {
         console.error('[MediaSessionService] Error initializing:', error);
         this.initializationPromise = null;
@@ -142,7 +154,7 @@ class MediaSessionService {
   /**
    * 미디어 메타데이터 업데이트
    */
-  async updateMetadata(track) {
+  async updateMetadata(track, duration = null) {
     if (Platform.OS !== 'android') {
       return;
     }
@@ -161,13 +173,19 @@ class MediaSessionService {
         title: track?.title || '재생 중',
         author: track?.author || 'MeTube',
         thumbnail: track?.thumbnail || null,
+        duration: duration,
       });
       await MediaSessionModule.updateMetadata(
         track?.title || '재생 중',
         track?.author || 'MeTube',
-        track?.thumbnail || null
+        track?.thumbnail || null,
+        duration
       );
       console.log('[MediaSessionService] Metadata updated successfully');
+      // 곡이 바뀔 때만 알림 표시
+      console.log('[MediaSessionService] Showing notification...');
+      await MediaSessionModule.showNotification();
+      console.log('[MediaSessionService] Notification shown successfully');
     } catch (error) {
       console.error('[MediaSessionService] Error updating metadata:', error);
     }
@@ -176,7 +194,7 @@ class MediaSessionService {
   /**
    * 재생 상태 업데이트
    */
-  async updatePlaybackState(isPlaying, canGoNext = true, canGoPrevious = true) {
+  async updatePlaybackState(isPlaying, canGoNext = true, canGoPrevious = true, position = null, duration = null) {
     if (Platform.OS !== 'android') {
       return;
     }
@@ -191,11 +209,9 @@ class MediaSessionService {
       }
 
       this.isPlaying = isPlaying;
-      console.log('[MediaSessionService] Updating playback state:', isPlaying, 'canGoNext:', canGoNext, 'canGoPrevious:', canGoPrevious);
-      await MediaSessionModule.updatePlaybackState(isPlaying, canGoNext, canGoPrevious);
-      console.log('[MediaSessionService] Showing notification...');
-      await MediaSessionModule.showNotification();
-      console.log('[MediaSessionService] Notification shown successfully');
+      console.log('[MediaSessionService] Updating playback state:', isPlaying, 'canGoNext:', canGoNext, 'canGoPrevious:', canGoPrevious, 'position:', position, 'duration:', duration);
+      await MediaSessionModule.updatePlaybackState(isPlaying, canGoNext, canGoPrevious, position, duration);
+      // 알림은 updateMetadata에서만 표시 (곡이 바뀔 때만)
     } catch (error) {
       console.error('[MediaSessionService] Error updating playback state:', error);
     }
@@ -240,6 +256,10 @@ class MediaSessionService {
       if (this.stopListener) {
         this.stopListener.remove();
         this.stopListener = null;
+      }
+      if (this.seekListener) {
+        this.seekListener.remove();
+        this.seekListener = null;
       }
     } catch (error) {
       console.error('[MediaSessionService] Error dismissing:', error);

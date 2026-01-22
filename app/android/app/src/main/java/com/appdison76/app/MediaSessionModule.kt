@@ -18,6 +18,8 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.Promise
+import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.net.URL
 import java.util.concurrent.Executors
@@ -74,7 +76,22 @@ class MediaSessionModule(reactContext: ReactApplicationContext) : ReactContextBa
       }
 
       // MediaSession 생성
-      val intent = Intent(context, context.javaClass)
+      // 알림 터치 시 앱을 열기 위한 Intent 생성
+      val intent = try {
+        Intent().apply {
+          setClassName(context.packageName, "com.appdison76.app.MainActivity")
+          flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+          action = Intent.ACTION_MAIN
+          addCategory(Intent.CATEGORY_LAUNCHER)
+        }
+      } catch (e: Exception) {
+        android.util.Log.e("MediaSessionModule", "MainActivity not found, falling back to package manager: ${e.message}")
+        context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+          flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        } ?: Intent(context, context.javaClass).apply {
+          flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+      }
       val pendingIntent = PendingIntent.getActivity(
         context,
         0,
@@ -119,12 +136,21 @@ class MediaSessionModule(reactContext: ReactApplicationContext) : ReactContextBa
             android.util.Log.d("MediaSessionModule", "Callback: onStop")
             sendEvent("stop", null)
           }
+
+          override fun onSeekTo(pos: Long) {
+            android.util.Log.d("MediaSessionModule", "Callback: onSeekTo: $pos")
+            val params = Arguments.createMap().apply {
+              putDouble("position", pos.toDouble())
+            }
+            sendEvent("seek", params)
+          }
         })
         setFlags(
           MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
           MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
         )
         isActive = true
+        setSessionActivity(pendingIntent) // MediaSession에 PendingIntent 설정
       }
 
       promise.resolve(null)
@@ -134,7 +160,7 @@ class MediaSessionModule(reactContext: ReactApplicationContext) : ReactContextBa
   }
 
   @ReactMethod
-  fun updateMetadata(title: String, artist: String, thumbnailUrl: String?, promise: Promise) {
+  fun updateMetadata(title: String, artist: String, thumbnailUrl: String?, duration: Double?, promise: Promise) {
     try {
       val session = mediaSession ?: run {
         promise.reject("NO_SESSION", "MediaSession not initialized", null)
@@ -145,6 +171,11 @@ class MediaSessionModule(reactContext: ReactApplicationContext) : ReactContextBa
       val metadataBuilder = MediaMetadataCompat.Builder()
         .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
         .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
+      
+      // duration 추가 (트랙바 표시를 위해 필요)
+      if (duration != null) {
+        metadataBuilder.putLong(MediaMetadataCompat.METADATA_KEY_DURATION, duration.toLong())
+      }
       
       // 메타데이터를 먼저 설정 (제목과 아티스트가 즉시 표시되도록)
       session.setMetadata(metadataBuilder.build())
@@ -160,12 +191,17 @@ class MediaSessionModule(reactContext: ReactApplicationContext) : ReactContextBa
             val bitmap = BitmapFactory.decodeStream(connection.getInputStream())
             if (bitmap != null) {
               // 썸네일 로드 완료 후 메타데이터 업데이트
-              val updatedMetadata = MediaMetadataCompat.Builder()
+              val updatedMetadataBuilder = MediaMetadataCompat.Builder()
                 .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
                 .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
                 .putBitmap(MediaMetadataCompat.METADATA_KEY_ART, bitmap)
-                .build()
-              session.setMetadata(updatedMetadata)
+              
+              // duration도 유지
+              if (duration != null) {
+                updatedMetadataBuilder.putLong(MediaMetadataCompat.METADATA_KEY_DURATION, duration.toLong())
+              }
+              
+              session.setMetadata(updatedMetadataBuilder.build())
             }
           } catch (e: Exception) {
             // 썸네일 로드 실패 시 무시 (제목과 아티스트는 이미 설정됨)
@@ -180,12 +216,14 @@ class MediaSessionModule(reactContext: ReactApplicationContext) : ReactContextBa
   }
 
   @ReactMethod
-  fun updatePlaybackState(isPlaying: Boolean, canGoNext: Boolean, canGoPrevious: Boolean, promise: Promise) {
+  fun updatePlaybackState(isPlaying: Boolean, canGoNext: Boolean, canGoPrevious: Boolean, position: Double?, duration: Double?, promise: Promise) {
     try {
       val session = mediaSession ?: run {
         promise.reject("NO_SESSION", "MediaSession not initialized", null)
         return
       }
+      
+      android.util.Log.d("MediaSessionModule", "updatePlaybackState called: isPlaying=$isPlaying, position=$position, duration=$duration")
       
       val state = if (isPlaying) {
         PlaybackStateCompat.STATE_PLAYING
@@ -193,11 +231,29 @@ class MediaSessionModule(reactContext: ReactApplicationContext) : ReactContextBa
         PlaybackStateCompat.STATE_PAUSED
       }
       
+      // position과 duration이 있으면 사용, 없으면 UNKNOWN
+      val playbackPosition = if (position != null && position >= 0) {
+        position.toLong()
+      } else {
+        PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN
+      }
+      
+      android.util.Log.d("MediaSessionModule", "playbackPosition: $playbackPosition (from position: $position)")
+      val playbackSpeed = if (isPlaying) 1.0f else 0.0f
+      
+      // updateTime: position이 업데이트된 시점의 타임스탬프
+      // 재생 중일 때: 시스템이 자동으로 position + (현재시간 - updateTime) * speed로 계산
+      // 일시정지일 때: position이 고정됨 (speed = 0)
+      val updateTime = System.currentTimeMillis()
+      
+      android.util.Log.d("MediaSessionModule", "updateTime: $updateTime, playbackSpeed: $playbackSpeed, state: $state")
+      
       // Actions를 동적으로 설정 (버튼 표시 여부 결정)
       var actions = PlaybackStateCompat.ACTION_PLAY_PAUSE or
                     PlaybackStateCompat.ACTION_PLAY or
                     PlaybackStateCompat.ACTION_PAUSE or
-                    PlaybackStateCompat.ACTION_STOP
+                    PlaybackStateCompat.ACTION_STOP or
+                    PlaybackStateCompat.ACTION_SEEK_TO
       
       if (canGoNext) {
         actions = actions or PlaybackStateCompat.ACTION_SKIP_TO_NEXT
@@ -208,11 +264,14 @@ class MediaSessionModule(reactContext: ReactApplicationContext) : ReactContextBa
       }
       
       val playbackState = PlaybackStateCompat.Builder()
-        .setState(state, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1.0f)
+        .setState(state, playbackPosition, playbackSpeed, updateTime)
         .setActions(actions)
         .build()
       
+      android.util.Log.d("MediaSessionModule", "Setting playback state: position=$playbackPosition, updateTime=$updateTime, state=$state")
       session.setPlaybackState(playbackState)
+      android.util.Log.d("MediaSessionModule", "Playback state set successfully")
+      // MediaStyle 알림이 자동으로 PlaybackStateCompat를 읽어서 트랙바를 업데이트함 (수동 업데이트 불필요)
       promise.resolve(null)
     } catch (e: Exception) {
       promise.reject("UPDATE_ERROR", e.message, e)
@@ -235,7 +294,22 @@ class MediaSessionModule(reactContext: ReactApplicationContext) : ReactContextBa
         return
       }
       
-      val intent = Intent(context, context.javaClass)
+      // 알림 터치 시 앱을 열기 위한 Intent 생성
+      val intent = try {
+        Intent().apply {
+          setClassName(context.packageName, "com.appdison76.app.MainActivity")
+          flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+          action = Intent.ACTION_MAIN
+          addCategory(Intent.CATEGORY_LAUNCHER)
+        }
+      } catch (e: Exception) {
+        android.util.Log.e("MediaSessionModule", "MainActivity not found, falling back to package manager: ${e.message}")
+        context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+          flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        } ?: Intent(context, context.javaClass).apply {
+          flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+      }
       val pendingIntent = PendingIntent.getActivity(
         context,
         0,

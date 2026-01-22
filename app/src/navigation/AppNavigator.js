@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import SearchScreen from '../screens/SearchScreen';
 import FavoritesScreen from '../screens/FavoritesScreen';
 import DownloadsScreen from '../screens/DownloadsScreen';
-import LocalFilesScreen from '../screens/LocalFilesScreen';
+// import LocalFilesScreen from '../screens/LocalFilesScreen'; // 내폰 탭 (주석처리 - 나중에 사용 가능)
 import VideoSearchScreen from '../screens/VideoSearchScreen';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../locales/translations';
@@ -26,8 +26,8 @@ function MainTabs() {
         return t.tabSave;
       case 'Downloads':
         return t.tabMyFiles;
-      case 'LocalFiles':
-        return t.tabLocalFiles;
+      // case 'LocalFiles': // 내폰 탭 (주석처리 - 나중에 사용 가능)
+      //   return t.tabLocalFiles;
       case 'Favorites':
         return t.tabFavorites;
       default:
@@ -49,9 +49,10 @@ function MainTabs() {
             iconName = focused ? 'star' : 'star-outline';
           } else if (route.name === 'Downloads') {
             iconName = focused ? 'folder' : 'folder-outline';
-          } else if (route.name === 'LocalFiles') {
-            iconName = focused ? 'phone-portrait' : 'phone-portrait-outline';
           }
+          // else if (route.name === 'LocalFiles') { // 내폰 탭 (주석처리 - 나중에 사용 가능)
+          //   iconName = focused ? 'phone-portrait' : 'phone-portrait-outline';
+          // }
 
           return <Ionicons name={iconName} size={size} color={color} />;
         },
@@ -77,10 +78,11 @@ function MainTabs() {
         name="Favorites" 
         component={FavoritesScreen}
       />
-      <Tab.Screen 
+      {/* 내폰 탭 (주석처리 - 나중에 사용 가능) */}
+      {/* <Tab.Screen 
         name="LocalFiles" 
         component={LocalFilesScreen}
-      />
+      /> */}
     </Tab.Navigator>
   );
 }

@@ -1371,23 +1371,22 @@ export const getAutocomplete = async (query) => {
     });
     
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error('[downloadService] Autocomplete server error:', {
-        status: response.status,
-        statusText: response.statusText,
-        errorData: errorData,
-      });
-      throw new Error(errorData.error || '자동완성에 실패했습니다.');
+      // 400 에러는 서버 측 문제이므로 경고만 표시 (에러 로그는 최소화)
+      if (response.status === 400) {
+        console.warn('[downloadService] Autocomplete server returned 400 (non-critical)');
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.warn('[downloadService] Autocomplete server error:', response.status, errorData.error || '');
+      }
+      // 자동완성 실패는 치명적이지 않으므로 빈 배열 반환 (에러를 throw하지 않음)
+      return [];
     }
     
     const suggestions = await response.json();
     return Array.isArray(suggestions) ? suggestions : [];
   } catch (error) {
-    console.error('[downloadService] Error getting autocomplete:', error);
-    console.error('[downloadService] Autocomplete error details:', {
-      message: error.message,
-      stack: error.stack,
-    });
+    // 자동완성 실패는 치명적이지 않으므로 경고만 표시 (에러 로그는 최소화)
+    console.warn('[downloadService] Autocomplete failed (non-critical):', error.message);
     // 자동완성 실패는 치명적이지 않으므로 빈 배열 반환
     return [];
   }
