@@ -10,10 +10,19 @@ const execAsync = promisify(exec);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// YouTube player_client 설정 (환경 변수로 변경 가능)
-// 가능한 값: android, ios, web, tv_embedded, web_embedded
-// 기본값: android (봇 감지 우회를 위해)
-const YOUTUBE_PLAYER_CLIENT = process.env.YOUTUBE_PLAYER_CLIENT || 'android';
+// 여러 player_client를 순차적으로 시도 (봇 감지 우회)
+// 매 요청마다 랜덤 순서로 시도하여 패턴 감지 방지
+const PLAYER_CLIENTS = ['web', 'ios', 'android', 'tv_embedded', 'web_embedded'];
+
+// 배열을 랜덤하게 섞는 함수 (Fisher-Yates 알고리즘)
+const shuffleArray = (array) => {
+  const shuffled = [...array]; // 원본 배열 복사
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+};
 
 // User-Agent 설정 (player_client에 맞게)
 const getUserAgent = (client) => {
@@ -24,12 +33,16 @@ const getUserAgent = (client) => {
       return 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1';
     case 'web':
       return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+    case 'tv_embedded':
+      return 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+    case 'web_embedded':
+      return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
     default:
-      return 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
+      return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
   }
 };
 
-console.log(`[Server] Using YouTube player_client: ${YOUTUBE_PLAYER_CLIENT}`);
+console.log(`[Server] Will try player_clients in order: ${PLAYER_CLIENTS.join(' -> ')}`);
 
 // 미들웨어
 app.use(cors());
@@ -103,132 +116,210 @@ app.get('/api/download/video', async (req, res) => {
     res.setHeader('Transfer-Encoding', 'chunked');
     res.setHeader('Cache-Control', 'no-cache');
 
-    // yt-dlp를 사용하여 영상 다운로드 및 스트리밍
-    // spawn을 사용하여 더 세밀한 제어 가능
-    // 비디오와 오디오가 합쳐진 파일을 다운로드 (best[ext=mp4]는 이미 합쳐진 비디오)
-    // stdout으로 출력할 때는 합치기가 어려우므로, 이미 합쳐진 비디오를 우선 선택
-    // YouTube 봇 감지 우회를 위해 환경 변수로 설정된 player_client 사용
-    const userAgent = getUserAgent(YOUTUBE_PLAYER_CLIENT);
-    const ytdlpProcess = spawn('python3', [
-      '-m', 'yt_dlp',
-      '-f', 'best/bestvideo+bestaudio',
-      '--merge-output-format', 'mp4',
-      '--no-warnings',
-      '--progress',
-      '--extractor-args', `youtube:player_client=${YOUTUBE_PLAYER_CLIENT}`,
-      '--retries', '3',
-      '--fragment-retries', '3',
-      '--user-agent', userAgent,
-      '--no-check-certificate',
-      '-o', '-',
-      url
-    ], {
-      stdio: ['ignore', 'pipe', 'pipe'] // stdin: ignore, stdout: pipe, stderr: pipe
-    });
+    // 여러 player_client를 랜덤 순서로 시도 (패턴 감지 방지)
+    const shuffledClients = shuffleArray(PLAYER_CLIENTS);
+    console.log(`[Server] Trying player_clients in random order: ${shuffledClients.join(' -> ')}`);
     
-    let hasStarted = false;
-    let isCompleted = false;
-    let clientDisconnected = false;
-    let isWaitingForDrain = false; // drain 이벤트 대기 중인지 확인하는 플래그
+    let lastError = null;
+    let triedClients = [];
     
-    // MaxListeners 경고 방지
-    res.setMaxListeners(20);
-    
-    ytdlpProcess.stdout.on('data', (chunk) => {
-      if (!res.headersSent) {
-        res.writeHead(200);
-        hasStarted = true;
-      }
-      if (!res.destroyed && !clientDisconnected) {
-        try {
-          const canContinue = res.write(chunk);
-          // 버퍼가 가득 차면 drain 이벤트를 기다림 (이미 대기 중이면 추가하지 않음)
-          if (!canContinue && !isWaitingForDrain) {
-            isWaitingForDrain = true;
-            res.once('drain', () => {
-              isWaitingForDrain = false; // drain 완료 후 플래그 해제
-            });
+    for (const playerClient of shuffledClients) {
+      triedClients.push(playerClient);
+      console.log(`[Server] Trying player_client: ${playerClient} (${triedClients.length}/${shuffledClients.length})`);
+      
+      try {
+        const userAgent = getUserAgent(playerClient);
+        const ytdlpProcess = spawn('python3', [
+          '-m', 'yt_dlp',
+          '-f', 'best/bestvideo+bestaudio',
+          '--merge-output-format', 'mp4',
+          '--no-warnings',
+          '--progress',
+          '--extractor-args', `youtube:player_client=${playerClient}`,
+          '--retries', '2',
+          '--fragment-retries', '2',
+          '--user-agent', userAgent,
+          '--no-check-certificate',
+          '-o', '-',
+          url
+        ], {
+          stdio: ['ignore', 'pipe', 'pipe']
+        });
+        
+        let hasStarted = false;
+        let isCompleted = false;
+        let clientDisconnected = false;
+        let isWaitingForDrain = false;
+        let hasBotError = false;
+        let processKilled = false;
+        
+        // MaxListeners 경고 방지
+        res.setMaxListeners(20);
+        
+        // 봇 감지 에러를 빠르게 감지하기 위한 Promise
+        const botErrorPromise = new Promise((resolve) => {
+          const stderrHandler = (data) => {
+            const message = data.toString();
+            
+            // 봇 감지 에러 확인
+            if (message.includes('Sign in to confirm you\'re not a bot') || 
+                (message.includes('bot') && message.includes('ERROR'))) {
+              console.error(`[Server] ❌ ${playerClient} failed: Bot detection error`);
+              hasBotError = true;
+              if (!processKilled) {
+                processKilled = true;
+                ytdlpProcess.kill('SIGTERM');
+              }
+              ytdlpProcess.stderr.removeListener('data', stderrHandler);
+              resolve({ error: 'bot_detection', client: playerClient });
+              return;
+            }
+            
+            // 포맷 에러 확인
+            if (message.includes('Requested format is not available') || 
+                message.includes('format is not available')) {
+              console.error(`[Server] ❌ ${playerClient} failed: Format not available`);
+              hasBotError = true;
+              if (!processKilled) {
+                processKilled = true;
+                ytdlpProcess.kill('SIGTERM');
+              }
+              ytdlpProcess.stderr.removeListener('data', stderrHandler);
+              resolve({ error: 'format_not_available', client: playerClient });
+              return;
+            }
+            
+            // 일반 로그
+            if (message.includes('[download]') || message.includes('[info]')) {
+              console.log(`[Server] yt-dlp (${playerClient}):`, message.trim());
+            } else if (message.includes('ERROR') || message.includes('WARNING')) {
+              console.error(`[Server] yt-dlp (${playerClient}) error:`, message.trim());
+            } else {
+              console.log(`[Server] yt-dlp (${playerClient}):`, message.trim());
+            }
+          };
+          
+          ytdlpProcess.stderr.on('data', stderrHandler);
+        });
+        
+        // 성공적으로 시작되었는지 확인하기 위한 Promise
+        const startPromise = new Promise((resolve) => {
+          let resolved = false;
+          const timeout = setTimeout(() => {
+            if (!hasStarted && !hasBotError && !resolved) {
+              console.log(`[Server] ⚠️ ${playerClient} did not start within 5 seconds`);
+              if (!processKilled) {
+                processKilled = true;
+                ytdlpProcess.kill('SIGTERM');
+              }
+              resolved = true;
+              resolve({ error: 'timeout', client: playerClient });
+            }
+          }, 5000);
+          
+          const stdoutHandler = (chunk) => {
+            if (!hasBotError && !resolved) {
+              if (!res.headersSent) {
+                res.writeHead(200);
+                hasStarted = true;
+                clearTimeout(timeout);
+                resolved = true;
+                resolve({ success: true, client: playerClient });
+              }
+              
+              if (!res.destroyed && !clientDisconnected && !hasBotError) {
+                try {
+                  const canContinue = res.write(chunk);
+                  if (!canContinue && !isWaitingForDrain) {
+                    isWaitingForDrain = true;
+                    res.once('drain', () => {
+                      isWaitingForDrain = false;
+                    });
+                  }
+                } catch (error) {
+                  console.error('[Server] Error writing chunk:', error);
+                  clientDisconnected = true;
+                }
+              }
+            }
+          };
+          
+          ytdlpProcess.stdout.on('data', stdoutHandler);
+          
+          ytdlpProcess.stdout.on('end', () => {
+            isCompleted = true;
+            if (!res.destroyed && !clientDisconnected) {
+              res.end();
+            }
+            console.log(`[Server] ✅ Video stream completed with ${playerClient}`);
+            clearTimeout(timeout);
+            if (!resolved) {
+              resolved = true;
+              resolve({ success: true, completed: true, client: playerClient });
+            }
+          });
+        });
+        
+        // 프로세스 종료 처리
+        ytdlpProcess.on('error', (error) => {
+          console.error(`[Server] Process error (${playerClient}):`, error);
+          lastError = error;
+        });
+        
+        ytdlpProcess.on('close', (code, signal) => {
+          if (code !== 0 && code !== null && !isCompleted && !hasBotError) {
+            console.log(`[Server] yt-dlp (${playerClient}) exited with code: ${code}`);
           }
-        } catch (error) {
-          console.error('[Server] Error writing chunk:', error);
-          // 에러가 발생해도 프로세스는 계속 실행
-          clientDisconnected = true;
-        }
-      } else if (clientDisconnected) {
-        // 클라이언트가 연결을 끊었어도 데이터는 계속 읽어서 버퍼링
-        // (프로세스가 종료되지 않도록)
-      }
-    });
-
-    ytdlpProcess.stdout.on('end', () => {
-      isCompleted = true;
-      if (!res.destroyed && !clientDisconnected) {
-        res.end();
-      }
-      console.log('[Server] Video stream completed');
-    });
-
-    ytdlpProcess.stderr.on('data', (data) => {
-      const message = data.toString();
-      // 진행률 정보는 info로, 실제 에러만 error로 처리
-      if (message.includes('[download]') || message.includes('[info]')) {
-        console.log('[Server] yt-dlp:', message.trim());
-      } else if (message.includes('ERROR') || message.includes('WARNING')) {
-        console.error('[Server] yt-dlp error:', message.trim());
-      } else {
-        console.log('[Server] yt-dlp:', message.trim());
-      }
-    });
-
-    ytdlpProcess.on('error', (error) => {
-      console.error('[Server] Process error:', error);
-      if (!res.headersSent) {
-        res.status(500).json({ error: '다운로드 프로세스 오류가 발생했습니다.' });
-      } else if (!res.destroyed && !clientDisconnected) {
-        res.end();
-      }
-    });
-
-    ytdlpProcess.on('close', (code, signal) => {
-      console.log('[Server] yt-dlp exited with code:', code, 'signal:', signal);
-      if (code !== 0 && code !== null && !isCompleted) {
-        if (!res.headersSent && !clientDisconnected) {
-          res.status(500).json({ error: '다운로드가 실패했습니다.' });
-        } else if (!res.destroyed && !clientDisconnected) {
-          res.end();
-        }
-      } else if (code === null && !hasStarted && !clientDisconnected) {
-        // 프로세스가 시작되지 않고 종료된 경우
-        if (!res.headersSent) {
-          res.status(500).json({ error: '다운로드를 시작할 수 없습니다.' });
-        }
-      }
-    });
-    
-    // 클라이언트 연결 종료 시 처리 - 프로세스를 종료하지 않음
-    req.on('close', () => {
-      if (!clientDisconnected) {
-        clientDisconnected = true;
-        console.log('[Server] Client disconnected, but keeping yt-dlp process running');
-        // stdout을 계속 읽어서 프로세스가 종료되지 않도록 함
-        ytdlpProcess.stdout.on('data', () => {
-          // 데이터는 버리지만 프로세스는 계속 실행
         });
+        
+        // 봇 에러 또는 시작 중 하나가 먼저 발생
+        const result = await Promise.race([botErrorPromise, startPromise]);
+        
+        if (result.error) {
+          // 에러 발생 - 다음 client로 시도
+          console.log(`[Server] ⚠️ ${playerClient} failed, trying next client...`);
+          lastError = new Error(`Failed with ${playerClient}: ${result.error}`);
+          continue;
+        }
+        
+        if (result.success) {
+          // 성공적으로 시작됨 - 이 client로 계속 진행
+          console.log(`[Server] ✅ Successfully started with ${playerClient}`);
+          
+          // 클라이언트 연결 종료 시 처리
+          req.on('close', () => {
+            if (!clientDisconnected) {
+              clientDisconnected = true;
+              console.log('[Server] Client disconnected, but keeping yt-dlp process running');
+            }
+          });
+          
+          // 응답 종료 시에도 프로세스는 계속 실행
+          res.on('close', () => {
+            if (!isCompleted && ytdlpProcess && !ytdlpProcess.killed) {
+              console.log('[Server] Response closed, but yt-dlp will continue');
+            }
+          });
+          
+          return; // 성공 - 함수 종료
+        }
+        
+      } catch (error) {
+        console.error(`[Server] Error with ${playerClient}:`, error);
+        lastError = error;
+        continue; // 다음 client로
       }
-    });
+    }
     
-    // 응답 종료 시에도 프로세스는 계속 실행
-    res.on('close', () => {
-      if (!isCompleted && ytdlpProcess && !ytdlpProcess.killed) {
-        console.log('[Server] Response closed, but yt-dlp will continue');
-        // stdout을 계속 읽어서 프로세스가 종료되지 않도록 함
-        ytdlpProcess.stdout.on('data', () => {
-          // 데이터는 버리지만 프로세스는 계속 실행
-        });
-      }
-    });
-    
-    console.log('[Server] Video stream started');
+    // 모든 client가 실패한 경우
+    console.error('[Server] ❌ All player_clients failed');
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        error: '모든 player_client 시도가 실패했습니다.',
+        triedClients: triedClients,
+        lastError: lastError?.message 
+      });
+    }
   } catch (error) {
     console.error('[Server] Error downloading video:', error);
     if (!res.headersSent) {
@@ -273,143 +364,210 @@ app.get('/api/download/audio', async (req, res) => {
     // 7. best (최고 품질, 비디오+오디오)
     let formatSelector = 'bestaudio/bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio[ext=webm]/bestaudio[ext=opus]/best[height<=720]/bestvideo[height<=720]+bestaudio/best';
     
-    // YouTube 봇 감지 우회를 위해 환경 변수로 설정된 player_client 사용
-    const userAgent = getUserAgent(YOUTUBE_PLAYER_CLIENT);
-    const ytdlpProcess = spawn('python3', [
-      '-m', 'yt_dlp',
-      '-f', formatSelector,
-      '--no-warnings',
-      '--progress',
-      '--extractor-args', `youtube:player_client=${YOUTUBE_PLAYER_CLIENT}`,
-      '--retries', '3',
-      '--fragment-retries', '3',
-      '--user-agent', userAgent,
-      '--no-check-certificate',
-      '--no-playlist',
-      '-o', '-',
-      url
-    ], {
-      stdio: ['ignore', 'pipe', 'pipe'] // stdin: ignore, stdout: pipe, stderr: pipe
-    });
+    // 여러 player_client를 랜덤 순서로 시도 (패턴 감지 방지)
+    const shuffledClients = shuffleArray(PLAYER_CLIENTS);
+    console.log(`[Server] Trying player_clients in random order: ${shuffledClients.join(' -> ')}`);
     
-    let hasStarted = false;
-    let isCompleted = false;
-    let clientDisconnected = false;
-    let isWaitingForDrain = false; // drain 이벤트 대기 중인지 확인하는 플래그
+    let lastError = null;
+    let triedClients = [];
     
-    // MaxListeners 경고 방지
-    res.setMaxListeners(20);
-    
-    ytdlpProcess.stdout.on('data', (chunk) => {
-      if (!res.headersSent) {
-        res.writeHead(200);
-        hasStarted = true;
-      }
-      if (!res.destroyed && !clientDisconnected) {
-        try {
-          const canContinue = res.write(chunk);
-          // 버퍼가 가득 차면 drain 이벤트를 기다림 (이미 대기 중이면 추가하지 않음)
-          if (!canContinue && !isWaitingForDrain) {
-            isWaitingForDrain = true;
-            res.once('drain', () => {
-              isWaitingForDrain = false; // drain 완료 후 플래그 해제
-            });
-          }
-        } catch (error) {
-          console.error('[Server] Error writing chunk:', error);
-          // 에러가 발생해도 프로세스는 계속 실행
-          clientDisconnected = true;
-        }
-      } else if (clientDisconnected) {
-        // 클라이언트가 연결을 끊었어도 데이터는 계속 읽어서 버퍼링
-        // (프로세스가 종료되지 않도록)
-      }
-    });
-
-    ytdlpProcess.stdout.on('end', () => {
-      isCompleted = true;
-      if (!res.destroyed && !clientDisconnected) {
-        res.end();
-      }
-      console.log('[Server] Audio stream completed');
-    });
-
-    ytdlpProcess.stderr.on('data', (data) => {
-      const message = data.toString();
-      // 진행률 정보는 info로, 실제 에러만 error로 처리
-      if (message.includes('[download]') || message.includes('[info]')) {
-        console.log('[Server] yt-dlp:', message.trim());
-      } else if (message.includes('ERROR') || message.includes('WARNING')) {
-        console.error('[Server] yt-dlp error:', message.trim());
+    for (const playerClient of shuffledClients) {
+      triedClients.push(playerClient);
+      console.log(`[Server] Trying player_client: ${playerClient} (${triedClients.length}/${shuffledClients.length})`);
+      
+      try {
+        const userAgent = getUserAgent(playerClient);
+        const ytdlpProcess = spawn('python3', [
+          '-m', 'yt_dlp',
+          '-f', formatSelector,
+          '--no-warnings',
+          '--progress',
+          '--extractor-args', `youtube:player_client=${playerClient}`,
+          '--retries', '2',
+          '--fragment-retries', '2',
+          '--user-agent', userAgent,
+          '--no-check-certificate',
+          '--no-playlist',
+          '-o', '-',
+          url
+        ], {
+          stdio: ['ignore', 'pipe', 'pipe']
+        });
         
-        // 포맷을 찾을 수 없는 에러인 경우 클라이언트에게 에러 응답
-        if (message.includes('Requested format is not available') || 
-            message.includes('format is not available')) {
-          if (!res.headersSent && !isCompleted) {
-            console.error('[Server] Format not available, sending error response to client');
-            res.status(500).json({ 
-              error: '요청한 포맷을 사용할 수 없습니다. 다른 포맷을 시도합니다.',
-              retry: true 
-            });
-            isCompleted = true;
-            // 프로세스는 계속 실행하되 클라이언트 연결은 종료
-            if (ytdlpProcess && !ytdlpProcess.killed) {
-              ytdlpProcess.kill('SIGTERM');
+        let hasStarted = false;
+        let isCompleted = false;
+        let clientDisconnected = false;
+        let isWaitingForDrain = false;
+        let hasBotError = false;
+        let processKilled = false;
+        
+        // MaxListeners 경고 방지
+        res.setMaxListeners(20);
+        
+        // 봇 감지 에러를 빠르게 감지하기 위한 Promise
+        const botErrorPromise = new Promise((resolve) => {
+          const stderrHandler = (data) => {
+            const message = data.toString();
+            
+            // 봇 감지 에러 확인
+            if (message.includes('Sign in to confirm you\'re not a bot') || 
+                (message.includes('bot') && message.includes('ERROR'))) {
+              console.error(`[Server] ❌ ${playerClient} failed: Bot detection error`);
+              hasBotError = true;
+              if (!processKilled) {
+                processKilled = true;
+                ytdlpProcess.kill('SIGTERM');
+              }
+              ytdlpProcess.stderr.removeListener('data', stderrHandler);
+              resolve({ error: 'bot_detection', client: playerClient });
+              return;
             }
+            
+            // 포맷 에러 확인
+            if (message.includes('Requested format is not available') || 
+                message.includes('format is not available')) {
+              console.error(`[Server] ❌ ${playerClient} failed: Format not available`);
+              hasBotError = true;
+              if (!processKilled) {
+                processKilled = true;
+                ytdlpProcess.kill('SIGTERM');
+              }
+              ytdlpProcess.stderr.removeListener('data', stderrHandler);
+              resolve({ error: 'format_not_available', client: playerClient });
+              return;
+            }
+            
+            // 일반 로그
+            if (message.includes('[download]') || message.includes('[info]')) {
+              console.log(`[Server] yt-dlp (${playerClient}):`, message.trim());
+            } else if (message.includes('ERROR') || message.includes('WARNING')) {
+              console.error(`[Server] yt-dlp (${playerClient}) error:`, message.trim());
+            } else {
+              console.log(`[Server] yt-dlp (${playerClient}):`, message.trim());
+            }
+          };
+          
+          ytdlpProcess.stderr.on('data', stderrHandler);
+        });
+        
+        // 성공적으로 시작되었는지 확인하기 위한 Promise
+        const startPromise = new Promise((resolve) => {
+          let resolved = false;
+          const timeout = setTimeout(() => {
+            if (!hasStarted && !hasBotError && !resolved) {
+              console.log(`[Server] ⚠️ ${playerClient} did not start within 5 seconds`);
+              if (!processKilled) {
+                processKilled = true;
+                ytdlpProcess.kill('SIGTERM');
+              }
+              resolved = true;
+              resolve({ error: 'timeout', client: playerClient });
+            }
+          }, 5000);
+          
+          const stdoutHandler = (chunk) => {
+            if (!hasBotError && !resolved) {
+              if (!res.headersSent) {
+                res.writeHead(200);
+                hasStarted = true;
+                clearTimeout(timeout);
+                resolved = true;
+                resolve({ success: true, client: playerClient });
+              }
+              
+              if (!res.destroyed && !clientDisconnected && !hasBotError) {
+                try {
+                  const canContinue = res.write(chunk);
+                  if (!canContinue && !isWaitingForDrain) {
+                    isWaitingForDrain = true;
+                    res.once('drain', () => {
+                      isWaitingForDrain = false;
+                    });
+                  }
+                } catch (error) {
+                  console.error('[Server] Error writing chunk:', error);
+                  clientDisconnected = true;
+                }
+              }
+            }
+          };
+          
+          ytdlpProcess.stdout.on('data', stdoutHandler);
+          
+          ytdlpProcess.stdout.on('end', () => {
+            isCompleted = true;
+            if (!res.destroyed && !clientDisconnected) {
+              res.end();
+            }
+            console.log(`[Server] ✅ Audio stream completed with ${playerClient}`);
+            clearTimeout(timeout);
+            if (!resolved) {
+              resolved = true;
+              resolve({ success: true, completed: true, client: playerClient });
+            }
+          });
+        });
+        
+        // 프로세스 종료 처리
+        ytdlpProcess.on('error', (error) => {
+          console.error(`[Server] Process error (${playerClient}):`, error);
+          lastError = error;
+        });
+        
+        ytdlpProcess.on('close', (code, signal) => {
+          if (code !== 0 && code !== null && !isCompleted && !hasBotError) {
+            console.log(`[Server] yt-dlp (${playerClient}) exited with code: ${code}`);
           }
-        }
-      } else {
-        console.log('[Server] yt-dlp:', message.trim());
-      }
-    });
-
-    ytdlpProcess.on('error', (error) => {
-      console.error('[Server] Process error:', error);
-      if (!res.headersSent) {
-        res.status(500).json({ error: '다운로드 프로세스 오류가 발생했습니다.' });
-      } else if (!res.destroyed && !clientDisconnected) {
-        res.end();
-      }
-    });
-
-    ytdlpProcess.on('close', (code, signal) => {
-      console.log('[Server] yt-dlp exited with code:', code, 'signal:', signal);
-      if (code !== 0 && code !== null && !isCompleted) {
-        if (!res.headersSent && !clientDisconnected) {
-          res.status(500).json({ error: '다운로드가 실패했습니다.' });
-        } else if (!res.destroyed && !clientDisconnected) {
-          res.end();
-        }
-      } else if (code === null && !hasStarted && !clientDisconnected) {
-        // 프로세스가 시작되지 않고 종료된 경우
-        if (!res.headersSent) {
-          res.status(500).json({ error: '다운로드를 시작할 수 없습니다.' });
-        }
-      }
-    });
-    
-    // 클라이언트 연결 종료 시 처리 - 프로세스를 종료하지 않음
-    req.on('close', () => {
-      if (!clientDisconnected) {
-        clientDisconnected = true;
-        console.log('[Server] Client disconnected, but keeping yt-dlp process running');
-        // stdout을 계속 읽어서 프로세스가 종료되지 않도록 함
-        ytdlpProcess.stdout.on('data', () => {
-          // 데이터는 버리지만 프로세스는 계속 실행
         });
+        
+        // 봇 에러 또는 시작 중 하나가 먼저 발생
+        const result = await Promise.race([botErrorPromise, startPromise]);
+        
+        if (result.error) {
+          // 에러 발생 - 다음 client로 시도
+          console.log(`[Server] ⚠️ ${playerClient} failed, trying next client...`);
+          lastError = new Error(`Failed with ${playerClient}: ${result.error}`);
+          continue;
+        }
+        
+        if (result.success) {
+          // 성공적으로 시작됨 - 이 client로 계속 진행
+          console.log(`[Server] ✅ Successfully started with ${playerClient}`);
+          
+          // 클라이언트 연결 종료 시 처리
+          req.on('close', () => {
+            if (!clientDisconnected) {
+              clientDisconnected = true;
+              console.log('[Server] Client disconnected, but keeping yt-dlp process running');
+            }
+          });
+          
+          // 응답 종료 시에도 프로세스는 계속 실행
+          res.on('close', () => {
+            if (!isCompleted && ytdlpProcess && !ytdlpProcess.killed) {
+              console.log('[Server] Response closed, but yt-dlp will continue');
+            }
+          });
+          
+          return; // 성공 - 함수 종료
+        }
+        
+      } catch (error) {
+        console.error(`[Server] Error with ${playerClient}:`, error);
+        lastError = error;
+        continue; // 다음 client로
       }
-    });
+    }
     
-    // 응답 종료 시에도 프로세스는 계속 실행
-    res.on('close', () => {
-      if (!isCompleted && ytdlpProcess && !ytdlpProcess.killed) {
-        console.log('[Server] Response closed, but yt-dlp will continue');
-        // stdout을 계속 읽어서 프로세스가 종료되지 않도록 함
-        ytdlpProcess.stdout.on('data', () => {
-          // 데이터는 버리지만 프로세스는 계속 실행
-        });
-      }
-    });
+    // 모든 client가 실패한 경우
+    console.error('[Server] ❌ All player_clients failed');
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        error: '모든 player_client 시도가 실패했습니다.',
+        triedClients: triedClients,
+        lastError: lastError?.message 
+      });
+    }
   } catch (error) {
     console.error('[Server] Error downloading audio:', error);
     if (!res.headersSent) {
