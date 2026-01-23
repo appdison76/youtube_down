@@ -262,15 +262,16 @@ app.get('/api/download/audio', async (req, res) => {
     // yt-dlp를 사용하여 오디오 다운로드 및 스트리밍
     // Railway 서버 환경을 고려한 더 유연한 포맷 선택
     // Railway의 클라우드 IP는 YouTube에서 제한을 받을 수 있어 여러 폴백 옵션 제공
-    // 1순위: bestaudio (오디오 전용), 2순위: bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio (다양한 오디오 포맷)
-    // 3순위: best[height<=480] (저화질 비디오+오디오), 4순위: best (최고 품질)
-    // quality 파라미터에 따라 포맷 선택 (highestaudio 또는 bestaudio)
-    let formatSelector = 'bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio/best[height<=480]/best';
-    if (quality === 'highestaudio') {
-      formatSelector = 'bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio/best[height<=480]/best';
-    } else {
-      formatSelector = 'bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio/best[height<=480]/best';
-    }
+    // 더 유연한 포맷 선택: 오디오 전용 포맷부터 비디오+오디오까지 다양한 옵션 시도
+    // 포맷 선택자 우선순위:
+    // 1. bestaudio (모든 오디오 포맷)
+    // 2. bestaudio[ext=m4a] (M4A 오디오)
+    // 3. bestaudio[ext=mp3] (MP3 오디오)
+    // 4. bestaudio[ext=webm] (WebM 오디오)
+    // 5. bestaudio[ext=opus] (Opus 오디오)
+    // 6. best[height<=720]/bestvideo[height<=720]+bestaudio (저화질 비디오+오디오)
+    // 7. best (최고 품질, 비디오+오디오)
+    let formatSelector = 'bestaudio/bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio[ext=webm]/bestaudio[ext=opus]/best[height<=720]/bestvideo[height<=720]+bestaudio/best';
     
     // YouTube 봇 감지 우회를 위해 환경 변수로 설정된 player_client 사용
     const userAgent = getUserAgent(YOUTUBE_PLAYER_CLIENT);
@@ -340,6 +341,23 @@ app.get('/api/download/audio', async (req, res) => {
         console.log('[Server] yt-dlp:', message.trim());
       } else if (message.includes('ERROR') || message.includes('WARNING')) {
         console.error('[Server] yt-dlp error:', message.trim());
+        
+        // 포맷을 찾을 수 없는 에러인 경우 클라이언트에게 에러 응답
+        if (message.includes('Requested format is not available') || 
+            message.includes('format is not available')) {
+          if (!res.headersSent && !isCompleted) {
+            console.error('[Server] Format not available, sending error response to client');
+            res.status(500).json({ 
+              error: '요청한 포맷을 사용할 수 없습니다. 다른 포맷을 시도합니다.',
+              retry: true 
+            });
+            isCompleted = true;
+            // 프로세스는 계속 실행하되 클라이언트 연결은 종료
+            if (ytdlpProcess && !ytdlpProcess.killed) {
+              ytdlpProcess.kill('SIGTERM');
+            }
+          }
+        }
       } else {
         console.log('[Server] yt-dlp:', message.trim());
       }
