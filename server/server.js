@@ -201,8 +201,15 @@ if (!fs.existsSync(DOWNLOAD_DIR)) {
 app.post('/api/video-info', async (req, res) => {
   try {
     console.log('[Server] ===== Video info request received =====');
+    console.log('[Server] Request body type:', typeof req.body);
     console.log('[Server] Request body:', req.body);
     console.log('[Server] Headers:', req.headers);
+    
+    // JSON 파싱 오류 처리
+    if (!req.body || typeof req.body !== 'object') {
+      console.error('[Server] ❌ Invalid request body:', req.body);
+      return res.status(400).json({ error: '잘못된 요청 형식입니다.' });
+    }
     
     const { url } = req.body;
     
@@ -222,12 +229,57 @@ app.post('/api/video-info', async (req, res) => {
       try {
         console.log(`[Server] Trying to get video info with ${playerClient}...`);
         const userAgent = getUserAgent(playerClient);
-        const { stdout } = await execAsync(`python3 -m yt_dlp --dump-json --no-warnings --extractor-args "youtube:player_client=${playerClient}" --user-agent "${userAgent}" "${url}"`);
+        
+        // spawn을 사용하여 안전하게 실행
+        const { spawn } = require('child_process');
+        let stdout = '';
+        let stderr = '';
+        
+        const ytdlpProcess = spawn('python3', [
+          '-m', 'yt_dlp',
+          '--dump-json',
+          '--no-warnings',
+          '--extractor-args', `youtube:player_client=${playerClient}`,
+          '--user-agent', userAgent,
+          url
+        ], {
+          stdio: ['ignore', 'pipe', 'pipe']
+        });
+        
+        ytdlpProcess.stdout.on('data', (data) => {
+          stdout += data.toString();
+        });
+        
+        ytdlpProcess.stderr.on('data', (data) => {
+          stderr += data.toString();
+        });
+        
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            ytdlpProcess.kill('SIGTERM');
+            reject(new Error('Timeout'));
+          }, 15000);
+          
+          ytdlpProcess.on('close', (code) => {
+            clearTimeout(timeout);
+            if (code === 0) {
+              resolve();
+            } else {
+              reject(new Error(`Process exited with code ${code}: ${stderr}`));
+            }
+          });
+          
+          ytdlpProcess.on('error', (error) => {
+            clearTimeout(timeout);
+            reject(error);
+          });
+        });
+        
         info = JSON.parse(stdout);
         console.log(`[Server] ✅ Successfully got video info with ${playerClient}`);
         break; // 성공하면 중단
       } catch (error) {
-        const errorMsg = error.message || error.stderr || String(error);
+        const errorMsg = error.message || stderr || String(error);
         console.log(`[Server] ❌ Failed with ${playerClient}: ${errorMsg.substring(0, 100)}`);
         lastError = error;
         
