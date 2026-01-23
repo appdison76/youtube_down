@@ -14,13 +14,14 @@ const PORT = process.env.PORT || 3000;
 // 매 요청마다 랜덤 순서로 시도하여 패턴 감지 방지
 // 더 많은 옵션을 추가하여 차단 확률 감소
 const PLAYER_CLIENTS = [
-  'web', 
+  'android',        // 가장 안정적으로 작동 (테스트 결과 확인)
   'ios', 
-  'android', 
-  'mweb',           // 모바일 웹
-  'tv_embedded', 
-  'web_embedded'
-  // 'android_embedded' 제거: 403 Forbidden 오류가 자주 발생
+  'web'
+  // 제거된 클라이언트:
+  // - 'mweb': 테스트에서 실패
+  // - 'tv_embedded': "This video is unavailable" 오류
+  // - 'web_embedded': "This video is unavailable" 오류
+  // - 'android_embedded': 403 Forbidden 오류가 자주 발생
 ];
 
 // 배열을 랜덤하게 섞는 함수 (Fisher-Yates 알고리즘)
@@ -42,13 +43,6 @@ const getUserAgent = (client) => {
       return 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1';
     case 'web':
       return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-    case 'tv_embedded':
-      return 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-    case 'web_embedded':
-      return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-    case 'mweb':
-      return 'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
-    // 'android_embedded' 제거됨: 403 Forbidden 오류가 자주 발생
     default:
       return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
   }
