@@ -85,6 +85,8 @@ export default function DownloadsScreen({ navigation }) {
   const playlistRef = useRef([]); // 플레이리스트 ref (백그라운드에서도 접근 가능)
   const currentIndexRef = useRef(0); // currentIndex ref
   const isPlayingRef = useRef(false); // 재생 중인지 확인하는 ref (race condition 방지)
+  const lastNotificationUpdateRef = useRef(0); // 마지막 알림 업데이트 시간 (throttling)
+  const isSeekingRef = useRef(false); // seek 중인지 확인하는 ref (seek 중에는 setOnPlaybackStatusUpdate 무시)
 
   // 플레이리스트 목록 로드
   const loadPlaylists = useCallback(async () => {
@@ -350,7 +352,7 @@ export default function DownloadsScreen({ navigation }) {
             author: previousFile.author || '',
             thumbnail: previousFile.thumbnail || null,
           });
-          await mediaSessionService.updatePlaybackState(isPlaying);
+          await mediaSessionService.updatePlaybackState(isPlaying, true, true, null, null, false);
         }
         throw new Error('File not found');
       }
@@ -411,11 +413,16 @@ export default function DownloadsScreen({ navigation }) {
       // 초기 재생 상태 업데이트 (실제 position과 duration 사용)
       const initialPosition = status.isLoaded ? status.positionMillis || 0 : 0;
       console.log('[DownloadsScreen] Updating MediaSession playback state: playing, canGoNext:', canGoNext, 'canGoPrevious:', canGoPrevious, 'position:', initialPosition, 'duration:', duration);
-      await mediaSessionService.updatePlaybackState(true, canGoNext, canGoPrevious, initialPosition, duration);
+      await mediaSessionService.updatePlaybackState(true, canGoNext, canGoPrevious, initialPosition, duration, true); // 곡 변경 시 항상 알림 업데이트
       console.log('[DownloadsScreen] Successfully started playing new file');
 
       // 재생 완료 시 다음 곡 재생 및 재생 위치 업데이트
       newSound.setOnPlaybackStatusUpdate(async (status) => {
+        // seek 중이면 업데이트 무시 (handleSeek에서 직접 업데이트함)
+        if (isSeekingRef.current) {
+          return;
+        }
+        
         // 재생이 실제로 시작되었을 때 플래그 해제 (다음 곡으로 넘어갈 수 있도록)
         if (status.isPlaying && isPlayingRef.current) {
           isPlayingRef.current = false;
@@ -425,17 +432,35 @@ export default function DownloadsScreen({ navigation }) {
         if (status.isLoaded) {
           const position = status.positionMillis || 0;
           const duration = status.durationMillis || 0;
+          
+          // position이 0이고 재생 중이 아니면 업데이트 무시 (잘못된 상태)
+          if (position === 0 && !status.isPlaying && duration > 0) {
+            return;
+          }
+          
           const canGoNext = index < (playlistRef.current.length > 0 ? playlistRef.current : playlist).length - 1;
           const canGoPrevious = index > 0;
           
           try {
+            // PlaybackStateCompat는 항상 업데이트되므로 트랙바가 자동으로 갱신됨
+            // 하지만 알림도 주기적으로 업데이트해야 트랙바가 제대로 표시됨
+            // 재생 중일 때는 더 자주 업데이트 (0.3초마다)
+            const now = Date.now();
+            const updateInterval = status.isPlaying ? 300 : 500; // 재생 중: 0.3초, 일시정지: 0.5초
+            const shouldUpdateNotification = now - lastNotificationUpdateRef.current >= updateInterval;
+            
             await mediaSessionService.updatePlaybackState(
               status.isPlaying,
               canGoNext,
               canGoPrevious,
               position,
-              duration
+              duration,
+              shouldUpdateNotification // 알림 업데이트 여부
             );
+            
+            if (shouldUpdateNotification) {
+              lastNotificationUpdateRef.current = now;
+            }
           } catch (error) {
             console.warn('[DownloadsScreen] Error updating playback state:', error);
           }
@@ -462,7 +487,7 @@ export default function DownloadsScreen({ navigation }) {
             author: previousFile.author || '',
             thumbnail: previousFile.thumbnail || null,
           });
-          await mediaSessionService.updatePlaybackState(isPlaying, canGoNext, canGoPrevious);
+          await mediaSessionService.updatePlaybackState(isPlaying, canGoNext, canGoPrevious, null, null, false);
           console.log('[DownloadsScreen] Previous file notification maintained');
         } else {
           console.warn('[DownloadsScreen] No previous file to maintain notification');
@@ -504,8 +529,13 @@ export default function DownloadsScreen({ navigation }) {
         const canGoNext = currentFileIndexForPause < currentPlaylistForPause.length - 1;
         const canGoPrevious = currentFileIndexForPause > 0;
         
+        // 현재 재생 위치와 duration 가져오기
+        const currentStatus = await soundRef.current.getStatusAsync();
+        const position = currentStatus.isLoaded ? currentStatus.positionMillis || 0 : 0;
+        const duration = currentStatus.isLoaded ? currentStatus.durationMillis || 0 : 0;
+        
         // 상태만 업데이트 (메타데이터는 변경되지 않으므로 updateMetadata 호출 불필요)
-        await mediaSessionService.updatePlaybackState(true, canGoNext, canGoPrevious);
+        await mediaSessionService.updatePlaybackState(true, canGoNext, canGoPrevious, position, duration, true); // 버튼 클릭 시 항상 알림 업데이트
       }
     } catch (error) {
       console.error('[DownloadsScreen] Error playing:', error);
@@ -540,8 +570,13 @@ export default function DownloadsScreen({ navigation }) {
         const canGoNext = currentFileIndexForPause < currentPlaylistForPause.length - 1;
         const canGoPrevious = currentFileIndexForPause > 0;
         
+        // 현재 재생 위치와 duration 가져오기
+        const currentStatus = await soundRef.current.getStatusAsync();
+        const position = currentStatus.isLoaded ? currentStatus.positionMillis || 0 : 0;
+        const duration = currentStatus.isLoaded ? currentStatus.durationMillis || 0 : 0;
+        
         // 상태만 업데이트 (메타데이터는 변경되지 않으므로 updateMetadata 호출 불필요)
-        await mediaSessionService.updatePlaybackState(false, canGoNext, canGoPrevious);
+        await mediaSessionService.updatePlaybackState(false, canGoNext, canGoPrevious, position, duration, true); // 버튼 클릭 시 항상 알림 업데이트
       }
     } catch (error) {
       console.error('[DownloadsScreen] Error pausing:', error);
@@ -658,7 +693,7 @@ export default function DownloadsScreen({ navigation }) {
                 author: currentFile.author || '',
                 thumbnail: currentFile.thumbnail || null,
               });
-              await mediaSessionService.updatePlaybackState(isPlaying);
+              await mediaSessionService.updatePlaybackState(isPlaying, true, true, null, null, false);
             }
             // 오류를 다시 throw하지 않음 (알림은 유지됨)
           }
@@ -671,7 +706,7 @@ export default function DownloadsScreen({ navigation }) {
         console.log('[DownloadsScreen] Last song, cannot go next');
         // 마지막 곡이면 다음곡 버튼이 비활성화되어야 하므로 상태만 업데이트
         if (currentFile) {
-          await mediaSessionService.updatePlaybackState(isPlaying, false, currentFileIndex > 0);
+          await mediaSessionService.updatePlaybackState(isPlaying, false, currentFileIndex > 0, null, null, false);
         }
       }
     } catch (error) {
@@ -688,7 +723,7 @@ export default function DownloadsScreen({ navigation }) {
             author: currentFile.author || '',
             thumbnail: currentFile.thumbnail || null,
           });
-          await mediaSessionService.updatePlaybackState(isPlaying, canGoNext, canGoPrevious);
+          await mediaSessionService.updatePlaybackState(isPlaying, canGoNext, canGoPrevious, null, null, false);
         }
       } catch (updateError) {
         console.error('[DownloadsScreen] Error updating notification after handleNext error:', updateError);
@@ -755,7 +790,7 @@ export default function DownloadsScreen({ navigation }) {
         console.log('[DownloadsScreen] First song, cannot go previous');
         // 첫 곡이면 이전곡 버튼이 비활성화되어야 하므로 상태만 업데이트
         if (currentFile) {
-          await mediaSessionService.updatePlaybackState(isPlaying, currentFileIndex < currentPlaylist.length - 1, false);
+          await mediaSessionService.updatePlaybackState(isPlaying, currentFileIndex < currentPlaylist.length - 1, false, null, null, false);
         }
       }
     } catch (error) {
@@ -771,7 +806,7 @@ export default function DownloadsScreen({ navigation }) {
             author: currentFile.author || '',
             thumbnail: currentFile.thumbnail || null,
           });
-          await mediaSessionService.updatePlaybackState(isPlaying, canGoNext, canGoPrevious);
+          await mediaSessionService.updatePlaybackState(isPlaying, canGoNext, canGoPrevious, null, null, false);
         }
       } catch (updateError) {
         console.error('[DownloadsScreen] Error updating notification after handlePrevious error:', updateError);
@@ -884,6 +919,9 @@ export default function DownloadsScreen({ navigation }) {
     const handleSeek = async (positionMillis) => {
       try {
         if (soundRef.current) {
+          // seek 시작 플래그 설정
+          isSeekingRef.current = true;
+          
           await soundRef.current.setPositionAsync(positionMillis);
           console.log('[DownloadsScreen] Seeked to:', positionMillis);
           
@@ -899,12 +937,19 @@ export default function DownloadsScreen({ navigation }) {
               status.isPlaying,
               canGoNext,
               canGoPrevious,
-              positionMillis,
-              status.durationMillis || 0
+              positionMillis, // seek한 위치 사용
+              status.durationMillis || 0,
+              true // seek 시 항상 알림 업데이트
             );
           }
+          
+          // seek 완료 후 약간의 딜레이를 두고 플래그 해제 (setOnPlaybackStatusUpdate가 잘못된 position으로 덮어쓰는 것 방지)
+          setTimeout(() => {
+            isSeekingRef.current = false;
+          }, 500);
         }
       } catch (error) {
+        isSeekingRef.current = false; // 오류 발생 시에도 플래그 해제
         console.error('[DownloadsScreen] Error seeking:', error);
       }
     };

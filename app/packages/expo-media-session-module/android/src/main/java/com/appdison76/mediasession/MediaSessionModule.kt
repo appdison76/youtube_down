@@ -164,7 +164,7 @@ class MediaSessionModule : Module() {
       }
     }
 
-    AsyncFunction("updatePlaybackState") { isPlaying: Boolean, canGoNext: Boolean, canGoPrevious: Boolean, position: Double?, duration: Double?, promise: Promise ->
+    AsyncFunction("updatePlaybackState") { isPlaying: Boolean, canGoNext: Boolean, canGoPrevious: Boolean, position: Double?, duration: Double?, shouldUpdateNotification: Boolean, promise: Promise ->
       try {
         val session = mediaSession ?: return@AsyncFunction promise.reject("NO_SESSION", "MediaSession not initialized", null)
         
@@ -185,7 +185,16 @@ class MediaSessionModule : Module() {
         // updateTime: position이 업데이트된 시점의 타임스탬프
         // 재생 중일 때: 시스템이 자동으로 position + (현재시간 - updateTime) * speed로 계산
         // 일시정지일 때: position이 고정됨 (speed = 0)
-        val updateTime = System.currentTimeMillis()
+        // 재생 중일 때는 updateTime을 현재시간 - position으로 설정하여 시스템이 자동으로 계산하도록 함
+        val updateTime = if (isPlaying && playbackPosition != PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN) {
+          // 재생 중: 시스템이 자동으로 position을 추적하도록 함
+          // updateTime = 현재시간 - position이면, 시스템이 position + (현재시간 - updateTime) * speed로 계산
+          // 이렇게 하면 시스템이 자동으로 트랙바를 업데이트함
+          System.currentTimeMillis() - playbackPosition
+        } else {
+          // 일시정지: position이 고정되므로 현재 시간 사용
+          System.currentTimeMillis()
+        }
         
         // 액션 설정
         var actions = PlaybackStateCompat.ACTION_PLAY or
@@ -206,7 +215,137 @@ class MediaSessionModule : Module() {
           .build()
         
         session.setPlaybackState(playbackState)
-        // MediaStyle 알림이 자동으로 PlaybackStateCompat를 읽어서 트랙바를 업데이트함 (수동 업데이트 불필요)
+        
+        // PlaybackStateCompat가 업데이트되면 트랙바는 자동으로 갱신됨
+        // 하지만 알림도 주기적으로 업데이트해야 트랙바가 제대로 표시됨
+        // shouldUpdateNotification이 true일 때만 알림을 업데이트 (throttling)
+        if (shouldUpdateNotification) {
+          try {
+          val manager = notificationManager
+          val context = appContext.reactContext
+          if (manager != null && context != null) {
+            val metadata = session.controller.metadata
+            val isPlayingState = state == PlaybackStateCompat.STATE_PLAYING
+            val actions = playbackState.actions
+            
+            val canShowPrevious = actions and PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS != 0L
+            val canShowNext = actions and PlaybackStateCompat.ACTION_SKIP_TO_NEXT != 0L
+            
+            // 알림 터치 시 앱을 열기 위한 Intent 생성
+            val intent = try {
+              Intent().apply {
+                setClassName(context.packageName, "com.appdison76.app.MainActivity")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                action = Intent.ACTION_MAIN
+                addCategory(Intent.CATEGORY_LAUNCHER)
+              }
+            } catch (e: Exception) {
+              context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+              } ?: Intent().apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+              }
+            }
+            val pendingIntent = PendingIntent.getActivity(
+              context,
+              NOTIFICATION_ID,
+              intent,
+              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+              } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+              }
+            )
+            
+            // MediaButtonReceiver를 위한 PendingIntent 생성 함수
+            fun buildMediaButtonPendingIntent(action: Long): PendingIntent {
+              val mediaButtonIntent = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
+                setClassName(context.packageName, "com.appdison76.app.MediaButtonReceiver")
+                putExtra(Intent.EXTRA_KEY_EVENT, android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, when (action) {
+                  PlaybackStateCompat.ACTION_PLAY_PAUSE -> android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+                  PlaybackStateCompat.ACTION_SKIP_TO_NEXT -> android.view.KeyEvent.KEYCODE_MEDIA_NEXT
+                  PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS -> android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS
+                  PlaybackStateCompat.ACTION_STOP -> android.view.KeyEvent.KEYCODE_MEDIA_STOP
+                  else -> android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+                }))
+              }
+              return PendingIntent.getBroadcast(
+                context,
+                action.toInt(),
+                mediaButtonIntent,
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                  PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                } else {
+                  PendingIntent.FLAG_UPDATE_CURRENT
+                }
+              )
+            }
+            
+            val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
+              .setSmallIcon(android.R.drawable.ic_media_play)
+              .setContentTitle(metadata?.getString(MediaMetadataCompat.METADATA_KEY_TITLE) ?: "재생 중")
+              .setContentText(metadata?.getString(MediaMetadataCompat.METADATA_KEY_ARTIST) ?: "MeTube")
+              .setLargeIcon(metadata?.getBitmap(MediaMetadataCompat.METADATA_KEY_ART))
+            
+            // 버튼을 조건부로 추가
+            var actionIndex = 0
+            val compactViewIndices = mutableListOf<Int>()
+            
+            if (canShowPrevious) {
+              notificationBuilder.addAction(
+                android.R.drawable.ic_media_previous,
+                "이전",
+                buildMediaButtonPendingIntent(PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS)
+              )
+              compactViewIndices.add(actionIndex)
+              actionIndex++
+            }
+            
+            val playPauseIndex = actionIndex
+            notificationBuilder.addAction(
+              if (isPlayingState) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
+              if (isPlayingState) "일시정지" else "재생",
+              buildMediaButtonPendingIntent(PlaybackStateCompat.ACTION_PLAY_PAUSE)
+            )
+            compactViewIndices.add(playPauseIndex)
+            actionIndex++
+            
+            if (canShowNext) {
+              notificationBuilder.addAction(
+                android.R.drawable.ic_media_next,
+                "다음",
+                buildMediaButtonPendingIntent(PlaybackStateCompat.ACTION_SKIP_TO_NEXT)
+              )
+              compactViewIndices.add(actionIndex)
+              actionIndex++
+            }
+            
+            val mediaStyle = MediaStyle()
+              .setMediaSession(session.sessionToken)
+            
+            when (compactViewIndices.size) {
+              1 -> mediaStyle.setShowActionsInCompactView(compactViewIndices[0])
+              2 -> mediaStyle.setShowActionsInCompactView(0, 1)
+              3 -> mediaStyle.setShowActionsInCompactView(0, 1, 2)
+            }
+            
+            notificationBuilder.setStyle(mediaStyle)
+            
+            val notification = notificationBuilder
+              .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+              .setContentIntent(pendingIntent)
+              .setOngoing(true)
+              .setAutoCancel(false)
+              .setSilent(true)
+              .build()
+            
+            manager.notify(NOTIFICATION_ID, notification)
+          }
+          } catch (e: Exception) {
+            // 알림 업데이트 실패해도 재생 상태는 업데이트되었으므로 계속 진행
+          }
+        }
+        
         promise.resolve(null)
       } catch (e: Exception) {
         promise.reject("UPDATE_ERROR", e.message, e)
