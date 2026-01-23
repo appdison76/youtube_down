@@ -61,6 +61,97 @@ console.log(`[Server] Will try player_clients in order: ${PLAYER_CLIENTS.join(' 
 app.use(cors());
 app.use(express.json());
 
+// IP 차단 테스트 엔드포인트
+app.get('/api/test-ip', async (req, res) => {
+  try {
+    console.log('[Server] ===== IP Block Test =====');
+    
+    // 간단한 YouTube URL로 테스트
+    const testUrl = 'https://www.youtube.com/watch?v=jNQXAC9IVRw'; // 짧은 테스트 영상
+    
+    const results = [];
+    
+    for (const playerClient of PLAYER_CLIENTS) {
+      try {
+        console.log(`[Server] Testing ${playerClient}...`);
+        const userAgent = getUserAgent(playerClient);
+        
+        // yt-dlp로 간단한 정보만 가져오기 (다운로드 없이)
+        const { exec } = require('child_process');
+        const { promisify } = require('util');
+        const execAsync = promisify(exec);
+        
+        const command = `python3 -m yt_dlp --dump-json --no-warnings --extractor-args "youtube:player_client=${playerClient}" --user-agent "${userAgent}" --no-check-certificate "${testUrl}"`;
+        
+        const startTime = Date.now();
+        try {
+          const { stdout } = await Promise.race([
+            execAsync(command, { timeout: 10000 }), // 10초 타임아웃
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 10000))
+          ]);
+          
+          const duration = Date.now() - startTime;
+          results.push({
+            client: playerClient,
+            status: 'success',
+            duration: `${duration}ms`,
+            hasTitle: stdout.includes('"title"')
+          });
+          console.log(`[Server] ✅ ${playerClient}: Success (${duration}ms)`);
+        } catch (error) {
+          const duration = Date.now() - startTime;
+          const errorMsg = error.message || error.stderr || String(error);
+          const isBotError = errorMsg.includes('bot') || errorMsg.includes('Sign in');
+          
+          results.push({
+            client: playerClient,
+            status: isBotError ? 'bot_detected' : 'error',
+            duration: `${duration}ms`,
+            error: errorMsg.substring(0, 200) // 처음 200자만
+          });
+          console.log(`[Server] ❌ ${playerClient}: ${isBotError ? 'Bot detected' : 'Error'} (${duration}ms)`);
+        }
+      } catch (error) {
+        results.push({
+          client: playerClient,
+          status: 'error',
+          error: error.message
+        });
+      }
+    }
+    
+    // 결과 요약
+    const successCount = results.filter(r => r.status === 'success').length;
+    const botDetectedCount = results.filter(r => r.status === 'bot_detected').length;
+    const errorCount = results.filter(r => r.status === 'error').length;
+    
+    const summary = {
+      total: PLAYER_CLIENTS.length,
+      success: successCount,
+      botDetected: botDetectedCount,
+      errors: errorCount,
+      isBlocked: botDetectedCount === PLAYER_CLIENTS.length, // 모든 client가 봇 감지되면 IP 차단 가능성
+      results: results
+    };
+    
+    console.log('[Server] Test Summary:', summary);
+    
+    res.json({
+      message: 'IP 차단 테스트 완료',
+      summary: summary,
+      recommendation: summary.isBlocked 
+        ? '모든 player_client가 봇 감지되었습니다. IP가 차단되었을 가능성이 높습니다. 몇 시간 후 다시 시도하거나 다른 서버를 사용하세요.'
+        : successCount > 0 
+        ? `${successCount}개의 player_client가 작동합니다.`
+        : '일부 player_client는 작동하지만 모두 실패했습니다.'
+    });
+    
+  } catch (error) {
+    console.error('[Server] Error in IP test:', error);
+    res.status(500).json({ error: '테스트 중 오류가 발생했습니다.', details: error.message });
+  }
+});
+
 // 다운로드 디렉토리 생성
 const DOWNLOAD_DIR = path.join(__dirname, 'downloads');
 if (!fs.existsSync(DOWNLOAD_DIR)) {
@@ -84,10 +175,33 @@ app.post('/api/video-info', async (req, res) => {
     console.log('[Server] Getting video info for:', url);
     
     // yt-dlp를 사용하여 영상 정보 가져오기
-    // YouTube 봇 감지 우회를 위한 옵션 추가 (환경 변수로 설정 가능)
-    const userAgent = getUserAgent(YOUTUBE_PLAYER_CLIENT);
-    const { stdout } = await execAsync(`python3 -m yt_dlp --dump-json --no-warnings --extractor-args "youtube:player_client=${YOUTUBE_PLAYER_CLIENT}" --user-agent "${userAgent}" "${url}"`);
-    const info = JSON.parse(stdout);
+    // 여러 player_client를 시도하여 정보 가져오기
+    let info = null;
+    let lastError = null;
+    
+    for (const playerClient of PLAYER_CLIENTS) {
+      try {
+        console.log(`[Server] Trying to get video info with ${playerClient}...`);
+        const userAgent = getUserAgent(playerClient);
+        const { stdout } = await execAsync(`python3 -m yt_dlp --dump-json --no-warnings --extractor-args "youtube:player_client=${playerClient}" --user-agent "${userAgent}" "${url}"`);
+        info = JSON.parse(stdout);
+        console.log(`[Server] ✅ Successfully got video info with ${playerClient}`);
+        break; // 성공하면 중단
+      } catch (error) {
+        const errorMsg = error.message || error.stderr || String(error);
+        console.log(`[Server] ❌ Failed with ${playerClient}: ${errorMsg.substring(0, 100)}`);
+        lastError = error;
+        
+        // 봇 감지 에러가 아니면 계속 시도
+        if (!errorMsg.includes('bot') && !errorMsg.includes('Sign in')) {
+          continue;
+        }
+      }
+    }
+    
+    if (!info) {
+      throw lastError || new Error('모든 player_client로 정보를 가져올 수 없습니다.');
+    }
     
     // 파일 크기 정보 추출 (filesize, filesize_approx, filesize_estimate 순으로 시도)
     const filesize = info.filesize || info.filesize_approx || info.filesize_estimate || null;
