@@ -407,6 +407,35 @@ app.get('/api/download/video', async (req, res) => {
               return;
             }
             
+            // 비디오 사용 불가 오류 확인
+            if (message.includes('This video is unavailable') || 
+                message.includes('video is unavailable') ||
+                message.includes('Video unavailable')) {
+              console.error(`[Server] ❌ ${playerClient} failed: Video unavailable`);
+              hasBotError = true;
+              if (!processKilled) {
+                processKilled = true;
+                ytdlpProcess.kill('SIGTERM');
+              }
+              ytdlpProcess.stderr.removeListener('data', stderrHandler);
+              resolve({ error: 'video_unavailable', client: playerClient });
+              return;
+            }
+            
+            // 포맷을 찾을 수 없음 오류 확인
+            if (message.includes('No video formats found') || 
+                message.includes('No formats found')) {
+              console.error(`[Server] ❌ ${playerClient} failed: No formats found`);
+              hasBotError = true;
+              if (!processKilled) {
+                processKilled = true;
+                ytdlpProcess.kill('SIGTERM');
+              }
+              ytdlpProcess.stderr.removeListener('data', stderrHandler);
+              resolve({ error: 'no_formats_found', client: playerClient });
+              return;
+            }
+            
             // 일반 로그
             if (message.includes('[download]') || message.includes('[info]')) {
               console.log(`[Server] yt-dlp (${playerClient}):`, message.trim());
@@ -657,6 +686,35 @@ app.get('/api/download/audio', async (req, res) => {
               }
               ytdlpProcess.stderr.removeListener('data', stderrHandler);
               resolve({ error: 'format_not_available', client: playerClient });
+              return;
+            }
+            
+            // 비디오 사용 불가 오류 확인
+            if (message.includes('This video is unavailable') || 
+                message.includes('video is unavailable') ||
+                message.includes('Video unavailable')) {
+              console.error(`[Server] ❌ ${playerClient} failed: Video unavailable`);
+              hasBotError = true;
+              if (!processKilled) {
+                processKilled = true;
+                ytdlpProcess.kill('SIGTERM');
+              }
+              ytdlpProcess.stderr.removeListener('data', stderrHandler);
+              resolve({ error: 'video_unavailable', client: playerClient });
+              return;
+            }
+            
+            // 포맷을 찾을 수 없음 오류 확인
+            if (message.includes('No video formats found') || 
+                message.includes('No formats found')) {
+              console.error(`[Server] ❌ ${playerClient} failed: No formats found`);
+              hasBotError = true;
+              if (!processKilled) {
+                processKilled = true;
+                ytdlpProcess.kill('SIGTERM');
+              }
+              ytdlpProcess.stderr.removeListener('data', stderrHandler);
+              resolve({ error: 'no_formats_found', client: playerClient });
               return;
             }
             
