@@ -77,18 +77,57 @@ app.get('/api/test-ip', async (req, res) => {
         const userAgent = getUserAgent(playerClient);
         
         // yt-dlp로 간단한 정보만 가져오기 (다운로드 없이)
-        const { exec } = require('child_process');
-        const { promisify } = require('util');
-        const execAsync = promisify(exec);
-        
-        const command = `python3 -m yt_dlp --dump-json --no-warnings --extractor-args "youtube:player_client=${playerClient}" --user-agent "${userAgent}" --no-check-certificate "${testUrl}"`;
+        // spawn을 사용하여 인자를 안전하게 전달
+        const { spawn } = require('child_process');
         
         const startTime = Date.now();
+        let stdout = '';
+        let stderr = '';
+        
         try {
-          const { stdout } = await Promise.race([
-            execAsync(command, { timeout: 10000 }), // 10초 타임아웃
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 10000))
-          ]);
+          const ytdlpProcess = spawn('python3', [
+            '-m', 'yt_dlp',
+            '--dump-json',
+            '--no-warnings',
+            '--extractor-args', `youtube:player_client=${playerClient}`,
+            '--user-agent', userAgent,
+            '--no-check-certificate',
+            testUrl
+          ], {
+            stdio: ['ignore', 'pipe', 'pipe']
+          });
+          
+          // stdout 수집
+          ytdlpProcess.stdout.on('data', (data) => {
+            stdout += data.toString();
+          });
+          
+          // stderr 수집
+          ytdlpProcess.stderr.on('data', (data) => {
+            stderr += data.toString();
+          });
+          
+          // 프로세스 완료 대기
+          await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+              ytdlpProcess.kill('SIGTERM');
+              reject(new Error('Timeout'));
+            }, 10000);
+            
+            ytdlpProcess.on('close', (code) => {
+              clearTimeout(timeout);
+              if (code === 0) {
+                resolve();
+              } else {
+                reject(new Error(`Process exited with code ${code}: ${stderr}`));
+              }
+            });
+            
+            ytdlpProcess.on('error', (error) => {
+              clearTimeout(timeout);
+              reject(error);
+            });
+          });
           
           const duration = Date.now() - startTime;
           results.push({
@@ -100,7 +139,7 @@ app.get('/api/test-ip', async (req, res) => {
           console.log(`[Server] ✅ ${playerClient}: Success (${duration}ms)`);
         } catch (error) {
           const duration = Date.now() - startTime;
-          const errorMsg = error.message || error.stderr || String(error);
+          const errorMsg = error.message || stderr || String(error);
           const isBotError = errorMsg.includes('bot') || errorMsg.includes('Sign in');
           
           results.push({
