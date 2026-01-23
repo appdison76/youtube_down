@@ -370,6 +370,8 @@ app.get('/api/download/video', async (req, res) => {
         let isWaitingForDrain = false;
         let hasBotError = false;
         let processKilled = false;
+        let startTimeout = null;
+        let startResolve = null;
         
         // MaxListeners 경고 방지
         res.setMaxListeners(20);
@@ -378,6 +380,18 @@ app.get('/api/download/video', async (req, res) => {
         const botErrorPromise = new Promise((resolve) => {
           const stderrHandler = (data) => {
             const message = data.toString();
+            
+            // 다운로드 시작 감지 - [download] 메시지가 나오면 시작된 것으로 간주
+            if (message.includes('[download]') && !hasStarted && !hasBotError && startResolve) {
+              hasStarted = true;
+              if (startTimeout) {
+                clearTimeout(startTimeout);
+              }
+              if (!res.headersSent) {
+                res.writeHead(200);
+              }
+              startResolve({ success: true, client: playerClient });
+            }
             
             // 봇 감지 에러 확인
             if (message.includes('Sign in to confirm you\'re not a bot') || 
@@ -451,8 +465,9 @@ app.get('/api/download/video', async (req, res) => {
         
         // 성공적으로 시작되었는지 확인하기 위한 Promise
         const startPromise = new Promise((resolve) => {
+          startResolve = resolve;
           let resolved = false;
-          const timeout = setTimeout(() => {
+          startTimeout = setTimeout(() => {
             if (!hasStarted && !hasBotError && !resolved) {
               console.log(`[Server] ⚠️ ${playerClient} did not start within 5 seconds`);
               if (!processKilled) {
@@ -469,7 +484,9 @@ app.get('/api/download/video', async (req, res) => {
               if (!res.headersSent) {
                 res.writeHead(200);
                 hasStarted = true;
-                clearTimeout(timeout);
+                if (startTimeout) {
+                  clearTimeout(startTimeout);
+                }
                 resolved = true;
                 resolve({ success: true, client: playerClient });
               }
@@ -499,7 +516,9 @@ app.get('/api/download/video', async (req, res) => {
               res.end();
             }
             console.log(`[Server] ✅ Video stream completed with ${playerClient}`);
-            clearTimeout(timeout);
+            if (startTimeout) {
+              clearTimeout(startTimeout);
+            }
             if (!resolved) {
               resolved = true;
               resolve({ success: true, completed: true, client: playerClient });
@@ -652,6 +671,8 @@ app.get('/api/download/audio', async (req, res) => {
         let isWaitingForDrain = false;
         let hasBotError = false;
         let processKilled = false;
+        let startTimeout = null;
+        let startResolve = null;
         
         // MaxListeners 경고 방지
         res.setMaxListeners(20);
@@ -660,6 +681,18 @@ app.get('/api/download/audio', async (req, res) => {
         const botErrorPromise = new Promise((resolve) => {
           const stderrHandler = (data) => {
             const message = data.toString();
+            
+            // 다운로드 시작 감지 - [download] 메시지가 나오면 시작된 것으로 간주
+            if (message.includes('[download]') && !hasStarted && !hasBotError && startResolve) {
+              hasStarted = true;
+              if (startTimeout) {
+                clearTimeout(startTimeout);
+              }
+              if (!res.headersSent) {
+                res.writeHead(200);
+              }
+              startResolve({ success: true, client: playerClient });
+            }
             
             // 봇 감지 에러 확인
             if (message.includes('Sign in to confirm you\'re not a bot') || 
@@ -733,8 +766,9 @@ app.get('/api/download/audio', async (req, res) => {
         
         // 성공적으로 시작되었는지 확인하기 위한 Promise
         const startPromise = new Promise((resolve) => {
+          startResolve = resolve;
           let resolved = false;
-          const timeout = setTimeout(() => {
+          startTimeout = setTimeout(() => {
             if (!hasStarted && !hasBotError && !resolved) {
               console.log(`[Server] ⚠️ ${playerClient} did not start within 5 seconds`);
               if (!processKilled) {
@@ -751,7 +785,9 @@ app.get('/api/download/audio', async (req, res) => {
               if (!res.headersSent) {
                 res.writeHead(200);
                 hasStarted = true;
-                clearTimeout(timeout);
+                if (startTimeout) {
+                  clearTimeout(startTimeout);
+                }
                 resolved = true;
                 resolve({ success: true, client: playerClient });
               }
@@ -781,7 +817,9 @@ app.get('/api/download/audio', async (req, res) => {
               res.end();
             }
             console.log(`[Server] ✅ Audio stream completed with ${playerClient}`);
-            clearTimeout(timeout);
+            if (startTimeout) {
+              clearTimeout(startTimeout);
+            }
             if (!resolved) {
               resolved = true;
               resolve({ success: true, completed: true, client: playerClient });
