@@ -19,8 +19,8 @@ const PLAYER_CLIENTS = [
   'android', 
   'mweb',           // 모바일 웹
   'tv_embedded', 
-  'web_embedded',
-  'android_embedded' // Android 임베디드
+  'web_embedded'
+  // 'android_embedded' 제거: 403 Forbidden 오류가 자주 발생
 ];
 
 // 배열을 랜덤하게 섞는 함수 (Fisher-Yates 알고리즘)
@@ -48,8 +48,7 @@ const getUserAgent = (client) => {
       return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
     case 'mweb':
       return 'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
-    case 'android_embedded':
-      return 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+    // 'android_embedded' 제거됨: 403 Forbidden 오류가 자주 발생
     default:
       return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
   }
@@ -372,6 +371,8 @@ app.get('/api/download/video', async (req, res) => {
         let processKilled = false;
         let startTimeout = null;
         let startResolve = null;
+        let fragmentFailureCount = 0;
+        const MAX_FRAGMENT_FAILURES = 10; // 10개 이상 프래그먼트 실패 시 다른 클라이언트로 전환
         
         // MaxListeners 경고 방지
         res.setMaxListeners(20);
@@ -391,6 +392,27 @@ app.get('/api/download/video', async (req, res) => {
                 res.writeHead(200);
               }
               startResolve({ success: true, client: playerClient });
+            }
+            
+            // 프래그먼트 실패 감지 (403 Forbidden 등)
+            if (message.includes('fragment not found') || 
+                (message.includes('Got error') && message.includes('403')) ||
+                (message.includes('HTTP Error 403'))) {
+              fragmentFailureCount++;
+              console.warn(`[Server] ⚠️ ${playerClient} fragment failure count: ${fragmentFailureCount}`);
+              
+              // 너무 많은 프래그먼트 실패 시 다른 클라이언트로 전환
+              if (fragmentFailureCount >= MAX_FRAGMENT_FAILURES && !hasBotError) {
+                console.error(`[Server] ❌ ${playerClient} failed: Too many fragment failures (${fragmentFailureCount})`);
+                hasBotError = true;
+                if (!processKilled) {
+                  processKilled = true;
+                  ytdlpProcess.kill('SIGTERM');
+                }
+                ytdlpProcess.stderr.removeListener('data', stderrHandler);
+                resolve({ error: 'too_many_fragment_failures', client: playerClient });
+                return;
+              }
             }
             
             // 봇 감지 에러 확인
@@ -673,6 +695,8 @@ app.get('/api/download/audio', async (req, res) => {
         let processKilled = false;
         let startTimeout = null;
         let startResolve = null;
+        let fragmentFailureCount = 0;
+        const MAX_FRAGMENT_FAILURES = 10; // 10개 이상 프래그먼트 실패 시 다른 클라이언트로 전환
         
         // MaxListeners 경고 방지
         res.setMaxListeners(20);
@@ -692,6 +716,27 @@ app.get('/api/download/audio', async (req, res) => {
                 res.writeHead(200);
               }
               startResolve({ success: true, client: playerClient });
+            }
+            
+            // 프래그먼트 실패 감지 (403 Forbidden 등)
+            if (message.includes('fragment not found') || 
+                (message.includes('Got error') && message.includes('403')) ||
+                (message.includes('HTTP Error 403'))) {
+              fragmentFailureCount++;
+              console.warn(`[Server] ⚠️ ${playerClient} fragment failure count: ${fragmentFailureCount}`);
+              
+              // 너무 많은 프래그먼트 실패 시 다른 클라이언트로 전환
+              if (fragmentFailureCount >= MAX_FRAGMENT_FAILURES && !hasBotError) {
+                console.error(`[Server] ❌ ${playerClient} failed: Too many fragment failures (${fragmentFailureCount})`);
+                hasBotError = true;
+                if (!processKilled) {
+                  processKilled = true;
+                  ytdlpProcess.kill('SIGTERM');
+                }
+                ytdlpProcess.stderr.removeListener('data', stderrHandler);
+                resolve({ error: 'too_many_fragment_failures', client: playerClient });
+                return;
+              }
             }
             
             // 봇 감지 에러 확인
