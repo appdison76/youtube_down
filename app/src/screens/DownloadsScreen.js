@@ -443,12 +443,14 @@ export default function DownloadsScreen({ navigation }) {
           
           try {
             // PlaybackStateCompat는 항상 업데이트되므로 트랙바가 자동으로 갱신됨
-            // 하지만 알림도 주기적으로 업데이트해야 트랙바가 제대로 표시됨
-            // 재생 중일 때는 더 자주 업데이트 (0.3초마다)
+            // 재생 중일 때는 position이 자주 업데이트되어야 트랙바가 부드럽게 진행됨
+            // 알림도 주기적으로 업데이트해야 트랙바가 제대로 표시됨
+            // 재생 중일 때는 더 자주 업데이트 (0.2초마다)하여 트랙바가 부드럽게 진행되도록 함
             const now = Date.now();
-            const updateInterval = status.isPlaying ? 300 : 500; // 재생 중: 0.3초, 일시정지: 0.5초
+            const updateInterval = status.isPlaying ? 200 : 500; // 재생 중: 0.2초, 일시정지: 0.5초
             const shouldUpdateNotification = now - lastNotificationUpdateRef.current >= updateInterval;
             
+            // 재생 중일 때는 PlaybackStateCompat를 항상 업데이트하여 트랙바가 진행되도록 함
             await mediaSessionService.updatePlaybackState(
               status.isPlaying,
               canGoNext,

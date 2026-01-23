@@ -185,16 +185,9 @@ class MediaSessionModule : Module() {
         // updateTime: position이 업데이트된 시점의 타임스탬프
         // 재생 중일 때: 시스템이 자동으로 position + (현재시간 - updateTime) * speed로 계산
         // 일시정지일 때: position이 고정됨 (speed = 0)
-        // 재생 중일 때는 updateTime을 현재시간 - position으로 설정하여 시스템이 자동으로 계산하도록 함
-        val updateTime = if (isPlaying && playbackPosition != PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN) {
-          // 재생 중: 시스템이 자동으로 position을 추적하도록 함
-          // updateTime = 현재시간 - position이면, 시스템이 position + (현재시간 - updateTime) * speed로 계산
-          // 이렇게 하면 시스템이 자동으로 트랙바를 업데이트함
-          System.currentTimeMillis() - playbackPosition
-        } else {
-          // 일시정지: position이 고정되므로 현재 시간 사용
-          System.currentTimeMillis()
-        }
+        // 재생 중일 때는 updateTime을 현재 시간으로 설정하고, position을 자주 업데이트하면
+        // 시스템이 자동으로 position + (현재시간 - updateTime) * speed로 계산하여 트랙바를 업데이트함
+        val updateTime = System.currentTimeMillis()
         
         // 액션 설정
         var actions = PlaybackStateCompat.ACTION_PLAY or
