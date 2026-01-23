@@ -12,7 +12,16 @@ const PORT = process.env.PORT || 3000;
 
 // 여러 player_client를 순차적으로 시도 (봇 감지 우회)
 // 매 요청마다 랜덤 순서로 시도하여 패턴 감지 방지
-const PLAYER_CLIENTS = ['web', 'ios', 'android', 'tv_embedded', 'web_embedded'];
+// 더 많은 옵션을 추가하여 차단 확률 감소
+const PLAYER_CLIENTS = [
+  'web', 
+  'ios', 
+  'android', 
+  'mweb',           // 모바일 웹
+  'tv_embedded', 
+  'web_embedded',
+  'android_embedded' // Android 임베디드
+];
 
 // 배열을 랜덤하게 섞는 함수 (Fisher-Yates 알고리즘)
 const shuffleArray = (array) => {
@@ -37,6 +46,10 @@ const getUserAgent = (client) => {
       return 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
     case 'web_embedded':
       return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+    case 'mweb':
+      return 'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
+    case 'android_embedded':
+      return 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
     default:
       return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
   }
@@ -276,9 +289,14 @@ app.get('/api/download/video', async (req, res) => {
         const result = await Promise.race([botErrorPromise, startPromise]);
         
         if (result.error) {
-          // 에러 발생 - 다음 client로 시도
+          // 에러 발생 - 다음 client로 시도 (짧은 지연 후)
           console.log(`[Server] ⚠️ ${playerClient} failed, trying next client...`);
           lastError = new Error(`Failed with ${playerClient}: ${result.error}`);
+          
+          // 다음 client로 전환하기 전에 짧은 지연 (패턴 감지 방지)
+          if (triedClients.length < shuffledClients.length) {
+            await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 500)); // 0.5~1초 랜덤 지연
+          }
           continue;
         }
         
@@ -524,9 +542,14 @@ app.get('/api/download/audio', async (req, res) => {
         const result = await Promise.race([botErrorPromise, startPromise]);
         
         if (result.error) {
-          // 에러 발생 - 다음 client로 시도
+          // 에러 발생 - 다음 client로 시도 (짧은 지연 후)
           console.log(`[Server] ⚠️ ${playerClient} failed, trying next client...`);
           lastError = new Error(`Failed with ${playerClient}: ${result.error}`);
+          
+          // 다음 client로 전환하기 전에 짧은 지연 (패턴 감지 방지)
+          if (triedClients.length < shuffledClients.length) {
+            await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 500)); // 0.5~1초 랜덤 지연
+          }
           continue;
         }
         
