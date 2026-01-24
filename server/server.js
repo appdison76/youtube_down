@@ -327,6 +327,9 @@ app.get('/api/download/video', async (req, res) => {
 
     console.log('[Server] Downloading video:', url, 'quality:', quality);
 
+    // 다운로드 시작 전 짧은 지연 (패턴 감지 방지)
+    await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 500));
+
     // 헤더 설정
     res.setHeader('Content-Disposition', 'attachment; filename="video.mp4"');
     res.setHeader('Content-Type', 'video/mp4');
@@ -359,6 +362,7 @@ app.get('/api/download/video', async (req, res) => {
           '--socket-timeout', '30',
           '--http-chunk-size', '10M',
           '--concurrent-fragments', '1',
+          '--throttled-rate', '1M',
           '--user-agent', userAgent,
           '--referer', 'https://www.youtube.com/',
           '--no-check-certificate',
@@ -656,6 +660,9 @@ app.get('/api/download/audio', async (req, res) => {
 
     console.log('[Server] Downloading audio:', url, 'quality:', quality);
 
+    // 다운로드 시작 전 짧은 지연 (패턴 감지 방지)
+    await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 500));
+
     // 헤더 설정
     res.setHeader('Content-Disposition', 'attachment; filename="audio.m4a"');
     res.setHeader('Content-Type', 'audio/mp4');
@@ -700,6 +707,7 @@ app.get('/api/download/audio', async (req, res) => {
           '--socket-timeout', '30',
           '--http-chunk-size', '10M',
           '--concurrent-fragments', '1',
+          '--throttled-rate', '1M',
           '--user-agent', userAgent,
           '--referer', 'https://www.youtube.com/',
           '--no-check-certificate',

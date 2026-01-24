@@ -9,8 +9,9 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# yt-dlp 최신 버전 설치 및 업데이트 (강제 재설치로 최신 버전 보장)
+# yt-dlp 최신 버전 설치 및 업데이트 (nightly 빌드 사용 - 최신 YouTube 변경사항 대응)
 RUN pip3 install --no-cache-dir --upgrade pip && \
+    pip3 install --no-cache-dir --upgrade --force-reinstall https://github.com/yt-dlp/yt-dlp/archive/master.tar.gz || \
     pip3 install --no-cache-dir --upgrade --force-reinstall yt-dlp
 
 # 작업 디렉토리 설정
