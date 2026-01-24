@@ -316,12 +316,6 @@ export default function DownloadsScreen({ navigation }) {
 
   // ✅ 오디오 파일 재생
   const playAudioFile = async (file, index) => {
-    // 이미 재생 중이면 무시 (race condition 방지)
-    if (isPlayingRef.current) {
-      console.log('[DownloadsScreen] Already playing, ignoring request');
-      return;
-    }
-    
     const previousFileIndex = currentIndex;
     const previousFile = playlist[previousFileIndex];
     
@@ -357,12 +351,17 @@ export default function DownloadsScreen({ navigation }) {
         throw new Error('File not found');
       }
 
-      // 기존 sound 정리
+      // 기존 sound 정리 (곡 변경 시 기존 재생 중지)
       if (soundRef.current) {
         try {
           await soundRef.current.unloadAsync();
+          soundRef.current = null;
+          isPlayingRef.current = false;
+          setIsPlaying(false);
+          console.log('[DownloadsScreen] Stopped previous playback for track change');
         } catch (unloadError) {
           console.warn('[DownloadsScreen] Error unloading previous sound:', unloadError);
+          // 계속 진행 (새 곡 재생 시도)
         }
       }
       
@@ -614,12 +613,6 @@ export default function DownloadsScreen({ navigation }) {
 
   // ✅ 다음 곡
   const handleNext = async () => {
-    // 재생 중이면 무시 (race condition 방지) - 기존 방식 사용
-    if (isPlayingRef.current) {
-      console.log('[DownloadsScreen] handleNext: Already playing, ignoring');
-      return;
-    }
-    
     // ref에서 최신 값 가져오기 (백그라운드에서도 접근 가능)
     const currentPlaylist = playlistRef.current.length > 0 ? playlistRef.current : playlist;
     const currentFileIndex = currentIndexRef.current >= 0 ? currentIndexRef.current : currentIndex;
@@ -757,12 +750,6 @@ export default function DownloadsScreen({ navigation }) {
 
   // ✅ 이전 곡
   const handlePrevious = async () => {
-    // 재생 중이면 무시 (race condition 방지) - 기존 방식 사용
-    if (isPlayingRef.current) {
-      console.log('[DownloadsScreen] handlePrevious: Already playing, ignoring');
-      return;
-    }
-    
     // ref에서 최신 값 가져오기
     const currentPlaylist = playlistRef.current.length > 0 ? playlistRef.current : playlist;
     const currentFileIndex = currentIndexRef.current >= 0 ? currentIndexRef.current : currentIndex;
