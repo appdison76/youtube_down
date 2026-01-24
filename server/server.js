@@ -10,6 +10,24 @@ const execAsync = promisify(exec);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// 프록시 설정 (환경 변수에서 읽기)
+// 예: PROXY_URL=http://proxy.example.com:8080 또는 PROXY_URL=socks5://proxy.example.com:1080
+const PROXY_URL = process.env.PROXY_URL || process.env.YTDLP_PROXY || null;
+
+if (PROXY_URL) {
+  console.log(`[Server] 프록시 사용: ${PROXY_URL}`);
+} else {
+  console.log('[Server] 프록시 미사용 (직접 연결)');
+}
+
+// yt-dlp 인자 배열에 프록시 옵션 추가하는 헬퍼 함수
+const addProxyArgs = (args) => {
+  if (PROXY_URL) {
+    args.push('--proxy', PROXY_URL);
+  }
+  return args;
+};
+
 // 여러 player_client를 순차적으로 시도 (봇 감지 우회)
 // 매 요청마다 랜덤 순서로 시도하여 패턴 감지 방지
 // 더 많은 옵션을 추가하여 차단 확률 감소
@@ -78,7 +96,7 @@ app.get('/api/test-ip', async (req, res) => {
         let stderr = '';
         
         try {
-          const ytdlpProcess = spawn('python3', [
+          const args = [
             '-m', 'yt_dlp',
             '--dump-json',
             '--no-warnings',
@@ -89,7 +107,9 @@ app.get('/api/test-ip', async (req, res) => {
             '--fragment-retries', '3',
             '--socket-timeout', '30',
             testUrl
-          ], {
+          ];
+          addProxyArgs(args);
+          const ytdlpProcess = spawn('python3', args, {
             stdio: ['ignore', 'pipe', 'pipe']
           });
           
@@ -231,7 +251,7 @@ app.post('/api/video-info', async (req, res) => {
         let stdout = '';
         let stderr = '';
         
-        const ytdlpProcess = spawn('python3', [
+        const args = [
           '-m', 'yt_dlp',
           '--dump-json',
           '--no-warnings',
@@ -242,7 +262,9 @@ app.post('/api/video-info', async (req, res) => {
           '--fragment-retries', '3',
           '--socket-timeout', '30',
           url
-        ], {
+        ];
+        addProxyArgs(args);
+        const ytdlpProcess = spawn('python3', args, {
           stdio: ['ignore', 'pipe', 'pipe']
         });
         
@@ -350,7 +372,7 @@ app.get('/api/download/video', async (req, res) => {
       
       try {
         const userAgent = getUserAgent(playerClient);
-        const ytdlpProcess = spawn('python3', [
+        const args = [
           '-m', 'yt_dlp',
           '-f', 'best/bestvideo+bestaudio',
           '--merge-output-format', 'mp4',
@@ -368,7 +390,9 @@ app.get('/api/download/video', async (req, res) => {
           '--no-check-certificate',
           '-o', '-',
           url
-        ], {
+        ];
+        addProxyArgs(args);
+        const ytdlpProcess = spawn('python3', args, {
           stdio: ['ignore', 'pipe', 'pipe']
         });
         
@@ -696,7 +720,7 @@ app.get('/api/download/audio', async (req, res) => {
       
       try {
         const userAgent = getUserAgent(playerClient);
-        const ytdlpProcess = spawn('python3', [
+        const args = [
           '-m', 'yt_dlp',
           '-f', formatSelector,
           '--no-warnings',
@@ -714,7 +738,9 @@ app.get('/api/download/audio', async (req, res) => {
           '--no-playlist',
           '-o', '-',
           url
-        ], {
+        ];
+        addProxyArgs(args);
+        const ytdlpProcess = spawn('python3', args, {
           stdio: ['ignore', 'pipe', 'pipe']
         });
         
