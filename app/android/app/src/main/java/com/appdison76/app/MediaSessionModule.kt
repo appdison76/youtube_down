@@ -7,12 +7,16 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.PorterDuff
 import android.os.Build
 import android.os.SystemClock
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.IconCompat
 import androidx.media.app.NotificationCompat.MediaStyle
 import com.appdison76.app.MediaButtonReceiver
 import com.facebook.react.bridge.ReactApplicationContext
@@ -49,6 +53,25 @@ class MediaSessionModule(reactContext: ReactApplicationContext) : ReactContextBa
 
   override fun getName(): String {
     return "MediaSessionModule"
+  }
+
+  // 재미나이 조언: 투명도 조절 및 회색 필터 적용 유틸리티 함수
+  private fun getTransparentIcon(context: Context, resourceId: Int, alpha: Int): IconCompat {
+    val drawable = ContextCompat.getDrawable(context, resourceId)?.mutate() ?: 
+        return IconCompat.createWithResource(context, resourceId)
+    
+    val width = drawable.intrinsicWidth.coerceAtLeast(1)
+    val height = drawable.intrinsicHeight.coerceAtLeast(1)
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    
+    drawable.setBounds(0, 0, width, height)
+    drawable.alpha = alpha
+    // 회색 필터를 입혀서 시스템이 마음대로 밝게 만드는 것을 방지
+    drawable.setColorFilter(android.graphics.Color.GRAY, PorterDuff.Mode.SRC_IN)
+    drawable.draw(canvas)
+    
+    return IconCompat.createWithBitmap(bitmap)
   }
 
   @ReactMethod
@@ -335,79 +358,75 @@ class MediaSessionModule(reactContext: ReactApplicationContext) : ReactContextBa
       
       android.util.Log.d("MediaSessionModule", "showNotification: isPlaying=$isPlaying, canShowNext=$canShowNext, canShowPrevious=$canShowPrevious, actions=$actions")
       
+      // 재미나이 조언: 아무것도 안 하는 Intent 생성 (위치 고정용)
+      val dummyIntent = PendingIntent.getBroadcast(
+        context, 100, Intent("DUMMY_ACTION"), 
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+      )
+      
       val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
         .setSmallIcon(android.R.drawable.ic_media_play)
         .setContentTitle(metadata?.getString(MediaMetadataCompat.METADATA_KEY_TITLE) ?: "재생 중")
         .setContentText(metadata?.getString(MediaMetadataCompat.METADATA_KEY_ARTIST) ?: "MeTube")
         .setLargeIcon(metadata?.getBitmap(MediaMetadataCompat.METADATA_KEY_ART))
       
-      // 버튼을 조건부로 추가하되, 재생/일시정지 버튼이 항상 중앙에 오도록 정렬
-      var actionIndex = 0
-      val compactViewIndices = mutableListOf<Int>()
+      // 재미나이 조언: 항상 3개의 버튼을 추가하되, 비활성화된 버튼은 시각적으로 비활성화
+      // 플레이 버튼을 항상 가운데(인덱스 1)에 고정하기 위해
       
-      // 이전 버튼 (조건부)
-      if (canShowPrevious) {
-        android.util.Log.d("MediaSessionModule", "Adding previous button at index $actionIndex")
-        notificationBuilder.addAction(
-          android.R.drawable.ic_media_previous,
-          "이전",
-          MediaButtonReceiver.buildMediaButtonPendingIntent(context, PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS)
-        )
-        compactViewIndices.add(actionIndex)
-        actionIndex++
+      // 1. 이전 버튼 (항상 추가, 비활성화 시 시각적으로 비활성화)
+      android.util.Log.d("MediaSessionModule", "Adding previous button at index 0, canShowPrevious=$canShowPrevious")
+      val prevIcon = if (canShowPrevious) {
+        // 활성 상태: 100% 불투명 (255)
+        IconCompat.createWithResource(context, android.R.drawable.ic_media_previous)
+      } else {
+        // 비활성 상태: 약 30% 투명도 (80) 및 회색 필터 적용
+        getTransparentIcon(context, android.R.drawable.ic_media_previous, 80)
       }
+      val prevAction = NotificationCompat.Action.Builder(
+        prevIcon,
+        "이전",
+        if (canShowPrevious) {
+          MediaButtonReceiver.buildMediaButtonPendingIntent(context, PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS)
+        } else {
+          dummyIntent  // null 대신 dummy (위치 고정용)
+        }
+      ).build()
+      notificationBuilder.addAction(prevAction)
       
-      // 재생/일시정지 버튼 (항상 중앙에 위치)
-      val playPauseIndex = actionIndex
-      android.util.Log.d("MediaSessionModule", "Adding play/pause button at index $playPauseIndex, isPlaying=$isPlaying")
+      // 2. 재생/일시정지 버튼 (항상 중앙 - Index 1)
+      android.util.Log.d("MediaSessionModule", "Adding play/pause button at index 1, isPlaying=$isPlaying")
       notificationBuilder.addAction(
         if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
         if (isPlaying) "일시정지" else "재생",
         MediaButtonReceiver.buildMediaButtonPendingIntent(context, PlaybackStateCompat.ACTION_PLAY_PAUSE)
       )
-      compactViewIndices.add(playPauseIndex)
-      actionIndex++
       
-      // 다음 버튼 (조건부)
-      if (canShowNext) {
-        android.util.Log.d("MediaSessionModule", "Adding next button at index $actionIndex")
-        notificationBuilder.addAction(
-          android.R.drawable.ic_media_next,
-          "다음",
-          MediaButtonReceiver.buildMediaButtonPendingIntent(context, PlaybackStateCompat.ACTION_SKIP_TO_NEXT)
-        )
-        compactViewIndices.add(actionIndex)
-        actionIndex++
+      // 3. 다음 버튼 (항상 추가, 비활성화 시 시각적으로 비활성화)
+      android.util.Log.d("MediaSessionModule", "Adding next button at index 2, canShowNext=$canShowNext")
+      val nextIcon = if (canShowNext) {
+        // 활성 상태: 100% 불투명 (255)
+        IconCompat.createWithResource(context, android.R.drawable.ic_media_next)
+      } else {
+        // 비활성 상태: 약 30% 투명도 (80) 및 회색 필터 적용
+        getTransparentIcon(context, android.R.drawable.ic_media_next, 80)
       }
+      val nextAction = NotificationCompat.Action.Builder(
+        nextIcon,
+        "다음",
+        if (canShowNext) {
+          MediaButtonReceiver.buildMediaButtonPendingIntent(context, PlaybackStateCompat.ACTION_SKIP_TO_NEXT)
+        } else {
+          dummyIntent  // null 대신 dummy (위치 고정용)
+        }
+      ).build()
+      notificationBuilder.addAction(nextAction)
       
-      // MediaStyle 설정 - 재생/일시정지 버튼이 항상 중앙에 오도록 인덱스 조정
+      // MediaStyle 설정 - 항상 (0, 1, 2)로 고정 (재미나이 조언)
       val mediaStyle = MediaStyle()
         .setMediaSession(session.sessionToken)
+        .setShowActionsInCompactView(0, 1, 2)  // 이전(0), 재생(1), 다음(2) 고정
       
-      // 버튼 개수에 따라 compactView 인덱스 조정
-      when (compactViewIndices.size) {
-        1 -> {
-          // 재생/일시정지만 있는 경우 (이론적으로는 발생하지 않음)
-          mediaStyle.setShowActionsInCompactView(compactViewIndices[0])
-        }
-        2 -> {
-          // 이전 또는 다음 중 하나만 있는 경우
-          // 재생/일시정지 버튼이 중앙에 오도록 인덱스 조정
-          if (!canShowPrevious) {
-            // [재생/일시정지] [다음] -> 인덱스 0, 1
-            mediaStyle.setShowActionsInCompactView(0, 1)
-          } else {
-            // [이전] [재생/일시정지] -> 인덱스 0, 1
-            mediaStyle.setShowActionsInCompactView(0, 1)
-          }
-        }
-        3 -> {
-          // 모든 버튼이 있는 경우
-          mediaStyle.setShowActionsInCompactView(0, 1, 2)
-        }
-      }
-      
-      android.util.Log.d("MediaSessionModule", "Compact view indices: ${compactViewIndices.joinToString()}, total actions: $actionIndex, canShowPrevious=$canShowPrevious, canShowNext=$canShowNext")
+      android.util.Log.d("MediaSessionModule", "Fixed compact view indices: 0, 1, 2 (previous, play/pause, next), canShowPrevious=$canShowPrevious, canShowNext=$canShowNext")
       
       notificationBuilder.setStyle(mediaStyle)
       
@@ -416,8 +435,8 @@ class MediaSessionModule(reactContext: ReactApplicationContext) : ReactContextBa
         .setContentIntent(pendingIntent)
         .setOngoing(true)
         .setAutoCancel(false)
-        .setSilent(true)
-        .setOnlyAlertOnce(true) // 알림 업데이트 시 소리/진동 방지 (버튼 깜빡임 방지)
+        .setSilent(true) // 소리는 끄되
+        .setOnlyAlertOnce(false) // [중요] 아이콘 변화를 반영하려면 false로 설정 (재미나이 조언)
         .build()
 
       manager.notify(NOTIFICATION_ID, notification)
