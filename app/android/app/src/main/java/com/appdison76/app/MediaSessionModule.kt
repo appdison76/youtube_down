@@ -8,6 +8,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Build
+import android.os.SystemClock
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
@@ -225,13 +226,18 @@ class MediaSessionModule(reactContext: ReactApplicationContext) : ReactContextBa
       
       android.util.Log.d("MediaSessionModule", "updatePlaybackState called: isPlaying=$isPlaying, position=$position, duration=$duration")
       
+      // 1. 상태 결정
       val state = if (isPlaying) {
         PlaybackStateCompat.STATE_PLAYING
       } else {
         PlaybackStateCompat.STATE_PAUSED
       }
       
-      // position과 duration이 있으면 사용, 없으면 UNKNOWN
+      // 2. 재생 속도 (재생 중일 때만 1.0f여야 트랙바가 움직임)
+      val playbackSpeed = if (isPlaying) 1.0f else 0.0f
+      
+      // 3. Position 처리
+      // RN에서 넘어오는 position(밀리초)을 Long으로 변환
       val playbackPosition = if (position != null && position >= 0) {
         position.toLong()
       } else {
@@ -239,14 +245,14 @@ class MediaSessionModule(reactContext: ReactApplicationContext) : ReactContextBa
       }
       
       android.util.Log.d("MediaSessionModule", "playbackPosition: $playbackPosition (from position: $position)")
-      val playbackSpeed = if (isPlaying) 1.0f else 0.0f
       
-      // updateTime: position이 업데이트된 시점의 타임스탬프
-      // 재생 중일 때: 시스템이 자동으로 position + (현재시간 - updateTime) * speed로 계산
-      // 일시정지일 때: position이 고정됨 (speed = 0)
-      val updateTime = System.currentTimeMillis()
+      // 4. 핵심: SystemClock.elapsedRealtime() 사용
+      // 안드로이드 미디어 컨트롤러는 이 값을 기준으로 "현재 위치 = position + (현재시간 - updateTime) * speed"를 계산함
+      // System.currentTimeMillis()는 절대 시각이지만, SystemClock.elapsedRealtime()은 부팅 후 경과 시간을 반환
+      // 재생 중일 때만 현재 시간을 기준으로 트랙바 동기화 (일시정지 시에는 0으로 설정하여 불필요한 업데이트 방지)
+      val updateTime = if (isPlaying) SystemClock.elapsedRealtime() else 0L
       
-      android.util.Log.d("MediaSessionModule", "updateTime: $updateTime, playbackSpeed: $playbackSpeed, state: $state")
+      android.util.Log.d("MediaSessionModule", "updateTime: $updateTime (elapsedRealtime), playbackSpeed: $playbackSpeed, state: $state")
       
       // Actions를 동적으로 설정 (버튼 표시 여부 결정)
       var actions = PlaybackStateCompat.ACTION_PLAY_PAUSE or
@@ -411,6 +417,7 @@ class MediaSessionModule(reactContext: ReactApplicationContext) : ReactContextBa
         .setOngoing(true)
         .setAutoCancel(false)
         .setSilent(true)
+        .setOnlyAlertOnce(true) // 알림 업데이트 시 소리/진동 방지 (버튼 깜빡임 방지)
         .build()
 
       manager.notify(NOTIFICATION_ID, notification)

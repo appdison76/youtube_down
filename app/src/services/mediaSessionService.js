@@ -218,6 +218,29 @@ class MediaSessionService {
   }
 
   /**
+   * 알림 업데이트 (버튼 아이콘 등 즉시 반영)
+   */
+  async showNotification() {
+    if (Platform.OS !== 'android') {
+      return;
+    }
+
+    try {
+      // 초기화 확인
+      await this.ensureInitialized();
+
+      if (!MediaSessionModule) {
+        console.warn('[MediaSessionService] MediaSessionModule not available for showNotification');
+        return;
+      }
+
+      await MediaSessionModule.showNotification();
+    } catch (error) {
+      console.error('[MediaSessionService] Error showing notification:', error);
+    }
+  }
+
+  /**
    * 알림 제거 및 MediaSession 해제
    */
   async dismiss() {

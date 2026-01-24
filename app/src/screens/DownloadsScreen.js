@@ -383,11 +383,23 @@ export default function DownloadsScreen({ navigation }) {
       setCurrentIndex(index);
       currentIndexRef.current = index; // ref에도 저장
       
-      // AsyncStorage에 현재 인덱스 저장
+      // 플레이리스트와 인덱스를 AsyncStorage에 저장 (잠금화면에서 버튼 작동을 위해 필수)
+      const currentPlaylistForSave = playlistRef.current.length > 0 ? playlistRef.current : playlist;
       try {
         await AsyncStorage.setItem('currentIndex', index.toString());
+        // 플레이리스트도 저장 (fileUri만 저장하여 파일이 삭제되어도 복원 가능)
+        await AsyncStorage.setItem('currentPlaylist', JSON.stringify(currentPlaylistForSave.map(f => ({
+          fileUri: f.fileUri,
+          title: f.title,
+          fileName: f.fileName,
+          author: f.author,
+          thumbnail: f.thumbnail,
+          videoId: f.videoId,
+          id: f.id
+        }))));
+        console.log('[DownloadsScreen] Saved playlist and index to AsyncStorage');
       } catch (error) {
-        console.error('[DownloadsScreen] Error saving currentIndex to AsyncStorage:', error);
+        console.error('[DownloadsScreen] Error saving currentIndex/currentPlaylist to AsyncStorage:', error);
       }
 
       // duration 얻기 (트랙바 표시를 위해 필요)
@@ -418,8 +430,8 @@ export default function DownloadsScreen({ navigation }) {
 
       // 재생 완료 시 다음 곡 재생 및 재생 위치 업데이트
       newSound.setOnPlaybackStatusUpdate(async (status) => {
-        // seek 중이면 업데이트 무시 (handleSeek에서 직접 업데이트함)
-        if (isSeekingRef.current) {
+        // Seek 중이거나 로드되지 않았으면 네이티브 업데이트 절대 금지
+        if (isSeekingRef.current || !status.isLoaded) {
           return;
         }
         
@@ -428,44 +440,34 @@ export default function DownloadsScreen({ navigation }) {
           isPlayingRef.current = false;
         }
         
-        // 재생 위치와 duration을 MediaSession에 업데이트
-        if (status.isLoaded) {
-          const position = status.positionMillis || 0;
-          const duration = status.durationMillis || 0;
-          
-          // position이 0이고 재생 중이 아니면 업데이트 무시 (잘못된 상태)
-          if (position === 0 && !status.isPlaying && duration > 0) {
-            return;
-          }
-          
-          const canGoNext = index < (playlistRef.current.length > 0 ? playlistRef.current : playlist).length - 1;
+        // 재생 위치와 duration 가져오기
+        const position = status.positionMillis || 0;
+        const duration = status.durationMillis || 0;
+        
+        // position이 0이고 재생 중이 아니면 업데이트 무시 (잘못된 상태)
+        if (position === 0 && !status.isPlaying && duration > 0) {
+          return;
+        }
+        
+        // [수정] 0.2초마다 업데이트하되, Seek 직후에는 더 엄격하게 체크
+        const now = Date.now();
+        if (now - lastNotificationUpdateRef.current >= 200) {
+          const currentPlaylist = playlistRef.current.length > 0 ? playlistRef.current : playlist;
+          const canGoNext = index < currentPlaylist.length - 1;
           const canGoPrevious = index > 0;
           
-          try {
-            // PlaybackStateCompat는 항상 업데이트되므로 트랙바가 자동으로 갱신됨
-            // 재생 중일 때는 position이 자주 업데이트되어야 트랙바가 부드럽게 진행됨
-            // 알림도 주기적으로 업데이트해야 트랙바가 제대로 표시됨
-            // 재생 중일 때는 더 자주 업데이트 (0.2초마다)하여 트랙바가 부드럽게 진행되도록 함
-            const now = Date.now();
-            const updateInterval = status.isPlaying ? 200 : 500; // 재생 중: 0.2초, 일시정지: 0.5초
-            const shouldUpdateNotification = now - lastNotificationUpdateRef.current >= updateInterval;
-            
-            // 재생 중일 때는 PlaybackStateCompat를 항상 업데이트하여 트랙바가 진행되도록 함
-            await mediaSessionService.updatePlaybackState(
-              status.isPlaying,
-              canGoNext,
-              canGoPrevious,
-              position,
-              duration,
-              shouldUpdateNotification // 알림 업데이트 여부
-            );
-            
-            if (shouldUpdateNotification) {
-              lastNotificationUpdateRef.current = now;
-            }
-          } catch (error) {
-            console.warn('[DownloadsScreen] Error updating playback state:', error);
-          }
+          // status.isPlaying이 일시적으로 false로 올 수 있으므로 UI 상태(isPlaying)와 교차 검증
+          const actuallyPlaying = status.isPlaying;
+          
+          await mediaSessionService.updatePlaybackState(
+            actuallyPlaying,
+            canGoNext,
+            canGoPrevious,
+            position,
+            duration
+            // 일반 진행 중에는 알림창 전체를 다시 그리지는 않음 (트랙바만 이동)
+          );
+          lastNotificationUpdateRef.current = now;
         }
         
         if (status.didJustFinish && !status.isLooping) {
@@ -612,7 +614,7 @@ export default function DownloadsScreen({ navigation }) {
 
   // ✅ 다음 곡
   const handleNext = async () => {
-    // 재생 중이면 무시 (race condition 방지)
+    // 재생 중이면 무시 (race condition 방지) - 기존 방식 사용
     if (isPlayingRef.current) {
       console.log('[DownloadsScreen] handleNext: Already playing, ignoring');
       return;
@@ -629,6 +631,26 @@ export default function DownloadsScreen({ navigation }) {
     if (currentPlaylist.length === 0) {
       console.log('[DownloadsScreen] Playlist is empty, attempting to restore from AsyncStorage');
       try {
+        // downloadedFiles가 비어있으면 먼저 로드 (잠금화면에서 들어올 때 필요)
+        let filesToUse = downloadedFiles;
+        if (filesToUse.length === 0) {
+          console.log('[DownloadsScreen] downloadedFiles is empty, loading files...');
+          // getDownloadedFiles를 직접 호출하여 즉시 사용 가능한 파일 목록 가져오기
+          const files = await getDownloadedFiles();
+          // 플레이리스트 정보도 함께 로드
+          const filesWithPlaylists = await Promise.all(
+            files.map(async (file) => {
+              const filePlaylists = await getPlaylistsForFile(file.fileUri);
+              return {
+                ...file,
+                playlist_ids: filePlaylists.map(p => p.playlist_id),
+                playlist_names: filePlaylists.map(p => p.playlist_name),
+              };
+            })
+          );
+          filesToUse = filesWithPlaylists;
+        }
+        
         const savedPlaylist = await AsyncStorage.getItem('currentPlaylist');
         const savedIndex = await AsyncStorage.getItem('currentIndex');
         
@@ -636,7 +658,7 @@ export default function DownloadsScreen({ navigation }) {
           const parsedPlaylist = JSON.parse(savedPlaylist);
           // 다운로드한 파일 목록에서 매칭되는 파일 찾기
           const restoredPlaylist = parsedPlaylist.map(savedFile => {
-            return downloadedFiles.find(file => file.fileUri === savedFile.fileUri) || savedFile;
+            return filesToUse.find(file => file.fileUri === savedFile.fileUri) || savedFile;
           }).filter(file => file != null);
           
           if (restoredPlaylist.length > 0) {
@@ -735,7 +757,7 @@ export default function DownloadsScreen({ navigation }) {
 
   // ✅ 이전 곡
   const handlePrevious = async () => {
-    // 재생 중이면 무시 (race condition 방지)
+    // 재생 중이면 무시 (race condition 방지) - 기존 방식 사용
     if (isPlayingRef.current) {
       console.log('[DownloadsScreen] handlePrevious: Already playing, ignoring');
       return;
@@ -750,13 +772,33 @@ export default function DownloadsScreen({ navigation }) {
     if (currentPlaylist.length === 0) {
       console.log('[DownloadsScreen] Playlist is empty in handlePrevious, attempting to restore');
       try {
+        // downloadedFiles가 비어있으면 먼저 로드 (잠금화면에서 들어올 때 필요)
+        let filesToUse = downloadedFiles;
+        if (filesToUse.length === 0) {
+          console.log('[DownloadsScreen] downloadedFiles is empty, loading files...');
+          // getDownloadedFiles를 직접 호출하여 즉시 사용 가능한 파일 목록 가져오기
+          const files = await getDownloadedFiles();
+          // 플레이리스트 정보도 함께 로드
+          const filesWithPlaylists = await Promise.all(
+            files.map(async (file) => {
+              const filePlaylists = await getPlaylistsForFile(file.fileUri);
+              return {
+                ...file,
+                playlist_ids: filePlaylists.map(p => p.playlist_id),
+                playlist_names: filePlaylists.map(p => p.playlist_name),
+              };
+            })
+          );
+          filesToUse = filesWithPlaylists;
+        }
+        
         const savedPlaylist = await AsyncStorage.getItem('currentPlaylist');
         const savedIndex = await AsyncStorage.getItem('currentIndex');
         
         if (savedPlaylist) {
           const parsedPlaylist = JSON.parse(savedPlaylist);
           const restoredPlaylist = parsedPlaylist.map(savedFile => {
-            return downloadedFiles.find(file => file.fileUri === savedFile.fileUri) || savedFile;
+            return filesToUse.find(file => file.fileUri === savedFile.fileUri) || savedFile;
           }).filter(file => file != null);
           
           if (restoredPlaylist.length > 0) {
@@ -920,36 +962,52 @@ export default function DownloadsScreen({ navigation }) {
     // Seek 핸들러 (트랙바 드래그 시 호출)
     const handleSeek = async (positionMillis) => {
       try {
-        if (soundRef.current) {
-          // seek 시작 플래그 설정
-          isSeekingRef.current = true;
-          
-          await soundRef.current.setPositionAsync(positionMillis);
-          console.log('[DownloadsScreen] Seeked to:', positionMillis);
-          
-          // Seek 후 MediaSession 업데이트
-          const status = await soundRef.current.getStatusAsync();
-          if (status.isLoaded) {
-            const currentPlaylistForSeek = playlistRef.current.length > 0 ? playlistRef.current : playlist;
-            const currentIndexForSeek = currentIndexRef.current >= 0 ? currentIndexRef.current : currentIndex;
-            const canGoNext = currentIndexForSeek < currentPlaylistForSeek.length - 1;
-            const canGoPrevious = currentIndexForSeek > 0;
-            
-            await mediaSessionService.updatePlaybackState(
-              status.isPlaying,
-              canGoNext,
-              canGoPrevious,
-              positionMillis, // seek한 위치 사용
-              status.durationMillis || 0,
-              true // seek 시 항상 알림 업데이트
-            );
+        if (!soundRef.current) return;
+        
+        // seek 시작 플래그 설정 (status 업데이트 무시 시작)
+        isSeekingRef.current = true;
+        
+        // 1. 현재 재생 중이었는지 확인
+        const status = await soundRef.current.getStatusAsync();
+        const wasPlaying = status.isPlaying;
+        const duration = status.isLoaded ? status.durationMillis : 0;
+        
+        // 2. 오디오 이동
+        await soundRef.current.setPositionAsync(positionMillis);
+        console.log('[DownloadsScreen] Seeked to:', positionMillis);
+        
+        // 3. 네이티브 MediaSession에 "재생 중" 상태라고 즉시 못 박기 (깜빡임 방지 핵심)
+        const currentPlaylist = playlistRef.current.length > 0 ? playlistRef.current : playlist;
+        const currentFileIndex = currentIndexRef.current >= 0 ? currentIndexRef.current : currentIndex;
+        const canGoNext = currentFileIndex < currentPlaylist.length - 1;
+        const canGoPrevious = currentFileIndex > 0;
+        
+        // 여기서 세 번째 인자 isPlaying을 wasPlaying(보통 true)으로 강제 고정하여 호출
+        await mediaSessionService.updatePlaybackState(
+          wasPlaying, 
+          canGoNext, 
+          canGoPrevious, 
+          positionMillis, // 이동한 위치
+          duration || 0
+        );
+        
+        // 알림 즉시 갱신 (버튼 상태 고정)
+        await mediaSessionService.showNotification();
+        
+        // 4. SEEK 전에 재생 중이었다면 재생 계속
+        if (wasPlaying) {
+          try {
+            await soundRef.current.playAsync();
+          } catch (playError) {
+            console.warn('[DownloadsScreen] Error resuming playback after seek:', playError);
           }
-          
-          // seek 완료 후 약간의 딜레이를 두고 플래그 해제 (setOnPlaybackStatusUpdate가 잘못된 position으로 덮어쓰는 것 방지)
-          setTimeout(() => {
-            isSeekingRef.current = false;
-          }, 500);
         }
+        
+        // 5. 약간의 지연 후 Seek 플래그 해제 (네이티브 상태 안정화 대기)
+        setTimeout(() => {
+          isSeekingRef.current = false;
+        }, 500);
+        
       } catch (error) {
         isSeekingRef.current = false; // 오류 발생 시에도 플래그 해제
         console.error('[DownloadsScreen] Error seeking:', error);
@@ -1764,19 +1822,28 @@ export default function DownloadsScreen({ navigation }) {
       )}
 
       {/* ✅ MiniPlayer (음악 재생 중일 때만 표시) */}
-      {playlist.length > 0 && (
-        <MiniPlayer
-          isVisible={true}
-          isPlaying={isPlaying}
-          currentItem={playlist[currentIndex]}
-          currentIndex={currentIndex}
-          totalItems={playlist.length}
-          onPlayPause={handlePlayPause}
-          onPrevious={handlePrevious}
-          onNext={handleNext}
-          onClose={handleStopPlaylist}
-        />
-      )}
+      {(() => {
+        // playlistRef를 우선 사용 (잠금화면에서 들어올 때 state가 비어있을 수 있음)
+        const currentPlaylist = playlistRef.current.length > 0 ? playlistRef.current : playlist;
+        const currentFileIndex = currentIndexRef.current >= 0 ? currentIndexRef.current : currentIndex;
+        
+        if (currentPlaylist.length > 0 && currentPlaylist[currentFileIndex]) {
+          return (
+            <MiniPlayer
+              isVisible={true}
+              isPlaying={isPlaying}
+              currentItem={currentPlaylist[currentFileIndex]}
+              currentIndex={currentFileIndex}
+              totalItems={currentPlaylist.length}
+              onPlayPause={handlePlayPause}
+              onPrevious={handlePrevious}
+              onNext={handleNext}
+              onClose={handleStopPlaylist}
+            />
+          );
+        }
+        return null;
+      })()}
 
       {/* 플레이리스트 관리 모달 */}
       <PinManagerModal
