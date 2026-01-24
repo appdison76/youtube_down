@@ -357,7 +357,10 @@ app.get('/api/download/video', async (req, res) => {
           '--retries', '3',
           '--fragment-retries', '3',
           '--socket-timeout', '30',
+          '--http-chunk-size', '10M',
+          '--concurrent-fragments', '1',
           '--user-agent', userAgent,
+          '--referer', 'https://www.youtube.com/',
           '--no-check-certificate',
           '-o', '-',
           url
@@ -374,7 +377,7 @@ app.get('/api/download/video', async (req, res) => {
         let startTimeout = null;
         let startResolve = null;
         let fragmentFailureCount = 0;
-        const MAX_FRAGMENT_FAILURES = 10; // 10개 이상 프래그먼트 실패 시 다른 클라이언트로 전환
+        const MAX_FRAGMENT_FAILURES = 3; // 3개 이상 프래그먼트 실패 시 다른 클라이언트로 전환 (403 에러 대응)
         
         // MaxListeners 경고 방지
         res.setMaxListeners(20);
@@ -399,9 +402,23 @@ app.get('/api/download/video', async (req, res) => {
             // 프래그먼트 실패 감지 (403 Forbidden 등)
             if (message.includes('fragment not found') || 
                 (message.includes('Got error') && message.includes('403')) ||
-                (message.includes('HTTP Error 403'))) {
+                (message.includes('HTTP Error 403')) ||
+                (message.includes('unable to download video data') && message.includes('403'))) {
               fragmentFailureCount++;
               console.warn(`[Server] ⚠️ ${playerClient} fragment failure count: ${fragmentFailureCount}`);
+              
+              // 403 Forbidden은 즉시 다른 클라이언트로 전환 (IP 차단 가능성)
+              if (message.includes('403') || message.includes('Forbidden')) {
+                console.error(`[Server] ❌ ${playerClient} failed: 403 Forbidden detected`);
+                hasBotError = true;
+                if (!processKilled) {
+                  processKilled = true;
+                  ytdlpProcess.kill('SIGTERM');
+                }
+                ytdlpProcess.stderr.removeListener('data', stderrHandler);
+                resolve({ error: '403_forbidden', client: playerClient });
+                return;
+              }
               
               // 너무 많은 프래그먼트 실패 시 다른 클라이언트로 전환
               if (fragmentFailureCount >= MAX_FRAGMENT_FAILURES && !hasBotError) {
@@ -681,7 +698,10 @@ app.get('/api/download/audio', async (req, res) => {
           '--retries', '3',
           '--fragment-retries', '3',
           '--socket-timeout', '30',
+          '--http-chunk-size', '10M',
+          '--concurrent-fragments', '1',
           '--user-agent', userAgent,
+          '--referer', 'https://www.youtube.com/',
           '--no-check-certificate',
           '--no-playlist',
           '-o', '-',
@@ -699,7 +719,7 @@ app.get('/api/download/audio', async (req, res) => {
         let startTimeout = null;
         let startResolve = null;
         let fragmentFailureCount = 0;
-        const MAX_FRAGMENT_FAILURES = 10; // 10개 이상 프래그먼트 실패 시 다른 클라이언트로 전환
+        const MAX_FRAGMENT_FAILURES = 3; // 3개 이상 프래그먼트 실패 시 다른 클라이언트로 전환 (403 에러 대응)
         
         // MaxListeners 경고 방지
         res.setMaxListeners(20);
@@ -724,9 +744,23 @@ app.get('/api/download/audio', async (req, res) => {
             // 프래그먼트 실패 감지 (403 Forbidden 등)
             if (message.includes('fragment not found') || 
                 (message.includes('Got error') && message.includes('403')) ||
-                (message.includes('HTTP Error 403'))) {
+                (message.includes('HTTP Error 403')) ||
+                (message.includes('unable to download video data') && message.includes('403'))) {
               fragmentFailureCount++;
               console.warn(`[Server] ⚠️ ${playerClient} fragment failure count: ${fragmentFailureCount}`);
+              
+              // 403 Forbidden은 즉시 다른 클라이언트로 전환 (IP 차단 가능성)
+              if (message.includes('403') || message.includes('Forbidden')) {
+                console.error(`[Server] ❌ ${playerClient} failed: 403 Forbidden detected`);
+                hasBotError = true;
+                if (!processKilled) {
+                  processKilled = true;
+                  ytdlpProcess.kill('SIGTERM');
+                }
+                ytdlpProcess.stderr.removeListener('data', stderrHandler);
+                resolve({ error: '403_forbidden', client: playerClient });
+                return;
+              }
               
               // 너무 많은 프래그먼트 실패 시 다른 클라이언트로 전환
               if (fragmentFailureCount >= MAX_FRAGMENT_FAILURES && !hasBotError) {
