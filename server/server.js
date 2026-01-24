@@ -85,6 +85,9 @@ app.get('/api/test-ip', async (req, res) => {
             '--extractor-args', `youtube:player_client=${playerClient}`,
             '--user-agent', userAgent,
             '--no-check-certificate',
+            '--retries', '3',
+            '--fragment-retries', '3',
+            '--socket-timeout', '30',
             testUrl
           ], {
             stdio: ['ignore', 'pipe', 'pipe']
@@ -234,6 +237,10 @@ app.post('/api/video-info', async (req, res) => {
           '--no-warnings',
           '--extractor-args', `youtube:player_client=${playerClient}`,
           '--user-agent', userAgent,
+          '--no-check-certificate',
+          '--retries', '3',
+          '--fragment-retries', '3',
+          '--socket-timeout', '30',
           url
         ], {
           stdio: ['ignore', 'pipe', 'pipe']
@@ -327,16 +334,16 @@ app.get('/api/download/video', async (req, res) => {
     res.setHeader('Transfer-Encoding', 'chunked');
     res.setHeader('Cache-Control', 'no-cache');
 
-    // 여러 player_client를 랜덤 순서로 시도 (패턴 감지 방지)
-    const shuffledClients = shuffleArray(PLAYER_CLIENTS);
-    console.log(`[Server] Trying player_clients in random order: ${shuffledClients.join(' -> ')}`);
+    // android를 먼저 시도 (가장 안정적), 실패 시 나머지 랜덤 순서로 시도
+    const androidFirst = ['android', ...shuffleArray(PLAYER_CLIENTS.filter(c => c !== 'android'))];
+    console.log(`[Server] Trying player_clients: ${androidFirst.join(' -> ')}`);
     
     let lastError = null;
     let triedClients = [];
     
-    for (const playerClient of shuffledClients) {
+    for (const playerClient of androidFirst) {
       triedClients.push(playerClient);
-      console.log(`[Server] Trying player_client: ${playerClient} (${triedClients.length}/${shuffledClients.length})`);
+      console.log(`[Server] Trying player_client: ${playerClient} (${triedClients.length}/${androidFirst.length})`);
       
       try {
         const userAgent = getUserAgent(playerClient);
@@ -347,8 +354,9 @@ app.get('/api/download/video', async (req, res) => {
           '--no-warnings',
           '--progress',
           '--extractor-args', `youtube:player_client=${playerClient}`,
-          '--retries', '2',
-          '--fragment-retries', '2',
+          '--retries', '3',
+          '--fragment-retries', '3',
+          '--socket-timeout', '30',
           '--user-agent', userAgent,
           '--no-check-certificate',
           '-o', '-',
@@ -563,7 +571,7 @@ app.get('/api/download/video', async (req, res) => {
           lastError = new Error(`Failed with ${playerClient}: ${result.error}`);
           
           // 다음 client로 전환하기 전에 짧은 지연 (패턴 감지 방지)
-          if (triedClients.length < shuffledClients.length) {
+          if (triedClients.length < androidFirst.length) {
             await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 500)); // 0.5~1초 랜덤 지연
           }
           continue;
@@ -651,16 +659,16 @@ app.get('/api/download/audio', async (req, res) => {
     // 7. best (최고 품질, 비디오+오디오)
     let formatSelector = 'bestaudio/bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio[ext=webm]/bestaudio[ext=opus]/best[height<=720]/bestvideo[height<=720]+bestaudio/best';
     
-    // 여러 player_client를 랜덤 순서로 시도 (패턴 감지 방지)
-    const shuffledClients = shuffleArray(PLAYER_CLIENTS);
-    console.log(`[Server] Trying player_clients in random order: ${shuffledClients.join(' -> ')}`);
+    // android를 먼저 시도 (가장 안정적), 실패 시 나머지 랜덤 순서로 시도
+    const androidFirst = ['android', ...shuffleArray(PLAYER_CLIENTS.filter(c => c !== 'android'))];
+    console.log(`[Server] Trying player_clients: ${androidFirst.join(' -> ')}`);
     
     let lastError = null;
     let triedClients = [];
     
-    for (const playerClient of shuffledClients) {
+    for (const playerClient of androidFirst) {
       triedClients.push(playerClient);
-      console.log(`[Server] Trying player_client: ${playerClient} (${triedClients.length}/${shuffledClients.length})`);
+      console.log(`[Server] Trying player_client: ${playerClient} (${triedClients.length}/${androidFirst.length})`);
       
       try {
         const userAgent = getUserAgent(playerClient);
@@ -670,8 +678,9 @@ app.get('/api/download/audio', async (req, res) => {
           '--no-warnings',
           '--progress',
           '--extractor-args', `youtube:player_client=${playerClient}`,
-          '--retries', '2',
-          '--fragment-retries', '2',
+          '--retries', '3',
+          '--fragment-retries', '3',
+          '--socket-timeout', '30',
           '--user-agent', userAgent,
           '--no-check-certificate',
           '--no-playlist',
@@ -887,7 +896,7 @@ app.get('/api/download/audio', async (req, res) => {
           lastError = new Error(`Failed with ${playerClient}: ${result.error}`);
           
           // 다음 client로 전환하기 전에 짧은 지연 (패턴 감지 방지)
-          if (triedClients.length < shuffledClients.length) {
+          if (triedClients.length < androidFirst.length) {
             await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 500)); // 0.5~1초 랜덤 지연
           }
           continue;

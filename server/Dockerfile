@@ -9,9 +9,9 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# yt-dlp 최신 버전 설치 및 업데이트
+# yt-dlp 최신 버전 설치 및 업데이트 (강제 재설치로 최신 버전 보장)
 RUN pip3 install --no-cache-dir --upgrade pip && \
-    pip3 install --no-cache-dir --upgrade yt-dlp
+    pip3 install --no-cache-dir --upgrade --force-reinstall yt-dlp
 
 # 작업 디렉토리 설정
 WORKDIR /app
