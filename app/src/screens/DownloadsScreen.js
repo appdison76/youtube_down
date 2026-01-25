@@ -1023,10 +1023,39 @@ export default function DownloadsScreen({ navigation }) {
   const handlePlayFile = async (file) => {
     try {
       if (Platform.OS === 'android') {
-        // 파일 존재 확인
-        const fileInfo = await FileSystem.getInfoAsync(file.fileUri);
-        if (!fileInfo.exists) {
-          Alert.alert(t.error, t.fileNotFound);
+        let contentUri = null;
+        
+        // videoId가 있으면 외부 저장소에서 파일 찾기 시도
+        if (file.videoId && MediaStoreModule && typeof MediaStoreModule.getContentUriByVideoId === 'function') {
+          try {
+            contentUri = await MediaStoreModule.getContentUriByVideoId(file.videoId, file.isVideo);
+            console.log('[DownloadsScreen] ✅ Found file in external storage, using it for playback:', contentUri);
+          } catch (error) {
+            console.warn('[DownloadsScreen] ⚠️ Could not find file in external storage by videoId, falling back to internal file:', error.message);
+            // 외부 저장소에서 찾지 못하면 내부 저장소 파일 사용
+          }
+        }
+        
+        // 외부 저장소에서 찾지 못했으면 내부 저장소 파일 사용
+        if (!contentUri) {
+          // 파일 존재 확인
+          const fileInfo = await FileSystem.getInfoAsync(file.fileUri);
+          if (!fileInfo.exists) {
+            Alert.alert(t.error, t.fileNotFound);
+            return;
+          }
+          
+          // FileProvider를 사용하여 content:// URI 생성
+          if (MediaStoreModule && typeof MediaStoreModule.getContentUri === 'function') {
+            contentUri = await MediaStoreModule.getContentUri(file.fileUri);
+          } else {
+            Alert.alert(t.error, t.playFileError);
+            return;
+          }
+        }
+
+        if (!contentUri) {
+          Alert.alert(t.error, t.playFileError);
           return;
         }
 
@@ -1043,19 +1072,12 @@ export default function DownloadsScreen({ navigation }) {
           mimeType = 'audio/mpeg';
         }
         
-        // FileProvider를 사용하여 content:// URI 생성
-        if (MediaStoreModule && typeof MediaStoreModule.getContentUri === 'function') {
-          const contentUri = await MediaStoreModule.getContentUri(file.fileUri);
-          
-          // Intent를 사용하여 외부 플레이어로 파일 열기
-          await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
-            data: contentUri,
-            type: mimeType,
-            flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
-          });
-        } else {
-          Alert.alert(t.error, t.playFileError);
-        }
+        // Intent를 사용하여 외부 플레이어로 파일 열기
+        await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+          data: contentUri,
+          type: mimeType,
+          flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
+        });
       } else {
         Alert.alert(t.notice, t.iosNotSupported);
       }
@@ -1069,7 +1091,7 @@ export default function DownloadsScreen({ navigation }) {
   // 다운로드한 파일 재저장
   const handleResaveFile = async (file) => {
     try {
-      await saveFileToDevice(file.fileUri, file.fileName, file.isVideo);
+      await saveFileToDevice(file.fileUri, file.fileName, file.isVideo, file.videoId ?? null);
       Alert.alert(
         t.notice,
         file.isVideo 
@@ -1391,7 +1413,7 @@ export default function DownloadsScreen({ navigation }) {
               style={styles.actionButton}
               onPress={(e) => {
                 e.stopPropagation();
-                shareDownloadedFile(item.fileUri, item.fileName, item.isVideo);
+                shareDownloadedFile(item.fileUri, item.fileName, item.isVideo, item.videoId);
               }}
             >
               <Ionicons name="share" size={24} color="#2196F3" />

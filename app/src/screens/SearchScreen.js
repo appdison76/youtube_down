@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -690,7 +690,7 @@ export default function SearchScreen({ navigation, route }) {
             text: t.saveButton,
             onPress: async () => {
               try {
-                await saveFileToDevice(fileUri, fileName, true);
+                await saveFileToDevice(fileUri, fileName, true, item.id);
                 Alert.alert(t.notice, t.videoSavedToGallery);
               } catch (error) {
                 console.error('[SearchScreen] Error saving file:', error);
@@ -700,7 +700,7 @@ export default function SearchScreen({ navigation, route }) {
           },
           {
             text: t.shareButton,
-            onPress: () => shareDownloadedFile(fileUri, fileName, true)
+            onPress: () => shareDownloadedFile(fileUri, fileName, true, item.id)
           }
         ]
       );
@@ -860,7 +860,7 @@ export default function SearchScreen({ navigation, route }) {
             text: t.saveButton,
             onPress: async () => {
               try {
-                await saveFileToDevice(fileUri, fileName, false);
+                await saveFileToDevice(fileUri, fileName, false, item.id);
                 Alert.alert(t.notice, t.musicSavedToApp);
               } catch (error) {
                 console.error('[SearchScreen] Error saving file:', error);
@@ -870,7 +870,7 @@ export default function SearchScreen({ navigation, route }) {
           },
           {
             text: t.shareButton,
-            onPress: () => shareDownloadedFile(fileUri, fileName, false)
+            onPress: () => shareDownloadedFile(fileUri, fileName, false, item.id)
           }
         ]
       );
@@ -967,111 +967,146 @@ export default function SearchScreen({ navigation, route }) {
   const handlePlayFile = async (file) => {
     try {
       if (Platform.OS === 'android') {
-        // ✅ 공유하기/저장하기와 동일한 방식으로 파일 찾기 (여러 경로 시도)
-        let fileUri = file.fileUri;
-        const fileName = file.fileName;
-        const DOWNLOAD_DIR = `${FileSystem.documentDirectory}downloads/`;
+        let contentUri = null;
         
-        console.log('[SearchScreen] Playing file:', fileUri, fileName);
-        let fileInfo = await FileSystem.getInfoAsync(fileUri);
-        
-        if (!fileInfo.exists) {
-          // 1. URL 디코딩 시도
+        // videoId가 있으면 외부 저장소에서 파일 찾기 시도
+        if (file.videoId && MediaStoreModule && typeof MediaStoreModule.getContentUriByVideoId === 'function') {
           try {
-            const decodedUri = decodeURIComponent(fileUri);
-            if (decodedUri !== fileUri) {
-              console.log('[SearchScreen] Trying decoded URI:', decodedUri);
-              fileInfo = await FileSystem.getInfoAsync(decodedUri);
-              if (fileInfo.exists) {
-                fileUri = decodedUri;
-                console.log('[SearchScreen] ✅ File found with decoded URI');
-              }
-            }
-          } catch (e) {
-            console.warn('[SearchScreen] Could not decode URI:', e);
+            contentUri = await MediaStoreModule.getContentUriByVideoId(file.videoId, file.isVideo);
+            console.log('[SearchScreen] ✅ Found file in external storage, using it for playback:', contentUri);
+          } catch (error) {
+            console.warn('[SearchScreen] ⚠️ Could not find file in external storage by videoId, falling back to internal file:', error.message);
+            // 외부 저장소에서 찾지 못하면 내부 저장소 파일 사용
           }
+        }
+        
+        // 외부 저장소에서 찾지 못했으면 내부 저장소 파일 사용
+        if (!contentUri) {
+          // ✅ 공유하기/저장하기와 동일한 방식으로 파일 찾기 (여러 경로 시도)
+          let fileUri = file.fileUri;
+          const fileName = file.fileName;
+          const DOWNLOAD_DIR = `${FileSystem.documentDirectory}downloads/`;
           
-          // 2. file:// 프로토콜 제거 후 시도
-          if (!fileInfo.exists && fileUri.startsWith('file://')) {
-            const withoutProtocol = fileUri.replace('file://', '');
-            console.log('[SearchScreen] Trying URI without file:// protocol:', withoutProtocol);
-            fileInfo = await FileSystem.getInfoAsync(withoutProtocol);
-            if (fileInfo.exists) {
-              fileUri = withoutProtocol;
-              console.log('[SearchScreen] ✅ File found without file:// protocol');
-            }
-          }
+          console.log('[SearchScreen] Playing file:', fileUri, fileName);
+          let fileInfo = await FileSystem.getInfoAsync(fileUri);
           
-          // 3. file:// 프로토콜 추가 후 시도
-          if (!fileInfo.exists && !fileUri.startsWith('file://')) {
-            const withProtocol = `file://${fileUri}`;
-            console.log('[SearchScreen] Trying URI with file:// protocol:', withProtocol);
-            fileInfo = await FileSystem.getInfoAsync(withProtocol);
-            if (fileInfo.exists) {
-              fileUri = withProtocol;
-              console.log('[SearchScreen] ✅ File found with file:// protocol');
-            }
-          }
-          
-          // 4. 파일명으로 경로 재구성 시도 (DOWNLOAD_DIR 사용)
-          if (!fileInfo.exists && fileName) {
-            const reconstructedUri = `${DOWNLOAD_DIR}${fileName}`;
-            if (reconstructedUri !== fileUri && !reconstructedUri.includes(fileUri) && !fileUri.includes(reconstructedUri)) {
-              console.log('[SearchScreen] Trying reconstructed URI from fileName:', reconstructedUri);
-              fileInfo = await FileSystem.getInfoAsync(reconstructedUri);
-              if (fileInfo.exists) {
-                fileUri = reconstructedUri;
-                console.log('[SearchScreen] ✅ File found with reconstructed URI');
-              }
-            }
-          }
-          
-          // 5. URI에서 파일명 추출하여 재구성 시도
-          if (!fileInfo.exists && fileUri.includes('/')) {
-            const uriParts = fileUri.split('/');
-            const uriFileName = uriParts[uriParts.length - 1];
-            if (uriFileName && uriFileName.includes('.') && uriFileName !== fileName) {
-              let decodedFileName = uriFileName;
-              try {
-                decodedFileName = decodeURIComponent(uriFileName);
-              } catch (e) {
-                // 디코딩 실패해도 원본 사용
-              }
-              
-              const altUri = `${DOWNLOAD_DIR}${decodedFileName}`;
-              if (altUri !== fileUri && altUri !== `${DOWNLOAD_DIR}${fileName}`) {
-                console.log('[SearchScreen] Trying alternative URI from path:', altUri);
-                fileInfo = await FileSystem.getInfoAsync(altUri);
+          if (!fileInfo.exists) {
+            // 1. URL 디코딩 시도
+            try {
+              const decodedUri = decodeURIComponent(fileUri);
+              if (decodedUri !== fileUri) {
+                console.log('[SearchScreen] Trying decoded URI:', decodedUri);
+                fileInfo = await FileSystem.getInfoAsync(decodedUri);
                 if (fileInfo.exists) {
-                  fileUri = altUri;
-                  console.log('[SearchScreen] ✅ File found with alternative URI from path');
+                  fileUri = decodedUri;
+                  console.log('[SearchScreen] ✅ File found with decoded URI');
+                }
+              }
+            } catch (e) {
+              console.warn('[SearchScreen] Could not decode URI:', e);
+            }
+            
+            // 2. file:// 프로토콜 제거 후 시도
+            if (!fileInfo.exists && fileUri.startsWith('file://')) {
+              const withoutProtocol = fileUri.replace('file://', '');
+              console.log('[SearchScreen] Trying URI without file:// protocol:', withoutProtocol);
+              fileInfo = await FileSystem.getInfoAsync(withoutProtocol);
+              if (fileInfo.exists) {
+                fileUri = withoutProtocol;
+                console.log('[SearchScreen] ✅ File found without file:// protocol');
+              }
+            }
+            
+            // 3. file:// 프로토콜 추가 후 시도
+            if (!fileInfo.exists && !fileUri.startsWith('file://')) {
+              const withProtocol = `file://${fileUri}`;
+              console.log('[SearchScreen] Trying URI with file:// protocol:', withProtocol);
+              fileInfo = await FileSystem.getInfoAsync(withProtocol);
+              if (fileInfo.exists) {
+                fileUri = withProtocol;
+                console.log('[SearchScreen] ✅ File found with file:// protocol');
+              }
+            }
+            
+            // 4. 파일명으로 경로 재구성 시도 (DOWNLOAD_DIR 사용)
+            if (!fileInfo.exists && fileName) {
+              const reconstructedUri = `${DOWNLOAD_DIR}${fileName}`;
+              if (reconstructedUri !== fileUri && !reconstructedUri.includes(fileUri) && !fileUri.includes(reconstructedUri)) {
+                console.log('[SearchScreen] Trying reconstructed URI from fileName:', reconstructedUri);
+                fileInfo = await FileSystem.getInfoAsync(reconstructedUri);
+                if (fileInfo.exists) {
+                  fileUri = reconstructedUri;
+                  console.log('[SearchScreen] ✅ File found with reconstructed URI');
+                }
+              }
+            }
+            
+            // 5. URI에서 파일명 추출하여 재구성 시도
+            if (!fileInfo.exists && fileUri.includes('/')) {
+              const uriParts = fileUri.split('/');
+              const uriFileName = uriParts[uriParts.length - 1];
+              if (uriFileName && uriFileName.includes('.') && uriFileName !== fileName) {
+                let decodedFileName = uriFileName;
+                try {
+                  decodedFileName = decodeURIComponent(uriFileName);
+                } catch (e) {
+                  // 디코딩 실패해도 원본 사용
+                }
+                
+                const altUri = `${DOWNLOAD_DIR}${decodedFileName}`;
+                if (altUri !== fileUri && altUri !== `${DOWNLOAD_DIR}${fileName}`) {
+                  console.log('[SearchScreen] Trying alternative URI from path:', altUri);
+                  fileInfo = await FileSystem.getInfoAsync(altUri);
+                  if (fileInfo.exists) {
+                    fileUri = altUri;
+                    console.log('[SearchScreen] ✅ File found with alternative URI from path');
+                  }
+                }
+              }
+            }
+            
+            // 6. file:// 프로토콜을 제거한 상태로 재구성 시도
+            if (!fileInfo.exists && fileName) {
+              let cleanUri = fileUri;
+              if (cleanUri.startsWith('file://')) {
+                cleanUri = cleanUri.replace('file://', '');
+              }
+              const cleanReconstructedUri = `${DOWNLOAD_DIR}${fileName}`;
+              
+              if (cleanReconstructedUri !== cleanUri) {
+                console.log('[SearchScreen] Trying clean reconstructed URI:', cleanReconstructedUri);
+                fileInfo = await FileSystem.getInfoAsync(cleanReconstructedUri);
+                if (fileInfo.exists) {
+                  fileUri = cleanReconstructedUri;
+                  console.log('[SearchScreen] ✅ File found with clean reconstructed URI');
                 }
               }
             }
           }
           
-          // 6. file:// 프로토콜을 제거한 상태로 재구성 시도
-          if (!fileInfo.exists && fileName) {
-            let cleanUri = fileUri;
-            if (cleanUri.startsWith('file://')) {
-              cleanUri = cleanUri.replace('file://', '');
+          if (!fileInfo.exists) {
+            console.error('[SearchScreen] ❌ File does not exist after all attempts!');
+            Alert.alert(t.error, t.fileNotFound);
+            return;
+          }
+
+          // FileProvider를 사용하여 content:// URI 생성
+          if (MediaStoreModule && typeof MediaStoreModule.getContentUri === 'function') {
+            // file:// 프로토콜 제거 (네이티브 모듈은 절대 경로를 원함)
+            let normalizedFileUri = fileInfo.uri || fileUri;
+            if (normalizedFileUri.startsWith('file://')) {
+              normalizedFileUri = normalizedFileUri.replace('file://', '');
             }
-            const cleanReconstructedUri = `${DOWNLOAD_DIR}${fileName}`;
             
-            if (cleanReconstructedUri !== cleanUri) {
-              console.log('[SearchScreen] Trying clean reconstructed URI:', cleanReconstructedUri);
-              fileInfo = await FileSystem.getInfoAsync(cleanReconstructedUri);
-              if (fileInfo.exists) {
-                fileUri = cleanReconstructedUri;
-                console.log('[SearchScreen] ✅ File found with clean reconstructed URI');
-              }
-            }
+            contentUri = await MediaStoreModule.getContentUri(normalizedFileUri);
+          } else {
+            Alert.alert(t.error, t.playFileError);
+            return;
           }
         }
-        
-        if (!fileInfo.exists) {
-          console.error('[SearchScreen] ❌ File does not exist after all attempts!');
-          Alert.alert(t.error, t.fileNotFound);
+
+        if (!contentUri) {
+          Alert.alert(t.error, t.playFileError);
           return;
         }
 
@@ -1079,7 +1114,7 @@ export default function SearchScreen({ navigation, route }) {
         let mimeType = file.isVideo ? 'video/*' : 'audio/*';
         
         // 파일 확장자에 따라 더 구체적인 MIME 타입 설정
-        const extension = fileName.split('.').pop()?.toLowerCase();
+        const extension = file.fileName.split('.').pop()?.toLowerCase();
         if (extension === 'mp4') {
           mimeType = 'video/mp4';
         } else if (extension === 'm4a') {
@@ -1088,25 +1123,12 @@ export default function SearchScreen({ navigation, route }) {
           mimeType = 'audio/mpeg';
         }
         
-        // FileProvider를 사용하여 content:// URI 생성
-        if (MediaStoreModule && typeof MediaStoreModule.getContentUri === 'function') {
-          // file:// 프로토콜 제거 (네이티브 모듈은 절대 경로를 원함)
-          let normalizedFileUri = fileInfo.uri || fileUri;
-          if (normalizedFileUri.startsWith('file://')) {
-            normalizedFileUri = normalizedFileUri.replace('file://', '');
-          }
-          
-          const contentUri = await MediaStoreModule.getContentUri(normalizedFileUri);
-          
-          // Intent를 사용하여 외부 플레이어로 파일 열기
-          await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
-            data: contentUri,
-            type: mimeType,
-            flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
-          });
-        } else {
-          Alert.alert(t.error, t.playFileError);
-        }
+        // Intent를 사용하여 외부 플레이어로 파일 열기
+        await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+          data: contentUri,
+          type: mimeType,
+          flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
+        });
       } else {
         Alert.alert(t.notice, t.iosNotSupported);
       }
@@ -1168,7 +1190,7 @@ export default function SearchScreen({ navigation, route }) {
         file.fileUri = foundUri;
       }
       
-      await saveFileToDevice(file.fileUri, file.fileName, file.isVideo);
+      await saveFileToDevice(file.fileUri, file.fileName, file.isVideo, file.videoId ?? null);
       Alert.alert(
         t.notice,
         file.isVideo 
@@ -1269,7 +1291,7 @@ export default function SearchScreen({ navigation, route }) {
             style={styles.downloadedFileActionButton}
             onPress={(e) => {
               e.stopPropagation(); // 카드 클릭 이벤트 전파 방지
-              shareDownloadedFile(item.fileUri, item.fileName, item.isVideo);
+              shareDownloadedFile(item.fileUri, item.fileName, item.isVideo, item.videoId);
             }}
           >
             <Ionicons name="share" size={20} color="#2196F3" />
@@ -1404,7 +1426,7 @@ export default function SearchScreen({ navigation, route }) {
                     style={styles.downloadedActionButton}
                     onPress={(e) => {
                       e.stopPropagation();
-                      shareDownloadedFile(downloadedVideo.fileUri, downloadedVideo.fileName, true);
+                      shareDownloadedFile(downloadedVideo.fileUri, downloadedVideo.fileName, true, downloadedVideo.videoId);
                     }}
                   >
                     <Ionicons name="share" size={18} color="#2196F3" />
@@ -1480,7 +1502,7 @@ export default function SearchScreen({ navigation, route }) {
                     style={styles.downloadedActionButton}
                     onPress={(e) => {
                       e.stopPropagation();
-                      shareDownloadedFile(downloadedAudio.fileUri, downloadedAudio.fileName, false);
+                      shareDownloadedFile(downloadedAudio.fileUri, downloadedAudio.fileName, false, downloadedAudio.videoId);
                     }}
                   >
                     <Ionicons name="share" size={18} color="#2196F3" />

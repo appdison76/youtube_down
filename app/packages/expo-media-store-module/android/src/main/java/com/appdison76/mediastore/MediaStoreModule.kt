@@ -62,11 +62,28 @@ class MediaStoreModule : Module() {
       }
     }
 
-    AsyncFunction("saveToMediaStore") { fileUri: String, fileName: String, isVideo: Boolean, promise: Promise ->
+    AsyncFunction("saveToMediaStore") { fileUri: String, fileName: String, isVideo: Boolean, videoId: String?, promise: Promise ->
       try {
         val context = appContext.reactContext ?: return@AsyncFunction promise.reject("CONTEXT_ERROR", "React context is null", null)
         
-        Log.d("MediaStoreModule", "Saving file: $fileUri, fileName: $fileName, isVideo: $isVideo")
+        Log.d("MediaStoreModule", "Saving file: $fileUri, fileName: $fileName, isVideo: $isVideo, videoId: $videoId")
+        
+        // DISPLAY_NAME 끝에 videoId 추가 (검색용)
+        val displayNameWithVideoId = if (!videoId.isNullOrBlank()) {
+          // 파일 확장자 앞에 videoId 추가: "파일명_videoId.mp4"
+          val lastDotIndex = fileName.lastIndexOf('.')
+          if (lastDotIndex > 0) {
+            val nameWithoutExt = fileName.substring(0, lastDotIndex)
+            val extension = fileName.substring(lastDotIndex)
+            "${nameWithoutExt}_${videoId}${extension}"
+          } else {
+            "${fileName}_${videoId}"
+          }
+        } else {
+          fileName
+        }
+        
+        Log.d("MediaStoreModule", "Display name with videoId: $displayNameWithVideoId")
         
         // 파일 URI를 실제 파일 경로로 변환
         val sourceFile = if (fileUri.startsWith("file://")) {
@@ -104,7 +121,7 @@ class MediaStoreModule : Module() {
         
         // MediaStore에 파일 저장
         val contentValues = ContentValues().apply {
-          put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+          put(MediaStore.MediaColumns.DISPLAY_NAME, displayNameWithVideoId)
           put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
           put(MediaStore.MediaColumns.RELATIVE_PATH, if (isVideo) {
             "Movies/YouTube Videos"
@@ -180,6 +197,77 @@ class MediaStoreModule : Module() {
       } catch (e: Exception) {
         Log.e("MediaStoreModule", "Error saving to MediaStore", e)
           promise.reject("SAVE_ERROR", "Failed to save file: ${e.message}", e)
+      }
+    }
+
+    AsyncFunction("getContentUriByVideoId") { videoId: String, isVideo: Boolean, promise: Promise ->
+      try {
+        val context = appContext.reactContext ?: return@AsyncFunction promise.reject("CONTEXT_ERROR", "React context is null", null)
+        
+        Log.d("MediaStoreModule", "Searching for videoId: $videoId, isVideo: $isVideo")
+        
+        val resolver = context.contentResolver
+        val collection = if (isVideo) {
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+          } else {
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+          }
+        } else {
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+          } else {
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+          }
+        }
+        
+        // DISPLAY_NAME 끝에 videoId가 붙은 파일 검색
+        // 예: "파일명_videoId.mp4" 또는 "파일명_videoId"
+        val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?"
+        val selectionArgs = arrayOf("%_$videoId%")
+        
+        val projection = arrayOf(
+          MediaStore.MediaColumns._ID,
+          MediaStore.MediaColumns.DISPLAY_NAME
+        )
+        
+        Log.d("MediaStoreModule", "Querying MediaStore: collection=$collection, selection=$selection, videoId=$videoId")
+        
+        val cursor = resolver.query(
+          collection,
+          projection,
+          selection,
+          selectionArgs,
+          "${MediaStore.MediaColumns.DATE_ADDED} DESC" // 최신순
+        )
+        
+        if (cursor == null) {
+          Log.e("MediaStoreModule", "❌ Cursor is null")
+          return@AsyncFunction promise.reject("QUERY_ERROR", "Failed to query MediaStore", null)
+        }
+        
+        try {
+          if (cursor.moveToFirst()) {
+            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+            val displayNameColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+            
+            val id = cursor.getLong(idColumn)
+            val displayName = cursor.getString(displayNameColumn)
+            
+            val contentUri = Uri.withAppendedPath(collection, id.toString())
+            
+            Log.d("MediaStoreModule", "✅ Found file in external storage: $displayName, URI: $contentUri")
+            promise.resolve(contentUri.toString())
+          } else {
+            Log.w("MediaStoreModule", "⚠️ No file found with videoId: $videoId")
+            promise.reject("NOT_FOUND", "No file found in external storage with videoId: $videoId", null)
+          }
+        } finally {
+          cursor.close()
+        }
+      } catch (e: Exception) {
+        Log.e("MediaStoreModule", "Error in getContentUriByVideoId: ${e.message}", e)
+        promise.reject("QUERY_ERROR", "Failed to find file by videoId: ${e.message}", e)
       }
     }
 

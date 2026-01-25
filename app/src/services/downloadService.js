@@ -1,4 +1,4 @@
-﻿import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 import MediaStoreModule from '../modules/MediaStoreModule';
@@ -275,8 +275,36 @@ export const getVideoInfo = async (url) => {
 };
 
 // 파일 공유
-export const shareDownloadedFile = async (fileUri, fileName, isVideo) => {
+export const shareDownloadedFile = async (fileUri, fileName, isVideo, videoId = null) => {
   try {
+    // videoId가 있으면 외부 저장소에서 파일 찾기 시도
+    if (videoId && Platform.OS === 'android' && MediaStoreModule && typeof MediaStoreModule.getContentUriByVideoId === 'function') {
+      try {
+        const externalContentUri = await MediaStoreModule.getContentUriByVideoId(videoId, isVideo);
+        console.log('[downloadService] ✅ Found file in external storage, using it for sharing:', externalContentUri);
+        
+        // 외부 저장소 파일을 사용하여 공유
+        const mimeType = isVideo ? 'video/mp4' : 'audio/mp4';
+        await MediaStoreModule.shareContentUri(externalContentUri, mimeType, fileName);
+        return;
+      } catch (error) {
+        console.warn('[downloadService] ⚠️ Could not find file in external storage by videoId, falling back to internal file:', error.message);
+        // 외부 저장소에서 찾지 못하면 내부 저장소 파일 사용
+      }
+    }
+    
+    // 내부 저장소 파일을 content:// URI로 변환하여 공유
+    if (Platform.OS === 'android' && MediaStoreModule && typeof MediaStoreModule.getContentUri === 'function') {
+      try {
+        const contentUri = await MediaStoreModule.getContentUri(fileUri);
+        const mimeType = isVideo ? 'video/mp4' : 'audio/mp4';
+        await MediaStoreModule.shareContentUri(contentUri, mimeType, fileName);
+        return;
+      } catch (error) {
+        console.warn('[downloadService] Failed to convert to content:// URI, falling back to ExpoSharing:', error.message);
+      }
+    }
+    
     // ExpoSharing은 file:// URI만 지원하므로 content:// URI는 사용하지 않음
     // fileUri가 이미 file://로 시작하는지 확인
     let shareUri = fileUri;
@@ -314,7 +342,7 @@ export const shareDownloadedFile = async (fileUri, fileName, isVideo) => {
 };
 
 // 파일을 기기 저장소에 저장
-export const saveFileToDevice = async (fileUri, fileName, isVideo) => {
+export const saveFileToDevice = async (fileUri, fileName, isVideo, videoId = null) => {
   try {
     if (Platform.OS !== 'android') {
       throw new Error('파일 저장은 Android에서만 지원됩니다.');
@@ -399,7 +427,7 @@ export const saveFileToDevice = async (fileUri, fileName, isVideo) => {
       finalUri = `file://${finalUri}`;
     }
     
-    await MediaStoreModule.saveToMediaStore(finalUri, fileName, isVideo);
+    await MediaStoreModule.saveToMediaStore(finalUri, fileName, isVideo, videoId);
     } catch (error) {
     console.error('[downloadService] Error saving file to device:', error);
     throw error;
