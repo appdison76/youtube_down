@@ -1030,7 +1030,7 @@ export default function LocalFilesScreen({ navigation }) {
             />
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle}>MelodySnap</Text>
+            <Text style={styles.headerTitle}>{t.appTitle}</Text>
           </View>
           <TouchableOpacity
             style={styles.playlistButton}
@@ -1481,8 +1481,8 @@ const styles = StyleSheet.create({
     borderBottomColor: '#cc0000',
   },
   logoContainer: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     borderRadius: 8,
     overflow: 'hidden',
     marginRight: 12,
@@ -1490,8 +1490,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoImage: {
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     resizeMode: 'cover',
   },
   headerTitleContainer: {

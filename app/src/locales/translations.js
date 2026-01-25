@@ -1,6 +1,7 @@
 export const translations = {
   ko: {
     // 공통
+    appTitle: 'Melody Snap',
     error: '오류',
     complete: '완료',
     all: '전체',
@@ -197,6 +198,7 @@ export const translations = {
   },
   en: {
     // Common
+    appTitle: 'Melody Snap',
     error: 'Error',
     complete: 'Complete',
     all: 'All',
@@ -394,6 +396,7 @@ export const translations = {
   },
   ja: {
     // 共通
+    appTitle: 'Melody Snap',
     error: 'エラー',
     complete: '完了',
     all: 'すべて',
@@ -591,6 +594,7 @@ export const translations = {
   },
   zh: {
     // 通用
+    appTitle: 'Melody Snap',
     error: '错误',
     complete: '完成',
     all: '全部',

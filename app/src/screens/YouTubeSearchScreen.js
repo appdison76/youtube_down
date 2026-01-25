@@ -21,6 +21,8 @@ import { searchVideos, getAutocomplete } from '../services/downloadService';
 import { addFavorite, removeFavorite, isFavorite, initDatabase } from '../services/database';
 import AdBanner from '../components/AdBanner';
 import LanguageSelector from '../components/LanguageSelector';
+import { useLanguage } from '../contexts/LanguageContext';
+import { translations } from '../locales/translations';
 
 // 검색 이력 저장 키
 const SEARCH_HISTORY_KEY = 'video_search_history';
@@ -28,6 +30,8 @@ const AUTCOMPLETE_ENABLED_KEY = 'video_autocomplete_enabled';
 const MAX_HISTORY = 1000; // 최대 1000개 저장
 
 export default function VideoSearchScreen({ navigation, route }) {
+  const { currentLanguage } = useLanguage();
+  const t = translations[currentLanguage];
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -528,7 +532,7 @@ export default function VideoSearchScreen({ navigation, route }) {
             />
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle}>MelodySnap</Text>
+            <Text style={styles.headerTitle}>{t.appTitle}</Text>
           </View>
           <LanguageSelector />
         </View>
@@ -730,8 +734,8 @@ const styles = StyleSheet.create({
     borderBottomColor: '#cc0000',
   },
   logoContainer: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     borderRadius: 8,
     overflow: 'hidden',
     marginRight: 12,
@@ -739,8 +743,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoImage: {
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     resizeMode: 'cover',
   },
   headerTitleContainer: {
