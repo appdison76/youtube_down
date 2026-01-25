@@ -53,7 +53,7 @@ function MainTabs() {
           } else if (route.name === 'Downloads') {
             iconName = focused ? 'folder' : 'folder-outline';
           } else if (route.name === 'MusicRecognition') {
-            iconName = focused ? 'musical-notes' : 'musical-notes-outline';
+            iconName = focused ? 'mic' : 'mic-outline';
           }
           // else if (route.name === 'LocalFiles') { // 내폰 탭 (주석처리 - 나중에 사용 가능)
           //   iconName = focused ? 'phone-portrait' : 'phone-portrait-outline';
