@@ -875,8 +875,7 @@ export default function MusicRecognitionScreen({ navigation }) {
         )}
       </ScrollView>
 
-      {/* 스크린샷 촬영을 위해 임시 주석처리 */}
-      {/* <AdBanner /> */}
+      <AdBanner />
     </View>
   );
 }
