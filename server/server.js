@@ -372,9 +372,11 @@ app.get('/api/download/video', async (req, res) => {
       
       try {
         const userAgent = getUserAgent(playerClient);
+        // 더 유연한 포맷 선택자: 여러 화질 옵션과 폴백 제공
+        const formatSelector = 'best/bestvideo+bestaudio/best[height<=1080]/bestvideo[height<=1080]+bestaudio/best[height<=720]/bestvideo[height<=720]+bestaudio/best[height<=480]/bestvideo[height<=480]+bestaudio/worst';
         const args = [
           '-m', 'yt_dlp',
-          '-f', 'best/bestvideo+bestaudio',
+          '-f', formatSelector,
           '--merge-output-format', 'mp4',
           '--no-warnings',
           '--progress',
@@ -1286,4 +1288,3 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`[Server] YouTube Downloader Server running on port ${PORT}`);
   console.log(`[Server] Accessible at http://localhost:${PORT}`);
 });
-
