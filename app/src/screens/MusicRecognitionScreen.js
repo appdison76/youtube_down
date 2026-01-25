@@ -130,12 +130,12 @@ export default function MusicRecognitionScreen({ navigation }) {
       });
     }, 500); // 500ms 지연으로 앱이 완전히 마운트된 후 초기화
 
-    return () => {
-      clearTimeout(initTimeout);
-    };
-
     // ACRCloud 이벤트 리스너 설정
     // Expo Modules에서는 모듈에서 직접 addListener를 사용해야 합니다
+    let recognitionResultListener = null;
+    let recognitionErrorListener = null;
+    let volumeChangedListener = null;
+
     try {
       if (Platform.OS === 'android' && ACRCloudModule && typeof ACRCloudModule.addListener === 'function') {
         console.log('[MusicRecognitionScreen] Setting up event listeners...');
@@ -144,7 +144,7 @@ export default function MusicRecognitionScreen({ navigation }) {
       
       // Expo Modules에서는 모듈에서 직접 addListener를 사용
       // 1. 인식 결과 리스너 (이벤트 이름: onRecognitionResult)
-      const recognitionResultListener = ACRCloudModule.addListener('onRecognitionResult', (result) => {
+      recognitionResultListener = ACRCloudModule.addListener('onRecognitionResult', (result) => {
           console.log('[MusicRecognitionScreen] ✅✅✅ Recognition result received:', result);
           console.log('[MusicRecognitionScreen] ✅ Event name matches: onRecognitionResult');
           console.log('[MusicRecognitionScreen] 📝 Result data:', JSON.stringify(result));
@@ -213,7 +213,7 @@ export default function MusicRecognitionScreen({ navigation }) {
         console.log('[MusicRecognitionScreen] ✅ Listener object:', recognitionResultListener);
 
         // 2. 인식 에러 리스너 (이벤트 이름: onRecognitionError)
-        const recognitionErrorListener = ACRCloudModule.addListener('onRecognitionError', (error) => {
+        recognitionErrorListener = ACRCloudModule.addListener('onRecognitionError', (error) => {
           console.error('[MusicRecognitionScreen] ❌❌❌ Recognition error received:', error);
           console.error('[MusicRecognitionScreen] ❌ Event name matches: onRecognitionError');
           
@@ -236,7 +236,7 @@ export default function MusicRecognitionScreen({ navigation }) {
         console.log('[MusicRecognitionScreen] ✅ Listener registered: onRecognitionError');
 
         // 3. 볼륨 변화 리스너 (이벤트 이름: onVolumeChanged) - 마이크 작동 여부 확인용
-        const volumeChangedListener = ACRCloudModule.addListener('onVolumeChanged', (data) => {
+        volumeChangedListener = ACRCloudModule.addListener('onVolumeChanged', (data) => {
           // 볼륨 변화는 로그만 출력 (필요시 UI에 표시 가능)
           console.log('[MusicRecognitionScreen] 🔊 🔊 🔊 Volume changed:', data.volume);
           console.log('[MusicRecognitionScreen] ✅ ✅ ✅ Microphone is working! Receiving audio input.');
@@ -258,17 +258,6 @@ export default function MusicRecognitionScreen({ navigation }) {
         console.log('[MusicRecognitionScreen] 📝 If you see 🔊 Volume changed messages, microphone is working.');
 
         console.log('[MusicRecognitionScreen] ✅ Event listeners registered');
-
-        return () => {
-          console.log('[MusicRecognitionScreen] Removing event listeners...');
-          try {
-            recognitionResultListener?.remove();
-            recognitionErrorListener?.remove();
-            volumeChangedListener?.remove();
-          } catch (cleanupError) {
-            console.warn('[MusicRecognitionScreen] ⚠️ Error removing listeners:', cleanupError.message);
-          }
-        };
       } else {
         console.warn('[MusicRecognitionScreen] ⚠️ ACRCloudModule not available or addListener not supported');
       }
@@ -276,6 +265,19 @@ export default function MusicRecognitionScreen({ navigation }) {
       console.warn('[MusicRecognitionScreen] ⚠️ Error setting up event listeners (non-fatal):', listenerError.message);
       // 이벤트 리스너 설정 실패해도 앱은 계속 실행
     }
+
+    return () => {
+      console.log('[MusicRecognitionScreen] Cleaning up...');
+      clearTimeout(initTimeout);
+      console.log('[MusicRecognitionScreen] Removing event listeners...');
+      try {
+        recognitionResultListener?.remove();
+        recognitionErrorListener?.remove();
+        volumeChangedListener?.remove();
+      } catch (cleanupError) {
+        console.warn('[MusicRecognitionScreen] ⚠️ Error removing listeners:', cleanupError.message);
+      }
+    };
   }, []); // 컴포넌트 마운트 시 한 번만 초기화
 
   // 녹음 중지 및 정리
