@@ -1486,10 +1486,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     overflow: 'hidden',
     marginRight: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   logoImage: {
-    width: 40,
-    height: 40,
+    width: 48,
+    height: 48,
+    resizeMode: 'cover',
   },
   headerTitleContainer: {
     flex: 1,

@@ -61,24 +61,40 @@ export default function MusicRecognitionScreen({ navigation }) {
   useEffect(() => {
     const initializeACRCloud = async () => {
       try {
+        // ✅ ACRCloudModule이 존재하는지 먼저 확인
+        if (!ACRCloudModule) {
+          console.warn('[MusicRecognitionScreen] ⚠️ ACRCloudModule not available, skipping initialization');
+          return;
+        }
+
+        if (Platform.OS !== 'android') {
+          console.log('[MusicRecognitionScreen] Skipping ACRCloud initialization (not Android)');
+          return;
+        }
+
         console.log('[MusicRecognitionScreen] Initializing ACRCloud...');
         console.log('[MusicRecognitionScreen] Platform.OS:', Platform.OS);
         console.log('[MusicRecognitionScreen] ACRCloudModule:', ACRCloudModule);
         console.log('[MusicRecognitionScreen] useInternalAudio:', useInternalAudio);
         
-        if (Platform.OS === 'android' && ACRCloudModule) {
-          // ACRCloud 프로젝트 정보
-          const accessKey = 'b01665eac8c9b3032f229e8cb9a3e702';
-          const accessSecret = 'T4GxjwxQZ9nngfwLmyu3hy20Fp2jJGVqLI4nCvD7';
-          const host = 'identify-ap-southeast-1.acrcloud.com';
-          
-          // 주변 소리 모드만 사용 (마이크 모드)
+        // ACRCloud 프로젝트 정보
+        const accessKey = 'b01665eac8c9b3032f229e8cb9a3e702';
+        const accessSecret = 'T4GxjwxQZ9nngfwLmyu3hy20Fp2jJGVqLI4nCvD7';
+        const host = 'identify-ap-southeast-1.acrcloud.com';
+        
+        // 주변 소리 모드만 사용 (마이크 모드) - 안전하게 처리
+        try {
           if (ACRCloudModule.setInternalAudioMode) {
             await ACRCloudModule.setInternalAudioMode(false);
             console.log('[MusicRecognitionScreen] Audio mode: Microphone (external sound)');
           }
-          
-          // ACRCloud가 초기화되지 않았을 때만 초기화
+        } catch (audioModeError) {
+          console.warn('[MusicRecognitionScreen] ⚠️ Failed to set audio mode:', audioModeError.message);
+          // 오디오 모드 설정 실패해도 계속 진행
+        }
+        
+        // ACRCloud가 초기화되지 않았을 때만 초기화 - 안전하게 처리
+        try {
           const isInitialized = await ACRCloudModule.isInitialized();
           console.log('[MusicRecognitionScreen] Is initialized:', isInitialized);
           
@@ -90,30 +106,41 @@ export default function MusicRecognitionScreen({ navigation }) {
             if (initResult) {
               console.log('[MusicRecognitionScreen] ✅ ACRCloud initialized successfully');
             } else {
-              console.error('[MusicRecognitionScreen] ❌ ACRCloud initialization failed');
+              console.warn('[MusicRecognitionScreen] ⚠️ ACRCloud initialization returned false');
             }
           } else {
             console.log('[MusicRecognitionScreen] ACRCloud already initialized');
           }
-        } else {
-          console.warn('[MusicRecognitionScreen] ⚠️ ACRCloudModule not available');
+        } catch (initError) {
+          console.warn('[MusicRecognitionScreen] ⚠️ ACRCloud initialization error (non-fatal):', initError.message);
+          // 초기화 실패해도 앱은 계속 실행
         }
       } catch (error) {
-        console.error('[MusicRecognitionScreen] ❌ Error initializing ACRCloud:', error);
-        // ✅ 첫 설치 시 권한이 없어서 실패할 수 있으므로 Alert 표시하지 않음
+        // ✅ 첫 설치 시 권한이 없어서 실패할 수 있으므로 에러를 조용히 처리
+        // 개발 빌드에서도 LogBox에 표시되지 않도록 console.warn 사용
         // 사용자가 버튼을 눌렀을 때 권한 요청 후 다시 초기화 시도
-        console.log('[MusicRecognitionScreen] ⚠️ Initialization failed (will retry when user starts recognition):', error.message);
+        console.warn('[MusicRecognitionScreen] ⚠️ ACRCloud initialization skipped (will retry when user starts recognition):', error.message);
       }
     };
 
-    initializeACRCloud();
+    // ✅ 개발 빌드에서 크래시 방지를 위해 약간의 지연 후 초기화
+    const initTimeout = setTimeout(() => {
+      initializeACRCloud().catch(error => {
+        console.warn('[MusicRecognitionScreen] ⚠️ ACRCloud initialization failed (non-fatal):', error.message);
+      });
+    }, 500); // 500ms 지연으로 앱이 완전히 마운트된 후 초기화
+
+    return () => {
+      clearTimeout(initTimeout);
+    };
 
     // ACRCloud 이벤트 리스너 설정
     // Expo Modules에서는 모듈에서 직접 addListener를 사용해야 합니다
-    if (Platform.OS === 'android' && ACRCloudModule) {
-      console.log('[MusicRecognitionScreen] Setting up event listeners...');
-      console.log('[MusicRecognitionScreen] ACRCloudModule:', ACRCloudModule);
-      console.log('[MusicRecognitionScreen] 📝 Registering event listeners using Expo Modules...');
+    try {
+      if (Platform.OS === 'android' && ACRCloudModule && typeof ACRCloudModule.addListener === 'function') {
+        console.log('[MusicRecognitionScreen] Setting up event listeners...');
+        console.log('[MusicRecognitionScreen] ACRCloudModule:', ACRCloudModule);
+        console.log('[MusicRecognitionScreen] 📝 Registering event listeners using Expo Modules...');
       
       // Expo Modules에서는 모듈에서 직접 addListener를 사용
       // 1. 인식 결과 리스너 (이벤트 이름: onRecognitionResult)
@@ -234,13 +261,21 @@ export default function MusicRecognitionScreen({ navigation }) {
 
         return () => {
           console.log('[MusicRecognitionScreen] Removing event listeners...');
-          recognitionResultListener?.remove();
-          recognitionErrorListener?.remove();
-          volumeChangedListener?.remove();
+          try {
+            recognitionResultListener?.remove();
+            recognitionErrorListener?.remove();
+            volumeChangedListener?.remove();
+          } catch (cleanupError) {
+            console.warn('[MusicRecognitionScreen] ⚠️ Error removing listeners:', cleanupError.message);
+          }
         };
       } else {
-        console.warn('[MusicRecognitionScreen] ⚠️ ACRCloudModule not available');
+        console.warn('[MusicRecognitionScreen] ⚠️ ACRCloudModule not available or addListener not supported');
       }
+    } catch (listenerError) {
+      console.warn('[MusicRecognitionScreen] ⚠️ Error setting up event listeners (non-fatal):', listenerError.message);
+      // 이벤트 리스너 설정 실패해도 앱은 계속 실행
+    }
   }, []); // 컴포넌트 마운트 시 한 번만 초기화
 
   // 녹음 중지 및 정리
@@ -942,10 +977,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     overflow: 'hidden',
     marginRight: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   logoImage: {
-    width: 40,
-    height: 40,
+    width: 48,
+    height: 48,
+    resizeMode: 'cover',
   },
   headerTitleContainer: {
     flex: 1,
