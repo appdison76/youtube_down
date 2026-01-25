@@ -780,6 +780,8 @@ export default function MusicRecognitionScreen({ navigation }) {
                 )}
               </View>
             </View>
+            {/* 인식된 곡 아래 쿠팡 광고 */}
+            <AdBanner style={{ marginTop: 16 }} />
           </View>
         )}
 
@@ -796,71 +798,76 @@ export default function MusicRecognitionScreen({ navigation }) {
             <Text style={styles.youtubeResultsTitle}>
               {t.musicRecognitionSelectVideo}
             </Text>
-            {youtubeResults.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={styles.youtubeResultCard}
-                onPress={() => handleOpenVideo(item)}
-                activeOpacity={0.8}
-              >
-                {item.thumbnail ? (
-                  <Image 
-                    source={{ uri: item.thumbnail }} 
-                    style={styles.youtubeThumbnail}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View style={styles.youtubeThumbnailPlaceholder}>
-                    <Ionicons name="videocam" size={48} color="#999" />
+            {youtubeResults.map((item, index) => (
+              <React.Fragment key={item.id}>
+                <TouchableOpacity
+                  style={styles.youtubeResultCard}
+                  onPress={() => handleOpenVideo(item)}
+                  activeOpacity={0.8}
+                >
+                  {item.thumbnail ? (
+                    <Image 
+                      source={{ uri: item.thumbnail }} 
+                      style={styles.youtubeThumbnail}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View style={styles.youtubeThumbnailPlaceholder}>
+                      <Ionicons name="videocam" size={48} color="#999" />
+                    </View>
+                  )}
+                  <View style={styles.youtubeResultContent}>
+                    <Text style={styles.youtubeResultTitleText} numberOfLines={2}>
+                      {item.title}
+                    </Text>
+                    <Text style={styles.youtubeResultChannel} numberOfLines={1}>
+                      {item.channelTitle}
+                    </Text>
+                    <View style={styles.youtubeResultActions}>
+                      <TouchableOpacity 
+                        style={styles.favoriteButton}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handleAddFavorite(item);
+                        }}
+                      >
+                        <Ionicons 
+                          name={favorites.has(item.id) ? "star" : "star-outline"} 
+                          size={18} 
+                          color={favorites.has(item.id) ? "#FFD700" : "#999"} 
+                        />
+                        <Text style={styles.favoriteButtonText}>{t.addToFavorites || '찜하기'}</Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity 
+                        style={styles.playButton}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handleOpenVideo(item);
+                        }}
+                      >
+                        <Ionicons name="play-circle" size={18} color="#fff" />
+                        <Text style={styles.playButtonText}>{t.play}</Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity
+                        style={styles.downloadButton}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handleDownload(item, true);
+                        }}
+                      >
+                        <Ionicons name="download-outline" size={18} color="#fff" />
+                        <Text style={styles.downloadButtonText}>{t.saveButton || '다운로드'}</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
+                </TouchableOpacity>
+                {/* 3개마다 쿠팡 광고 삽입 */}
+                {(index + 1) % 3 === 0 && (
+                  <AdBanner style={{ marginTop: 16, marginBottom: 16 }} />
                 )}
-                <View style={styles.youtubeResultContent}>
-                  <Text style={styles.youtubeResultTitleText} numberOfLines={2}>
-                    {item.title}
-                  </Text>
-                  <Text style={styles.youtubeResultChannel} numberOfLines={1}>
-                    {item.channelTitle}
-                  </Text>
-                  <View style={styles.youtubeResultActions}>
-                    <TouchableOpacity 
-                      style={styles.favoriteButton}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        handleAddFavorite(item);
-                      }}
-                    >
-                      <Ionicons 
-                        name={favorites.has(item.id) ? "star" : "star-outline"} 
-                        size={18} 
-                        color={favorites.has(item.id) ? "#FFD700" : "#999"} 
-                      />
-                      <Text style={styles.favoriteButtonText}>{t.addToFavorites || '찜하기'}</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity 
-                      style={styles.playButton}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        handleOpenVideo(item);
-                      }}
-                    >
-                      <Ionicons name="play-circle" size={18} color="#fff" />
-                      <Text style={styles.playButtonText}>{t.play}</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity
-                      style={styles.downloadButton}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        handleDownload(item, true);
-                      }}
-                    >
-                      <Ionicons name="download-outline" size={18} color="#fff" />
-                      <Text style={styles.downloadButtonText}>{t.saveButton || '다운로드'}</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </TouchableOpacity>
+              </React.Fragment>
             ))}
           </View>
         )}
@@ -874,8 +881,6 @@ export default function MusicRecognitionScreen({ navigation }) {
           </View>
         )}
       </ScrollView>
-
-      <AdBanner />
     </View>
   );
 }
