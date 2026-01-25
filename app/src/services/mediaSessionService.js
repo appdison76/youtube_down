@@ -209,7 +209,7 @@ class MediaSessionService {
       }
 
       this.isPlaying = isPlaying;
-      console.log('[MediaSessionService] Updating playback state:', isPlaying, 'canGoNext:', canGoNext, 'canGoPrevious:', canGoPrevious, 'position:', position, 'duration:', duration);
+      // 트랙바 업데이트 로그 제거 (재생 시 너무 많은 로그 출력 방지)
       await MediaSessionModule.updatePlaybackState(isPlaying, canGoNext, canGoPrevious, position, duration);
       // 알림은 updateMetadata에서만 표시 (곡이 바뀔 때만)
     } catch (error) {

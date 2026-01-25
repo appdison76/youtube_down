@@ -423,7 +423,6 @@ export default function DownloadsScreen({ navigation }) {
       }, duration);
       // 초기 재생 상태 업데이트 (실제 position과 duration 사용)
       const initialPosition = status.isLoaded ? status.positionMillis || 0 : 0;
-      console.log('[DownloadsScreen] Updating MediaSession playback state: playing, canGoNext:', canGoNext, 'canGoPrevious:', canGoPrevious, 'position:', initialPosition, 'duration:', duration);
       await mediaSessionService.updatePlaybackState(true, canGoNext, canGoPrevious, initialPosition, duration, true); // 곡 변경 시 항상 알림 업데이트
       console.log('[DownloadsScreen] Successfully started playing new file');
 
@@ -961,7 +960,6 @@ export default function DownloadsScreen({ navigation }) {
         
         // 2. 오디오 이동
         await soundRef.current.setPositionAsync(positionMillis);
-        console.log('[DownloadsScreen] Seeked to:', positionMillis);
         
         // 3. 네이티브 MediaSession에 "재생 중" 상태라고 즉시 못 박기 (깜빡임 방지 핵심)
         const currentPlaylist = playlistRef.current.length > 0 ? playlistRef.current : playlist;
