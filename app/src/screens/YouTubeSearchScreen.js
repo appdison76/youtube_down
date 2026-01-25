@@ -516,13 +516,8 @@ export default function VideoSearchScreen({ navigation, route }) {
           <TouchableOpacity 
             style={styles.logoContainer}
             onPress={() => {
-              // X 버튼과 동일하게 초기화
-              setSearchQuery('');
-              setResults([]);
-              navigation.setParams({
-                searchQuery: '',
-                searchResults: [],
-              });
+              // 음악 찾기 화면으로 이동
+              navigation.navigate('MusicRecognition');
             }}
             activeOpacity={0.7}
           >
@@ -533,7 +528,7 @@ export default function VideoSearchScreen({ navigation, route }) {
             />
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle}>MeTube</Text>
+            <Text style={styles.headerTitle}>MelodySnap</Text>
           </View>
           <LanguageSelector />
         </View>
@@ -725,37 +720,33 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF0000',
   },
   header: {
-    backgroundColor: '#FF0000',
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? 8 : 0,
-    paddingBottom: 12,
-    minHeight: 56,
+    paddingVertical: 12,
+    backgroundColor: '#FF0000',
+    borderBottomWidth: 1,
+    borderBottomColor: '#cc0000',
   },
   logoContainer: {
-    marginRight: 12,
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
+    borderRadius: 8,
     overflow: 'hidden',
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
+    marginRight: 12,
   },
   logoImage: {
-    width: 56,
-    height: 56,
+    width: 40,
+    height: 40,
   },
   headerTitleContainer: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: 12,
   },
   headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
     color: '#fff',
-    fontSize: 19,
-    fontWeight: 'bold',
   },
   searchSection: {
     padding: 16,

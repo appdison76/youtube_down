@@ -171,13 +171,13 @@ class MediaSessionService {
       this.currentTrack = track;
       console.log('[MediaSessionService] Updating metadata:', {
         title: track?.title || '재생 중',
-        author: track?.author || 'MeTube',
+        author: track?.author || 'MelodySnap',
         thumbnail: track?.thumbnail || null,
         duration: duration,
       });
       await MediaSessionModule.updateMetadata(
         track?.title || '재생 중',
-        track?.author || 'MeTube',
+        track?.author || 'MelodySnap',
         track?.thumbnail || null,
         duration
       );

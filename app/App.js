@@ -1,5 +1,5 @@
-﻿import React, { useState, useEffect } from 'react';
-import { Platform, Linking, NativeEventEmitter, NativeModules, AppState, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { Platform, Linking, NativeEventEmitter, NativeModules, AppState, Alert, PermissionsAndroid } from 'react-native';
 import AppNavigator from './src/navigation/AppNavigator';
 import { initDatabase } from './src/services/database';
 import { LanguageProvider } from './src/contexts/LanguageContext';
@@ -39,6 +39,11 @@ export default function App() {
       console.error('[App] Database initialization error:', error);
     });
   }, []);
+
+  // 마이크 권한 요청 (앱 시작 시) - 제거: 음악 인식 화면에서 요청하도록 변경
+  // useEffect(() => {
+  //   ... 권한 요청 코드 제거
+  // }, []);
 
   // ✅ 강제 업데이트 체크
   useEffect(() => {

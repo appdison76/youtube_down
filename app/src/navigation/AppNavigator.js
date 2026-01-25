@@ -8,6 +8,7 @@ import FavoritesScreen from '../screens/FavoritesScreen';
 import DownloadsScreen from '../screens/DownloadsScreen';
 // import LocalFilesScreen from '../screens/LocalFilesScreen'; // 내폰 탭 (주석처리 - 나중에 사용 가능)
 import VideoSearchScreen from '../screens/VideoSearchScreen';
+import MusicRecognitionScreen from '../screens/MusicRecognitionScreen';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../locales/translations';
 
@@ -30,6 +31,8 @@ function MainTabs() {
       //   return t.tabLocalFiles;
       case 'Favorites':
         return t.tabFavorites;
+      case 'MusicRecognition':
+        return t.tabMusicRecognition;
       default:
         return '';
     }
@@ -49,6 +52,8 @@ function MainTabs() {
             iconName = focused ? 'star' : 'star-outline';
           } else if (route.name === 'Downloads') {
             iconName = focused ? 'folder' : 'folder-outline';
+          } else if (route.name === 'MusicRecognition') {
+            iconName = focused ? 'musical-notes' : 'musical-notes-outline';
           }
           // else if (route.name === 'LocalFiles') { // 내폰 탭 (주석처리 - 나중에 사용 가능)
           //   iconName = focused ? 'phone-portrait' : 'phone-portrait-outline';
@@ -62,6 +67,10 @@ function MainTabs() {
         headerShown: false, // 커스텀 헤더 사용
       })}
     >
+      <Tab.Screen 
+        name="MusicRecognition" 
+        component={MusicRecognitionScreen}
+      />
       <Tab.Screen 
         name="VideoSearch" 
         component={VideoSearchScreen}

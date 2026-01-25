@@ -1,0 +1,11 @@
+{
+  "platforms": ["android"],
+  "ios": {
+    "modules": []
+  },
+  "android": {
+    "modules": [
+      "com.appdison76.acrcloud.ACRCloudModule"
+    ]
+  }
+}

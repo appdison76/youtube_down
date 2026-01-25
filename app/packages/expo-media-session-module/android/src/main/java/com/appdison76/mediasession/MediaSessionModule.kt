@@ -78,7 +78,7 @@ class MediaSessionModule : Module() {
           }
         )
 
-        mediaSession = MediaSessionCompat(context, "MeTubeMediaSession").apply {
+        mediaSession = MediaSessionCompat(context, "MelodySnapMediaSession").apply {
           setCallback(object : MediaSessionCompat.Callback() {
             override fun onPlay() {
               sendEvent("play", null)
@@ -277,7 +277,7 @@ class MediaSessionModule : Module() {
             val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
               .setSmallIcon(android.R.drawable.ic_media_play)
               .setContentTitle(metadata?.getString(MediaMetadataCompat.METADATA_KEY_TITLE) ?: "재생 중")
-              .setContentText(metadata?.getString(MediaMetadataCompat.METADATA_KEY_ARTIST) ?: "MeTube")
+              .setContentText(metadata?.getString(MediaMetadataCompat.METADATA_KEY_ARTIST) ?: "MelodySnap")
               .setLargeIcon(metadata?.getBitmap(MediaMetadataCompat.METADATA_KEY_ART))
             
             // 버튼을 조건부로 추가
@@ -389,7 +389,7 @@ class MediaSessionModule : Module() {
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
           .setSmallIcon(android.R.drawable.ic_media_play)
           .setContentTitle(metadata?.getString(MediaMetadataCompat.METADATA_KEY_TITLE) ?: "재생 중")
-          .setContentText(metadata?.getString(MediaMetadataCompat.METADATA_KEY_ARTIST) ?: "MeTube")
+          .setContentText(metadata?.getString(MediaMetadataCompat.METADATA_KEY_ARTIST) ?: "MelodySnap")
           .setLargeIcon(metadata?.getBitmap(MediaMetadataCompat.METADATA_KEY_ART))
           .setStyle(
             MediaStyle()

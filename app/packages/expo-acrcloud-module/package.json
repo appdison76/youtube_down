@@ -1,0 +1,24 @@
+{
+  "name": "expo-acrcloud-module",
+  "version": "1.0.0",
+  "description": "Expo module for ACRCloud music recognition",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "expo",
+    "acrcloud",
+    "music",
+    "recognition",
+    "android"
+  ],
+  "author": "",
+  "license": "MIT",
+  "peerDependencies": {
+    "expo": "*"
+  },
+  "dependencies": {
+    "expo-modules-core": "*"
+  }
+}

@@ -134,7 +134,7 @@ class MediaSessionModule(reactContext: ReactApplicationContext) : ReactContextBa
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
       )
 
-      mediaSession = MediaSessionCompat(context, "MeTubeMediaSession", null, mediaButtonPendingIntent).apply {
+      mediaSession = MediaSessionCompat(context, "MelodySnapMediaSession", null, mediaButtonPendingIntent).apply {
         setCallback(object : MediaSessionCompat.Callback() {
           override fun onPlay() {
             android.util.Log.d("MediaSessionModule", "Callback: onPlay")
@@ -361,7 +361,7 @@ class MediaSessionModule(reactContext: ReactApplicationContext) : ReactContextBa
       val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
         .setSmallIcon(android.R.drawable.ic_media_play)
         .setContentTitle(metadata?.getString(MediaMetadataCompat.METADATA_KEY_TITLE) ?: "재생 중")
-        .setContentText(metadata?.getString(MediaMetadataCompat.METADATA_KEY_ARTIST) ?: "MeTube")
+        .setContentText(metadata?.getString(MediaMetadataCompat.METADATA_KEY_ARTIST) ?: "MelodySnap")
         .setLargeIcon(metadata?.getBitmap(MediaMetadataCompat.METADATA_KEY_ART))
       
       // 버튼을 조건부로 추가하되, 재생/일시정지 버튼이 항상 중앙에 오도록 정렬

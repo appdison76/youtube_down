@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
@@ -108,5 +109,36 @@ class MainActivity : ReactActivity() {
       // Use the default back button implementation on Android S
       // because it's doing more than [Activity.moveTaskToBack] in fact.
       super.invokeDefaultOnBackPressed()
+  }
+
+  // MediaProjection 권한 결과 처리 (내부 소리 캡처용)
+  override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+    super.onActivityResult(requestCode, resultCode, data)
+    
+    // ACRCloudModule의 MediaProjection 요청 코드
+    if (requestCode == 1000) { // REQUEST_CODE_MEDIA_PROJECTION
+      Log.d("MainActivity", "MediaProjection result received: resultCode=$resultCode")
+      
+      // ACRCloudModule에 결과 전달
+      try {
+        // Companion object를 통해 인스턴스 접근
+        val acrCloudModule = com.appdison76.acrcloud.ACRCloudModule.Companion.getInstance()
+        if (acrCloudModule != null) {
+          // setMediaProjectionResultInternal 함수 호출 (public 함수)
+          try {
+            acrCloudModule.setMediaProjectionResultInternal(resultCode, data)
+            Log.d("MainActivity", "✅ MediaProjection result sent to ACRCloudModule")
+          } catch (e: Exception) {
+            Log.e("MainActivity", "Error calling setMediaProjectionResultInternal", e)
+            e.printStackTrace()
+          }
+        } else {
+          Log.w("MainActivity", "ACRCloudModule instance is null")
+        }
+      } catch (e: Exception) {
+        Log.e("MainActivity", "Error handling MediaProjection result", e)
+        e.printStackTrace()
+      }
+    }
   }
 }

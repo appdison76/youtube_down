@@ -1,0 +1,28 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'host.exp.exponent'
+version = '1.0.0'
+
+android {
+  namespace "com.appdison76.acrcloud"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+}
+
+dependencies {
+  implementation "androidx.annotation:annotation:1.2.0"
+  
+  // ACRCloud SDK는 수동으로 추가해야 합니다
+  // 1. ACRCloud SDK 다운로드: https://github.com/acrcloud/ACRCloudUniversalSDK
+  // 2. acrcloud-universal-sdk-(version).jar를 libs/ 폴더에 추가
+  // 3. libACRCloudUniversalEngine.so 파일들을 src/main/jniLibs/armeabi-v7a/, arm64-v8a/, x86/, x86_64/ 폴더에 추가
+  // 4. 아래 주석 해제하고 실제 파일명으로 변경:
+  
+  // ACRCloud SDK 추가
+  implementation files('libs/acrcloud-universal-sdk-1.3.33.jar')
+}
