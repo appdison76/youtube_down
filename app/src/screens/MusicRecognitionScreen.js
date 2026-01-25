@@ -100,7 +100,9 @@ export default function MusicRecognitionScreen({ navigation }) {
         }
       } catch (error) {
         console.error('[MusicRecognitionScreen] ❌ Error initializing ACRCloud:', error);
-        Alert.alert(t.error, `ACRCloud 초기화 실패: ${error.message}`);
+        // ✅ 첫 설치 시 권한이 없어서 실패할 수 있으므로 Alert 표시하지 않음
+        // 사용자가 버튼을 눌렀을 때 권한 요청 후 다시 초기화 시도
+        console.log('[MusicRecognitionScreen] ⚠️ Initialization failed (will retry when user starts recognition):', error.message);
       }
     };
 
@@ -379,8 +381,50 @@ export default function MusicRecognitionScreen({ navigation }) {
       
       console.log('[MusicRecognitionScreen] ✅ Step 1: Microphone permission OK');
       
+      console.log('[MusicRecognitionScreen] Step 2: Ensuring ACRCloud is initialized...');
       
-      console.log('[MusicRecognitionScreen] Step 2: Checking ACRCloud initialization...');
+      // ✅ 권한 확인 후 ACRCloud 초기화 확인 및 재시도
+      if (Platform.OS === 'android' && ACRCloudModule) {
+        const isInit = await ACRCloudModule.isInitialized?.();
+        console.log('[MusicRecognitionScreen] ACRCloud initialized:', isInit);
+        
+        if (!isInit) {
+          console.log('[MusicRecognitionScreen] ACRCloud not initialized, initializing now...');
+          try {
+            // ACRCloud 프로젝트 정보
+            const accessKey = 'b01665eac8c9b3032f229e8cb9a3e702';
+            const accessSecret = 'T4GxjwxQZ9nngfwLmyu3hy20Fp2jJGVqLI4nCvD7';
+            const host = 'identify-ap-southeast-1.acrcloud.com';
+            
+            // 주변 소리 모드만 사용 (마이크 모드)
+            if (ACRCloudModule.setInternalAudioMode) {
+              await ACRCloudModule.setInternalAudioMode(false);
+              console.log('[MusicRecognitionScreen] Audio mode: Microphone (external sound)');
+            }
+            
+            const initResult = await ACRCloudModule.initialize(accessKey, accessSecret, host);
+            console.log('[MusicRecognitionScreen] Initialize result:', initResult);
+            
+            if (!initResult) {
+              console.error('[MusicRecognitionScreen] ❌ ACRCloud initialization failed');
+              Alert.alert(t.error, 'ACRCloud 초기화에 실패했습니다. 앱을 재시작해주세요.');
+              setIsRecognizing(false);
+              return;
+            }
+            
+            console.log('[MusicRecognitionScreen] ✅ ACRCloud initialized successfully');
+          } catch (error) {
+            console.error('[MusicRecognitionScreen] ❌ Error initializing ACRCloud:', error);
+            Alert.alert(t.error, `ACRCloud 초기화 실패: ${error.message}`);
+            setIsRecognizing(false);
+            return;
+          }
+        } else {
+          console.log('[MusicRecognitionScreen] ✅ ACRCloud already initialized');
+        }
+      }
+      
+      console.log('[MusicRecognitionScreen] Step 3: Checking ACRCloud initialization...');
 
       // 이전 결과 초기화 (새 인식을 위해 - 샤잠처럼 매번 새로 시작)
       console.log('[MusicRecognitionScreen] 🔄 Clearing previous results for new recognition...');
@@ -420,19 +464,8 @@ export default function MusicRecognitionScreen({ navigation }) {
 
       if (Platform.OS === 'android' && ACRCloudModule) {
         // ACRCloud로 음악 인식 시작
-        console.log('[MusicRecognitionScreen] Step 3: Starting ACRCloud recognition...');
+        console.log('[MusicRecognitionScreen] Step 4: Starting ACRCloud recognition...');
         console.log('[MusicRecognitionScreen] ACRCloudModule:', ACRCloudModule);
-        
-        // 초기화 상태 확인
-        const isInit = await ACRCloudModule.isInitialized?.();
-        console.log('[MusicRecognitionScreen] ACRCloud initialized:', isInit);
-        
-        if (!isInit) {
-          console.error('[MusicRecognitionScreen] ❌ ACRCloud not initialized!');
-          Alert.alert(t.error, 'ACRCloud가 초기화되지 않았습니다. 앱을 재시작해주세요.');
-          setIsRecognizing(false);
-          return;
-        }
         
         const startResult = await ACRCloudModule.startRecognizing();
         console.log('[MusicRecognitionScreen] Step 4: Start recognition result:', startResult);
