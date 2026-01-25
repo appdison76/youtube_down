@@ -237,13 +237,15 @@ class ACRCloudModule : Module() {
             this.accessKey = accessKey
             this.accessSecret = accessSecret
             this.recorderConfig.isVolumeCallback = true
-            this.recorderConfig.reservedRecordBufferMS = 3000 // 3초 프리레코딩
+            // 프리레코딩 버퍼를 줄여서 이전 인식 결과가 남지 않도록 함
+            // 3초는 너무 길어서 이전 곡의 오디오가 버퍼에 남을 수 있음
+            this.recorderConfig.reservedRecordBufferMS = 1000 // 1초 프리레코딩 (이전: 3000ms)
             
             // 오디오 샘플 레이트 명시적 설정 (표준 규격)
             // GPT나 제미나이 같은 앱들이 사용하는 표준 샘플 레이트
             // 8000은 너무 낮고, 44100이 표준이지만 ACRCloud SDK가 자동으로 설정할 수 있음
             // 명시적으로 설정할 수 있다면 설정하되, SDK가 자동으로 처리하는 경우도 있음
-            Log.d("ACRCloudModule", "✅ Recorder config set - isVolumeCallback: true, reservedRecordBufferMS: 3000")
+            Log.d("ACRCloudModule", "✅ Recorder config set - isVolumeCallback: true, reservedRecordBufferMS: 1000 (reduced from 3000 to prevent cache issues)")
             Log.d("ACRCloudModule", "✅ ACRCloud SDK will use standard audio sample rate (typically 44100 Hz)")
             
             // 오디오 소스 설정
@@ -342,9 +344,29 @@ class ACRCloudModule : Module() {
           return@AsyncFunction promise.reject("NOT_INITIALIZED", "ACRCloud is not initialized. Call initialize() first.", null)
         }
         
+        // 이전 인식이 진행 중이면 먼저 취소 (버퍼/캐시 정리를 위해)
         if (isRecognizing) {
-          return@AsyncFunction promise.reject("ALREADY_RECOGNIZING", "Recognition is already in progress", null)
+          Log.d("ACRCloudModule", "⚠️ Previous recognition in progress, cancelling first...")
+          try {
+            mClient?.cancel()
+            Log.d("ACRCloudModule", "✅ Previous recognition cancelled")
+            // reservedRecordBufferMS가 1초이므로 버퍼를 완전히 정리하기 위해 짧은 대기
+            // 최소한의 대기로 성능 영향 최소화
+            Log.d("ACRCloudModule", "⏳ Waiting 300ms to clear audio buffer (reservedRecordBufferMS: 1000ms)...")
+            try {
+              Thread.sleep(300)
+            } catch (e: InterruptedException) {
+              Log.w("ACRCloudModule", "⚠️ Sleep interrupted: ${e.message}")
+            }
+            isRecognizing = false
+            Log.d("ACRCloudModule", "✅ Previous recognition fully stopped and buffer cleared")
+          } catch (e: Exception) {
+            Log.e("ACRCloudModule", "❌ Error cancelling previous recognition: ${e.message}", e)
+            // 에러가 나도 계속 진행
+            isRecognizing = false
+          }
         }
+        // 이전 인식이 없으면 대기하지 않음 (불필요한 지연 방지)
         
         Log.d("ACRCloudModule", "Starting music recognition...")
         Log.d("ACRCloudModule", "Context type: ${if (activity != null) "Activity" else "Application"}")
@@ -415,6 +437,8 @@ class ACRCloudModule : Module() {
           Log.d("ACRCloudModule", "  - context: ${mConfig?.context}")
           Log.d("ACRCloudModule", "  - context is Activity: ${mConfig?.context is Activity}")
           Log.d("ACRCloudModule", "  - isVolumeCallback: ${mConfig?.recorderConfig?.isVolumeCallback}")
+          Log.d("ACRCloudModule", "  - reservedRecordBufferMS: ${mConfig?.recorderConfig?.reservedRecordBufferMS}")
+          Log.d("ACRCloudModule", "  - Previous audio buffer should be cleared now")
           
           val startResult = mClient?.startRecognize()
           Log.d("ACRCloudModule", "startRecognize() returned: $startResult")
@@ -565,7 +589,28 @@ class ACRCloudModule : Module() {
         val metadata = jsonResult.getJSONObject("metadata")
         val musicInfo = if (metadata.has("music")) {
           val musicArray = metadata.getJSONArray("music")
+          
+          // 🔥 여러 후보가 있는지 확인하고 로그 출력
+          Log.d("ACRCloudModule", "📊 Total music candidates: ${musicArray.length()}")
+          
           if (musicArray.length() > 0) {
+            // 모든 후보를 로그로 출력
+            for (i in 0 until musicArray.length()) {
+              val music = musicArray.getJSONObject(i)
+              val artistsArray = music.optJSONArray("artists")
+              val artistName = if (artistsArray != null && artistsArray.length() > 0) {
+                artistsArray.getJSONObject(0).optString("name", "")
+              } else {
+                ""
+              }
+              val title = music.optString("title", "")
+              val score = music.optInt("score", -1) // 신뢰도 점수 (있는 경우)
+              val playOffset = music.optInt("play_offset_ms", -1) // 재생 오프셋
+              
+              Log.d("ACRCloudModule", "  Candidate #${i + 1}: '$title' by '$artistName' (score: $score, offset: $playOffset)")
+            }
+            
+            // 첫 번째 결과 사용 (ACRCloud는 신뢰도 순으로 정렬된 결과를 반환)
             val firstMusic = musicArray.getJSONObject(0)
             
             // 아티스트 정보 파싱
@@ -580,12 +625,19 @@ class ACRCloudModule : Module() {
             val albumObj = firstMusic.optJSONObject("album")
             val albumName = albumObj?.optString("name", "") ?: ""
             
+            val score = firstMusic.optInt("score", -1)
+            val playOffset = firstMusic.optInt("play_offset_ms", -1)
+            
+            Log.d("ACRCloudModule", "✅ Selected result: '${firstMusic.optString("title", "")}' by '$artistName' (score: $score, offset: $playOffset)")
+            
             mapOf(
               "title" to firstMusic.optString("title", ""),
               "artist" to artistName,
               "album" to albumName,
               "duration" to firstMusic.optInt("duration_ms", 0),
-              "acrid" to firstMusic.optString("acrid", "")
+              "acrid" to firstMusic.optString("acrid", ""),
+              "score" to score, // 신뢰도 점수 추가
+              "playOffset" to playOffset // 재생 오프셋 추가
             )
           } else {
             null

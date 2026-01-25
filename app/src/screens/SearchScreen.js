@@ -609,8 +609,8 @@ export default function SearchScreen({ navigation, route }) {
     // 이미 저장 중인 경우 취소 확인
     if (downloading[item.id]) {
       Alert.alert(
-        '저장 중',
-        '이미 저장이 진행 중입니다. 취소하시겠습니까?',
+        t.saving || '저장 중',
+        t.savingInProgress || '이미 저장이 진행 중입니다. 취소하시겠습니까?',
         [
           { text: t.no, style: 'cancel' },
           {
@@ -779,8 +779,8 @@ export default function SearchScreen({ navigation, route }) {
     // 이미 저장 중인 경우 취소 확인
     if (downloading[item.id]) {
       Alert.alert(
-        '저장 중',
-        '이미 저장이 진행 중입니다. 취소하시겠습니까?',
+        t.saving || '저장 중',
+        t.savingInProgress || '이미 저장이 진행 중입니다. 취소하시겠습니까?',
         [
           { text: t.no, style: 'cancel' },
           {
@@ -1351,14 +1351,14 @@ export default function SearchScreen({ navigation, route }) {
     
     // 버튼 표시 로직: 스트리밍이므로 이어받기 불가능, 항상 '다시받기'
     const getVideoButtonText = () => {
-      if (isDownloadingVideo) return '다운로드 중...';
+      if (isDownloadingVideo) return t.saving || '저장 중...';
       if (!downloadedVideo) return t.saveVideo; // '영상받기'
       // 스트리밍이므로 이어받기 불가능, status와 무관하게 '다시받기'
       return t.redownload; // '다시받기'
     };
     
     const getAudioButtonText = () => {
-      if (isDownloadingAudio) return '다운로드 중...';
+      if (isDownloadingAudio) return t.saving || '저장 중...';
       if (!downloadedAudio) return t.saveMusic; // '음악받기'
       // 스트리밍이므로 이어받기 불가능, status와 무관하게 '다시받기'
       return t.redownload; // '다시받기'

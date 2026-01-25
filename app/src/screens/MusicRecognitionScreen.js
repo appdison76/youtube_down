@@ -121,8 +121,10 @@ export default function MusicRecognitionScreen({ navigation }) {
           console.log('[MusicRecognitionScreen] 📝 Result data:', JSON.stringify(result));
           console.log('[MusicRecognitionScreen] 📝 Result title:', result?.title);
           console.log('[MusicRecognitionScreen] 📝 Result artist:', result?.artist);
+          console.log('[MusicRecognitionScreen] 📊 Result score (confidence):', result?.score);
+          console.log('[MusicRecognitionScreen] 📊 Result playOffset:', result?.playOffset);
           
-              // 인식 결과를 받았으므로 인식 중지 및 타임아웃 제거
+          // 인식 결과를 받았으므로 인식 중지 및 타임아웃 제거
           if (recordingTimeoutRef.current) {
             clearTimeout(recordingTimeoutRef.current);
             recordingTimeoutRef.current = null;
@@ -139,7 +141,22 @@ export default function MusicRecognitionScreen({ navigation }) {
             title: result.title || '',
             artist: result.artist || '',
             album: result.album || '',
+            score: result.score, // 신뢰도 점수 저장
+            playOffset: result.playOffset, // 재생 오프셋 저장
           };
+          
+          // 🔥 신뢰도 점수 로그만 남기기 (알림 팝업 제거)
+          if (result?.score !== undefined && result.score >= 0) {
+            if (result.score < 50) {
+              console.warn('[MusicRecognitionScreen] ⚠️ Low confidence score detected:', result.score);
+              console.warn('[MusicRecognitionScreen] ⚠️ Result may be inaccurate. Please try again.');
+            } else if (result.score < 70) {
+              console.log('[MusicRecognitionScreen] ⚠️ Moderate confidence score:', result.score);
+              console.log('[MusicRecognitionScreen] 💡 If result seems wrong, try recognizing at a different part of the song');
+            } else {
+              console.log('[MusicRecognitionScreen] ✅ Good confidence score:', result.score);
+            }
+          }
           
           console.log('[MusicRecognitionScreen] 📝 Setting recognition result:', newResult);
           console.log('[MusicRecognitionScreen] 📝 Result title:', newResult.title);
@@ -334,6 +351,8 @@ export default function MusicRecognitionScreen({ navigation }) {
     try {
       console.log('[MusicRecognitionScreen] 🎵 Starting music recognition...');
       console.log('[MusicRecognitionScreen] ========================================');
+      console.log('[MusicRecognitionScreen] ⚠️ IMPORTANT: Make sure only ONE song is playing');
+      console.log('[MusicRecognitionScreen] ⚠️ If multiple songs are playing, recognition may be inaccurate');
       console.log('[MusicRecognitionScreen] Step 1: Checking microphone permission...');
       
       // 마이크 권한 확인 및 요청 (중요: 실제 런타임 권한 요청)
@@ -377,6 +396,22 @@ export default function MusicRecognitionScreen({ navigation }) {
       if (recordingTimeoutRef.current) {
         clearTimeout(recordingTimeoutRef.current);
         recordingTimeoutRef.current = null;
+      }
+      
+      // 🔥 이전 인식이 진행 중이면 먼저 완전히 중지 (버퍼 정리는 네이티브에서 처리)
+      if (Platform.OS === 'android' && ACRCloudModule) {
+        try {
+          const wasRecognizing = await ACRCloudModule.isRecognizing?.();
+          if (wasRecognizing) {
+            console.log('[MusicRecognitionScreen] 🔄 Previous recognition in progress, stopping first...');
+            await ACRCloudModule.stopRecognizing();
+            // 버퍼 정리는 네이티브(startRecognizing)에서 처리하므로 여기서는 대기하지 않음
+            console.log('[MusicRecognitionScreen] ✅ Previous recognition stopped (buffer will be cleared in native)');
+          }
+        } catch (error) {
+          console.warn('[MusicRecognitionScreen] ⚠️ Error stopping previous recognition:', error);
+          // 에러가 나도 계속 진행
+        }
       }
       
       // 인식 시작
@@ -821,7 +856,7 @@ export default function MusicRecognitionScreen({ navigation }) {
                       }}
                     >
                       <Ionicons name="download-outline" size={18} color="#fff" />
-                      <Text style={styles.downloadButtonText}>다운로드</Text>
+                      <Text style={styles.downloadButtonText}>{t.saveButton || '다운로드'}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
