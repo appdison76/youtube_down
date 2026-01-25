@@ -167,7 +167,7 @@
 
         .screenshots-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 0;
             width: 100%;
             margin: 0;
@@ -630,6 +630,7 @@
             <h2 class="section-title">📝 버전 1.1.2 업데이트 내용</h2>
             <div class="update-content">
                 <ul class="update-list">
+                    <li>🎵 <strong>새로운 기능: 음악 찾기 (Shazam 기능)</strong> - 주변에서 재생되는 음악을 인식하여 곡 정보를 찾고, YouTube에서 바로 검색하여 다운로드할 수 있습니다. 샤잠(Shazam)처럼 간단하게 음악을 찾아보세요!</li>
                     <li>🎵 <strong>외부 저장소 파일 재생 개선</strong> - 외부 저장소에 저장한 음악/영상을 재생할 때 외부 플레이어 하단에 "삼성 뮤직으로 이동" 등 공유 옵션이 나타나도록 개선했습니다</li>
                     <li>📁 <strong>외부 저장소 파일 검색 개선</strong> - DISPLAY_NAME에 videoId를 저장하여 외부 저장소에서 파일을 더 정확하게 찾을 수 있습니다</li>
                     <li>🔄 <strong>재생 및 공유 로직 통일</strong> - "내폰"과 "내파일" 화면에서 동일한 방식으로 파일을 재생하고 공유할 수 있습니다</li>
@@ -678,6 +679,15 @@
                     <div class="screenshot-placeholder" style="display: none;">⭐</div>
                     <div class="screenshot-title">찜하기</div>
                     <div class="screenshot-desc">좋아하는 영상을 찜하기 목록에 저장하고 관리하세요</div>
+                </div>
+                <div class="screenshot-card">
+                    <img src="./screenshots/screenshot-music-recognition.jpg" 
+                         alt="음악 찾기 화면" 
+                         class="screenshot-image"
+                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                    <div class="screenshot-placeholder" style="display: none;">🎵</div>
+                    <div class="screenshot-title">음악 찾기 (샤잠 기능)</div>
+                    <div class="screenshot-desc">주변에서 재생되는 음악을 인식하여 곡 정보를 찾고, YouTube에서 바로 검색하여 다운로드할 수 있습니다</div>
                 </div>
             </div>
         </div>
@@ -748,6 +758,11 @@
                     <div class="feature-icon">🔎</div>
                     <h3 class="feature-title">빠른 검색</h3>
                     <p class="feature-desc">파일명으로 빠르게 원하는 파일을 찾아보세요</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🎵</div>
+                    <h3 class="feature-title">음악 찾기 (Shazam)</h3>
+                    <p class="feature-desc">주변에서 재생되는 음악을 인식하여 곡 정보를 찾고, YouTube에서 바로 검색하여 다운로드할 수 있습니다</p>
                 </div>
             </div>
         </div>

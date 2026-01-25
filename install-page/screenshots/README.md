@@ -4,23 +4,35 @@
 
 ## 필요한 이미지 파일
 
-다음 3개의 스크린샷 이미지를 이 폴더에 넣어주세요:
+다음 5개의 스크린샷 이미지를 이 폴더에 넣어주세요:
 
-1. **screenshot-download.jpg**
+1. **screenshot-search.jpg**
+   - YouTube 검색 화면 (VideoSearchScreen)
+   - 검색어로 YouTube 영상 검색 화면
+   - 권장 크기: 최소 600x1000px (세로 비율)
+   - 용량: 최대 500KB 권장
+
+2. **screenshot-download.jpg**
    - 영상 & 음악 다운로드 화면 (SearchScreen)
    - YouTube 앱에서 공유하기 또는 URL 입력 화면
    - 권장 크기: 최소 600x1000px (세로 비율)
    - 용량: 최대 500KB 권장
 
-2. **screenshot-files.jpg**
+3. **screenshot-files.jpg**
    - 영상 음악 관리 화면 (DownloadsScreen)
    - 다운로드한 파일 목록 및 필터 옵션
    - 권장 크기: 최소 600x1000px (세로 비율)
    - 용량: 최대 500KB 권장
 
-3. **screenshot-favorites.jpg**
+4. **screenshot-favorites.jpg**
    - 찜하기 화면 (FavoritesScreen)
    - 찜한 영상 목록 화면
+   - 권장 크기: 최소 600x1000px (세로 비율)
+   - 용량: 최대 500KB 권장
+
+5. **screenshot-music-recognition.jpg** (새로 추가)
+   - 음악 찾기 화면 (MusicRecognitionScreen)
+   - 음악 인식 버튼과 인식 결과, YouTube 검색 결과가 표시된 화면
    - 권장 크기: 최소 600x1000px (세로 비율)
    - 용량: 최대 500KB 권장
 
