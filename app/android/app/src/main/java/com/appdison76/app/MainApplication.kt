@@ -5,6 +5,8 @@ import android.content.res.Configuration
 
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
+import com.appdison76.app.MediaSessionPackage
+import com.appdison76.app.MediaStorePackage
 import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
 import com.facebook.react.ReactNativeHost
 import com.facebook.react.ReactPackage
@@ -23,8 +25,8 @@ class MainApplication : Application(), ReactApplication {
       object : DefaultReactNativeHost(this) {
         override fun getPackages(): List<ReactPackage> =
             PackageList(this).packages.apply {
-              // Packages that cannot be autolinked yet can be added manually here, for example:
-              // add(MyReactNativePackage())
+              add(MediaSessionPackage())
+              add(MediaStorePackage())
             }
 
           override fun getJSMainModuleName(): String = ".expo/.virtual-metro-entry"
