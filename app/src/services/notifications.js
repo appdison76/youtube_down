@@ -83,6 +83,18 @@ export const sendRecognitionNotification = async (title, artist, data = {}) => {
 };
 
 /**
+ * 음악 인식 실패 알림 발송
+ */
+export const sendRecognitionFailedNotification = async (message) => {
+  const notificationTitle = '❌ 음악 인식 실패';
+  const notificationBody = message || '음악을 찾을 수 없습니다.';
+  
+  return await sendLocalNotification(notificationTitle, notificationBody, {
+    type: 'recognition_failed',
+  });
+};
+
+/**
  * 알림 리스너 설정
  */
 export const setupNotificationListeners = (onNotificationReceived, onNotificationTapped) => {

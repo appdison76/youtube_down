@@ -29,6 +29,7 @@ import { addFavorite, removeFavorite, isFavorite, getFavorites } from '../servic
 import ACRCloudModule from '../modules/ACRCloudModule';
 import { 
   sendRecognitionNotification, 
+  sendRecognitionFailedNotification,
   setupNotificationListeners,
   requestNotificationPermission 
 } from '../services/notifications';
@@ -39,6 +40,7 @@ export default function MusicRecognitionScreen({ navigation }) {
   const [isRecognizing, setIsRecognizing] = useState(false);
   const [recognitionResult, setRecognitionResult] = useState(null);
   const [youtubeResults, setYoutubeResults] = useState([]);
+  const [recognitionError, setRecognitionError] = useState(null); // 인식 실패 메시지
   
   // recognitionResult 상태 변경 추적
   useEffect(() => {
@@ -199,6 +201,7 @@ export default function MusicRecognitionScreen({ navigation }) {
           // 상태 업데이트 (React가 리렌더링하도록)
           setIsRecognizing(false);
           setRecognitionResult(newResult);
+          setRecognitionError(null); // 인식 성공 시 에러 메시지 초기화
           
           console.log('[MusicRecognitionScreen] ✅ State updated - UI should refresh now');
           
@@ -303,10 +306,11 @@ export default function MusicRecognitionScreen({ navigation }) {
             errorMessage = t.musicRecognitionFailed || '음악을 인식하지 못했습니다.\n\n- 음악이 재생 중인지 확인하세요\n- 마이크가 음악 소리를 들을 수 있는지 확인하세요\n- 주변이 너무 시끄럽지 않은지 확인하세요';
           }
           
-          // 포그라운드에 있을 때만 알림 표시 (백그라운드에서는 알림만 발송)
-          if (appStateRef.current === 'active') {
-            Alert.alert(t.notice || '알림', errorMessage);
-          }
+          // 화면에 에러 메시지 표시 (Alert 대신)
+          setRecognitionError(errorMessage);
+          
+          // 알림 발송 (백그라운드에서도 알림 받을 수 있도록)
+          sendRecognitionFailedNotification(errorMessage);
         });
         console.log('[MusicRecognitionScreen] ✅ Listener registered: onRecognitionError');
 
@@ -716,6 +720,7 @@ export default function MusicRecognitionScreen({ navigation }) {
       setRecognitionResult(null);
       setYoutubeResults([]);
       setLoadingYoutube(false);
+      setRecognitionError(null); // 에러 메시지도 초기화
       
       // 타임아웃도 초기화
       if (recordingTimeoutRef.current) {
@@ -781,20 +786,11 @@ export default function MusicRecognitionScreen({ navigation }) {
           console.log('[MusicRecognitionScreen] ⏰ Auto-stopping recognition after 25 seconds (no result received)');
           stopRecognition();
           
-          // 결과가 없으면 알림 표시
+          // 결과가 없으면 화면에 에러 메시지 표시 및 알림 발송
           if (!recognitionResult) {
-            Alert.alert(
-              t.notice || '알림',
-              t.musicRecognitionFailed || '음악을 인식하지 못했습니다.\n\n- 음악이 재생 중인지 확인하세요\n- 마이크가 음악 소리를 들을 수 있는지 확인하세요\n- 주변이 너무 시끄럽지 않은지 확인하세요',
-              [{ 
-                text: t.ok || '확인',
-                onPress: () => {
-                  // 다음 인식을 위해 상태 초기화
-                  setRecognitionResult(null);
-                  setYoutubeResults([]);
-                }
-              }]
-            );
+            const errorMessage = t.musicRecognitionFailed || '음악을 인식하지 못했습니다.\n\n- 음악이 재생 중인지 확인하세요\n- 마이크가 음악 소리를 들을 수 있는지 확인하세요\n- 주변이 너무 시끄럽지 않은지 확인하세요';
+            setRecognitionError(errorMessage);
+            sendRecognitionFailedNotification(errorMessage);
           }
         }, 25000); // 25초로 설정 (인식 결과를 받으면 자동 중지되므로)
       } else {
@@ -1222,6 +1218,30 @@ export default function MusicRecognitionScreen({ navigation }) {
             </Text>
           </View>
         )}
+        
+        {/* 인식 실패 메시지 표시 (Alert 대신 화면에 표시) */}
+        {recognitionError && (
+          <View style={styles.errorArea}>
+            <View style={styles.errorCard}>
+              <Ionicons name="alert-circle" size={24} color="#FF6B6B" style={styles.errorIcon} />
+              <View style={styles.errorContent}>
+                <Text style={styles.errorTitle}>{t.notice || '알림'}</Text>
+                <Text style={styles.errorMessage}>{recognitionError}</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.errorCloseButton}
+              onPress={() => {
+                setRecognitionError(null);
+                // 다음 인식을 위해 상태 초기화
+                setRecognitionResult(null);
+                setYoutubeResults([]);
+              }}
+            >
+              <Text style={styles.errorCloseButtonText}>{t.ok || '확인'}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -1499,6 +1519,55 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   downloadButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  errorArea: {
+    marginTop: 20,
+    marginBottom: 20,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  errorCard: {
+    backgroundColor: '#FFF5F5',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#FFE0E0',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    width: '100%',
+    marginBottom: 12,
+  },
+  errorIcon: {
+    marginRight: 12,
+    marginTop: 2,
+  },
+  errorContent: {
+    flex: 1,
+  },
+  errorTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FF6B6B',
+    marginBottom: 8,
+  },
+  errorMessage: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 20,
+  },
+  errorCloseButton: {
+    backgroundColor: '#FF6B6B',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    minWidth: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  errorCloseButtonText: {
     color: '#fff',
     fontSize: 14,
     fontWeight: '600',
