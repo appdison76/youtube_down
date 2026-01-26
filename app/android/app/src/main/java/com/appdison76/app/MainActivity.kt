@@ -23,67 +23,52 @@ class MainActivity : ReactActivity() {
     // coloring the background, status bar, and navigation bar.
     // This is required for expo-splash-screen.
     setTheme(R.style.AppTheme);
-    super.onCreate(null)
+    super.onCreate(savedInstanceState)
     
     // 초기 intent 처리 (앱이 종료된 상태에서 공유로 실행될 때)
-    handleIntent(intent)
+    handleShareIntent(intent)
   }
   
   // 앱이 이미 실행 중일 때 새로운 intent 처리 (공유하기)
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
     setIntent(intent) // 새로운 intent로 업데이트
-    handleIntent(intent)
+    handleShareIntent(intent)
   }
   
-  // Intent 처리 (공유하기 또는 URL 열기)
-  private fun handleIntent(intent: Intent?) {
+  // 공유하기 Intent 처리 (YouTube URL을 deep link로 변환)
+  private fun handleShareIntent(intent: Intent?) {
     if (intent == null) return
     
-    Log.d(TAG, "Handling intent: ${intent.action}")
-    Log.d(TAG, "Intent data: ${intent.dataString}")
-    Log.d(TAG, "Intent extras: ${intent.extras}")
-    
-    when (intent.action) {
-      Intent.ACTION_SEND -> {
-        // 텍스트 공유 (YouTube URL 포함)
-        val text = intent.getStringExtra(Intent.EXTRA_TEXT)
-        if (text != null) {
-          Log.d(TAG, "Received shared text: $text")
-          // YouTube URL인지 확인
-          if (text.contains("youtube.com") || text.contains("youtu.be")) {
-            Log.d(TAG, "YouTube URL detected, sending to React Native")
-            sendUrlToReactNative(text)
-          }
+    if (intent.action == Intent.ACTION_SEND) {
+      val text = intent.getStringExtra(Intent.EXTRA_TEXT)
+      if (text != null) {
+        Log.d(TAG, "Received shared text: $text")
+        
+        // YouTube URL 추출
+        val youtubeUrlPattern = Regex("(https?://)?(www\\.)?(youtube\\.com/watch\\?v=|youtu\\.be/)([a-zA-Z0-9_-]+)")
+        val match = youtubeUrlPattern.find(text)
+        
+        if (match != null) {
+          val videoId = match.groupValues[4]
+          val fullUrl = match.value
+          
+          Log.d(TAG, "YouTube URL detected: $fullUrl")
+          Log.d(TAG, "Video ID: $videoId")
+          
+          // Deep link 형식으로 변환
+          val deepLinkUrl = "exp+app://?url=${Uri.encode(fullUrl)}"
+          Log.d(TAG, "Converting to deep link: $deepLinkUrl")
+          
+          // Intent를 deep link로 변환하여 expo-linking이 처리하도록 함
+          intent.data = Uri.parse(deepLinkUrl)
+          intent.action = Intent.ACTION_VIEW
+          intent.removeCategory(Intent.CATEGORY_DEFAULT)
+          intent.addCategory(Intent.CATEGORY_BROWSABLE)
+          
+          Log.d(TAG, "Intent modified for deep linking")
         }
       }
-      Intent.ACTION_VIEW -> {
-        // URL 직접 열기
-        val data = intent.data
-        if (data != null) {
-          val url = data.toString()
-          Log.d(TAG, "Received URL: $url")
-          if (url.contains("youtube.com") || url.contains("youtu.be")) {
-            Log.d(TAG, "YouTube URL detected, sending to React Native")
-            sendUrlToReactNative(url)
-          }
-        }
-      }
-    }
-  }
-  
-  // React Native로 URL 전달
-  private fun sendUrlToReactNative(url: String) {
-    try {
-      // React Native의 Linking API를 통해 URL 전달
-      // expo-linking이 자동으로 처리하지만, 명시적으로 처리
-      Log.d(TAG, "Sending URL to React Native: $url")
-      
-      // React Native가 준비될 때까지 대기 후 URL 전달
-      // 실제로는 Linking.getInitialURL()이나 Linking.addEventListener()가 처리함
-      // 여기서는 로그만 남기고, 실제 처리는 App.js의 Linking 이벤트 리스너가 처리
-    } catch (e: Exception) {
-      Log.e(TAG, "Error sending URL to React Native: ${e.message}", e)
     }
   }
   
