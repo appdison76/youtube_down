@@ -122,14 +122,16 @@ android {
         }
     }
     
-    // APK 파일명에 버전 포함
+    // APK 파일명에 버전 포함 (릴리즈 빌드만)
     applicationVariants.all { variant ->
         variant.outputs.all { output ->
-            def versionName = variant.versionName
-            def versionCode = variant.versionCode
             def buildType = variant.buildType.name
-            def outputFileName = "app-release-${versionName}.apk"
-            output.outputFileName = outputFileName
+            if (buildType == "release") {
+                def versionName = variant.versionName
+                def outputFileName = "app-release-${versionName}.apk"
+                output.outputFileName = outputFileName
+            }
+            // debug 빌드는 기본 파일명 사용 (버전 표시 안 함)
         }
     }
     packagingOptions {
