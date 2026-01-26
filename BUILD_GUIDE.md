@@ -15,7 +15,7 @@
 | **Debug** | 일반 로컬 Expo | `cd app && npx expo run:android` | `app-debug.apk` | `app/android/app/build/outputs/apk/debug/` | 디버깅/테스트 |
 | **Debug** | EAS 로컬 | `cd app && eas build --local --profile preview` | `app-debug.apk` | `./builds/` | 테스트 빌드 (EAS 로컬) |
 | **Debug** | EAS 클라우드 | `cd app && eas build --profile preview` | `app-debug.apk` | EAS 서버 | 테스트 빌드 (클라우드) |
-| **Release (APK)** | 순수 로컬 Gradle | `cd app/android && ./gradlew assembleRelease` | `app-release.apk` | `app/android/app/build/outputs/apk/release/` | 직접 배포용 |
+| **Release (APK)** | 순수 로컬 Gradle | `cd app/android && ./gradlew assembleRelease` | `app-release-1.1.4.apk` | `app/android/app/build/outputs/apk/release/` | 직접 배포용 (GitHub Release) |
 | **Release (APK)** | 일반 로컬 Expo | `cd app && npx expo run:android --variant release` | `app-release.apk` | `app/android/app/build/outputs/apk/release/` | 직접 배포용 |
 | **Release (APK)** | EAS 로컬 | `cd app && eas build --local --profile preview --platform android` | `app-release.apk` | `./builds/` | 직접 배포용 (EAS 로컬) |
 | **Release (APK)** | EAS 클라우드 | `cd app && eas build --profile preview --platform android` | `app-release.apk` | EAS 서버 | 직접 배포용 (클라우드) |
@@ -78,7 +78,8 @@ cd app/android
 # Windows: gradlew.bat assembleRelease
 
 # 결과물 위치:
-# app/android/app/build/outputs/apk/release/app-release.apk
+# app/android/app/build/outputs/apk/release/app-release-1.1.4.apk
+# (파일명에 versionName 포함)
 ```
 
 **Release 빌드 (AAB - Google Play Store용):**

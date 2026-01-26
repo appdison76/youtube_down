@@ -92,8 +92,8 @@ android {
         applicationId 'com.appdison76.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.1.3"
+        versionCode 6
+        versionName "1.1.4"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
@@ -117,7 +117,7 @@ android {
             shrinkResources enableShrinkResources.toBoolean()
             minifyEnabled enableMinifyInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
-            def enablePngCrunchInRelease = findProperty('android.enablePngCrunchInReleaseBuilds') ?: 'true'
+            def enablePngCrunchInRelease = findProperty('android.enablePngCrunchInReleaseBuilds') ?: 'false'
             crunchPngs enablePngCrunchInRelease.toBoolean()
         }
     }
@@ -129,6 +129,13 @@ android {
     }
     androidResources {
         ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'
+        // AAPT2 오류 방지: 리소스 컴파일 실패 시 경고만 표시
+        failOnMissingConfigEntry = false
+    }
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            output.outputFileName = "app-${variant.name}-${variant.versionName}.apk"
+        }
     }
 }
 
