@@ -7,6 +7,7 @@ import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
 import com.appdison76.app.MediaSessionPackage
 import com.appdison76.app.MediaStorePackage
+import com.appdison76.app.MusicRecognitionServicePackage
 import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
 import com.facebook.react.ReactNativeHost
 import com.facebook.react.ReactPackage
@@ -27,6 +28,7 @@ class MainApplication : Application(), ReactApplication {
             PackageList(this).packages.apply {
               add(MediaSessionPackage())
               add(MediaStorePackage())
+              add(MusicRecognitionServicePackage())
             }
 
           override fun getJSMainModuleName(): String = ".expo/.virtual-metro-entry"

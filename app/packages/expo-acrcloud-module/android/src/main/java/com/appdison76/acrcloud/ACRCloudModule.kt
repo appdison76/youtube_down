@@ -222,13 +222,15 @@ class ACRCloudModule : Module() {
                 // 볼륨이 0이 아닌지 확인 (마이크가 실제로 소리를 받고 있는지)
                 if (curVolume > 0.0) {
                   Log.d("ACRCloudModule", "🔊 🔊 🔊 Volume changed: $curVolume (✅ Microphone IS receiving audio!)")
+                  Log.d("ACRCloudModule", "🔊 Sending onVolumeChanged event to JS...")
+                  sendEvent("onVolumeChanged", mapOf("volume" to curVolume))
+                  Log.d("ACRCloudModule", "🔊 Event sent successfully!")
                 } else {
-                  Log.w("ACRCloudModule", "🔊 Volume changed: $curVolume (⚠️ Volume is 0 - microphone may not be receiving audio)")
+                  // 볼륨이 0일 때는 로그만 출력하고 이벤트는 보내지 않음 (너무 많은 경고 방지)
+                  // 백그라운드에서 다른 앱이 오디오를 재생하면 마이크 접근이 차단될 수 있음
+                  // 이는 정상적인 동작이므로 경고를 줄임
+                  Log.d("ACRCloudModule", "🔊 Volume changed: $curVolume (⚠️ Volume is 0 - may be background or mic blocked)")
                 }
-                
-                Log.d("ACRCloudModule", "🔊 Sending onVolumeChanged event to JS...")
-                sendEvent("onVolumeChanged", mapOf("volume" to curVolume))
-                Log.d("ACRCloudModule", "🔊 Event sent successfully!")
               }
             }
             // Activity Context 사용 (마이크 접근에 중요)
@@ -237,15 +239,15 @@ class ACRCloudModule : Module() {
             this.accessKey = accessKey
             this.accessSecret = accessSecret
             this.recorderConfig.isVolumeCallback = true
-            // 프리레코딩 버퍼를 줄여서 이전 인식 결과가 남지 않도록 함
-            // 3초는 너무 길어서 이전 곡의 오디오가 버퍼에 남을 수 있음
-            this.recorderConfig.reservedRecordBufferMS = 1000 // 1초 프리레코딩 (이전: 3000ms)
+            // 프리레코딩 버퍼를 최소화하여 앱 전환 시 잡음이 버퍼에 들어가는 것을 방지
+            // 0으로 설정하면 버퍼 없이 실시간 오디오만 사용 (앱 전환 시 잡음 방지)
+            this.recorderConfig.reservedRecordBufferMS = 0 // 0초 프리레코딩 (앱 전환 시 잡음 방지)
             
             // 오디오 샘플 레이트 명시적 설정 (표준 규격)
             // GPT나 제미나이 같은 앱들이 사용하는 표준 샘플 레이트
             // 8000은 너무 낮고, 44100이 표준이지만 ACRCloud SDK가 자동으로 설정할 수 있음
             // 명시적으로 설정할 수 있다면 설정하되, SDK가 자동으로 처리하는 경우도 있음
-            Log.d("ACRCloudModule", "✅ Recorder config set - isVolumeCallback: true, reservedRecordBufferMS: 1000 (reduced from 3000 to prevent cache issues)")
+            Log.d("ACRCloudModule", "✅ Recorder config set - isVolumeCallback: true, reservedRecordBufferMS: 0 (no pre-recording buffer to prevent noise from app switching)")
             Log.d("ACRCloudModule", "✅ ACRCloud SDK will use standard audio sample rate (typically 44100 Hz)")
             
             // 오디오 소스 설정
@@ -350,11 +352,11 @@ class ACRCloudModule : Module() {
           try {
             mClient?.cancel()
             Log.d("ACRCloudModule", "✅ Previous recognition cancelled")
-            // reservedRecordBufferMS가 1초이므로 버퍼를 완전히 정리하기 위해 짧은 대기
+            // reservedRecordBufferMS가 0이므로 버퍼 정리 대기 시간 최소화
             // 최소한의 대기로 성능 영향 최소화
-            Log.d("ACRCloudModule", "⏳ Waiting 300ms to clear audio buffer (reservedRecordBufferMS: 1000ms)...")
+            Log.d("ACRCloudModule", "⏳ Waiting 200ms to ensure clean audio buffer (reservedRecordBufferMS: 0ms)...")
             try {
-              Thread.sleep(300)
+              Thread.sleep(200)
             } catch (e: InterruptedException) {
               Log.w("ACRCloudModule", "⚠️ Sleep interrupted: ${e.message}")
             }

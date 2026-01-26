@@ -132,11 +132,6 @@ android {
         // AAPT2 오류 방지: 리소스 컴파일 실패 시 경고만 표시
         failOnMissingConfigEntry = false
     }
-    applicationVariants.all { variant ->
-        variant.outputs.all { output ->
-            output.outputFileName = "app-${variant.name}-${variant.versionName}.apk"
-        }
-    }
 }
 
 // Apply static values from `gradle.properties` to the `android.packagingOptions`
