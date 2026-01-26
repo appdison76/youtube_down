@@ -39,7 +39,6 @@ export default function MusicRecognitionScreen({ navigation }) {
   const [isRecognizing, setIsRecognizing] = useState(false);
   const [recognitionResult, setRecognitionResult] = useState(null);
   const [youtubeResults, setYoutubeResults] = useState([]);
-  const [countdown, setCountdown] = useState(null); // 카운트다운 상태 (null이면 카운트다운 없음, 숫자면 카운트다운 진행 중)
   
   // recognitionResult 상태 변경 추적
   useEffect(() => {
@@ -63,10 +62,8 @@ export default function MusicRecognitionScreen({ navigation }) {
   const useInternalAudio = false;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const recordingTimeoutRef = useRef(null);
-  const countdownTimerRef = useRef(null); // 카운트다운 타이머 참조
   const appStateRef = useRef(AppState.currentState);
   const shouldContinueRecognitionRef = useRef(true); // 인식 계속 여부 플래그
-  const pendingRecognitionRef = useRef(false); // 백그라운드에서 카운트다운이 완료되어 포그라운드로 돌아왔을 때 인식 시작할지 여부
 
   // ACRCloud 초기화 및 이벤트 리스너 설정
   useEffect(() => {
@@ -212,6 +209,19 @@ export default function MusicRecognitionScreen({ navigation }) {
             });
           }
           
+          // Foreground Service 중지 (알림이 사라지도록)
+          if (Platform.OS === 'android') {
+            try {
+              const { MusicRecognitionService } = NativeModules;
+              if (MusicRecognitionService) {
+                MusicRecognitionService.stopService();
+                console.log('[MusicRecognitionScreen] ✅ Foreground Service stopped (recognition completed)');
+              }
+            } catch (error) {
+              console.warn('[MusicRecognitionScreen] ⚠️ Failed to stop Foreground Service:', error);
+            }
+          }
+          
           // 항상 백그라운드 모드로 동작: 알림 발송
           const isBackground = appStateRef.current !== 'active';
           console.log('[MusicRecognitionScreen] 📱 Background mode: Sending notification');
@@ -242,8 +252,16 @@ export default function MusicRecognitionScreen({ navigation }) {
 
         // 2. 인식 에러 리스너 (이벤트 이름: onRecognitionError)
         recognitionErrorListener = ACRCloudModule.addListener('onRecognitionError', (error) => {
-          console.error('[MusicRecognitionScreen] ❌❌❌ Recognition error received:', error);
-          console.error('[MusicRecognitionScreen] ❌ Event name matches: onRecognitionError');
+          // "No result" (code 1001)는 정상적인 실패 케이스이므로 에러가 아닌 정보로 처리
+          const isNoResult = error?.code === 1001 || error?.error === 'No result';
+          
+          if (isNoResult) {
+            console.log('[MusicRecognitionScreen] ℹ️ Recognition completed with no result (code 1001)');
+            console.log('[MusicRecognitionScreen] ℹ️ This is a normal failure case, not an error');
+          } else {
+            console.error('[MusicRecognitionScreen] ❌ Recognition error received:', error);
+            console.error('[MusicRecognitionScreen] ❌ Event name matches: onRecognitionError');
+          }
           
           // 타임아웃 제거
           if (recordingTimeoutRef.current) {
@@ -258,8 +276,37 @@ export default function MusicRecognitionScreen({ navigation }) {
             });
           }
           
+          // Foreground Service 중지
+          if (Platform.OS === 'android') {
+            try {
+              const { MusicRecognitionService } = NativeModules;
+              if (MusicRecognitionService) {
+                MusicRecognitionService.stopService();
+                console.log('[MusicRecognitionScreen] ✅ Foreground Service stopped (recognition error)');
+              }
+            } catch (error) {
+              console.warn('[MusicRecognitionScreen] ⚠️ Failed to stop Foreground Service:', error);
+            }
+          }
+          
           setIsRecognizing(false);
-          Alert.alert(t.error, error.error || t.musicRecognitionStartError || '음악 인식에 실패했습니다.');
+          
+          // 에러 메시지 처리
+          // "No result" (code 1001)는 ACRCloud DB에 해당 음악이 없다는 의미
+          // 다른 에러는 일반적인 인식 실패 메시지 표시
+          let errorMessage;
+          if (isNoResult) {
+            // ACRCloud DB에 없는 경우
+            errorMessage = t.musicRecognitionNoResult || '음악을 찾을 수 없습니다.\n\n- 음악의 다른 구간을 시도해보세요\n- 다른 곡으로 다시 시도해보세요';
+          } else {
+            // 다른 에러 (마이크 문제, 음악 재생 안 됨 등)
+            errorMessage = t.musicRecognitionFailed || '음악을 인식하지 못했습니다.\n\n- 음악이 재생 중인지 확인하세요\n- 마이크가 음악 소리를 들을 수 있는지 확인하세요\n- 주변이 너무 시끄럽지 않은지 확인하세요';
+          }
+          
+          // 포그라운드에 있을 때만 알림 표시 (백그라운드에서는 알림만 발송)
+          if (appStateRef.current === 'active') {
+            Alert.alert(t.notice || '알림', errorMessage);
+          }
         });
         console.log('[MusicRecognitionScreen] ✅ Listener registered: onRecognitionError');
 
@@ -313,33 +360,12 @@ export default function MusicRecognitionScreen({ navigation }) {
       const prevState = appStateRef.current;
       appStateRef.current = nextAppState;
       
-      // 포그라운드에서 백그라운드로 갔을 때: 카운트다운 중이면 즉시 인식 시작
+      // 포그라운드에서 백그라운드로 갔을 때: 인식 계속
       if (prevState === 'active' && nextAppState !== 'active') {
-        console.log('[MusicRecognitionScreen] 📱 App went to background');
-        
-        // 카운트다운 중이면 즉시 인식 시작 (백그라운드에서 타이머가 멈추므로)
-        // 하지만 Android 14+에서는 백그라운드에서 포그라운드 서비스를 시작할 수 없으므로
-        // 포그라운드에 있을 때만 서비스를 시작하고, 백그라운드로 가면 서비스 시작을 건너뜀
-        if (countdown !== null && countdownTimerRef.current) {
-          console.log('[MusicRecognitionScreen] ⏩ Countdown in progress, but app is going to background');
-          console.log('[MusicRecognitionScreen] ⚠️ Cannot start foreground service from background on Android 14+');
-          console.log('[MusicRecognitionScreen] ⏩ Will start recognition when app returns to foreground');
-          
-          // 카운트다운 타이머만 정리하고, 서비스는 시작하지 않음
-          if (countdownTimerRef.current) {
-            clearInterval(countdownTimerRef.current);
-            countdownTimerRef.current = null;
-          }
-          
-          // 카운트다운 완료 플래그 설정 (포그라운드로 돌아왔을 때 인식 시작)
-          setCountdown(null);
-          // 백그라운드에서는 서비스를 시작하지 않음 (Android 14+ 제한)
-          // 포그라운드로 돌아왔을 때 인식을 시작하도록 플래그 설정
-          pendingRecognitionRef.current = true;
-          shouldContinueRecognitionRef.current = true;
-        } else if (isRecognizing) {
+        console.log('[MusicRecognitionScreen] 📱 App went to background, continuing recognition...');
+        shouldContinueRecognitionRef.current = true;
+        if (isRecognizing) {
           console.log('[MusicRecognitionScreen] 📱 Recognition continues in background');
-          shouldContinueRecognitionRef.current = true;
         }
       }
       
@@ -347,17 +373,23 @@ export default function MusicRecognitionScreen({ navigation }) {
       if (prevState !== 'active' && nextAppState === 'active') {
         console.log('[MusicRecognitionScreen] 📱 App returned to foreground');
         
-        // 카운트다운이 완료되었고 아직 인식이 시작되지 않았으면 인식 시작
-        // (백그라운드로 갔을 때 카운트다운이 완료되었지만 서비스를 시작하지 못한 경우)
-        if (pendingRecognitionRef.current && countdown === null && !isRecognizing) {
-          console.log('[MusicRecognitionScreen] ⏩ Countdown was completed in background, starting recognition now');
-          pendingRecognitionRef.current = false;
-          startRecognitionInternal();
-        } else if (isRecognizing) {
-          // 이미 인식 중이면 중지 (알림을 눌러서 돌아온 경우)
-          console.log('[MusicRecognitionScreen] 📱 App returned to foreground, stopping recognition...');
-          shouldContinueRecognitionRef.current = false; // 인식 계속 플래그 비활성화
-          stopRecognition();
+        // 알림을 눌러서 돌아온 경우는 알림 리스너에서 이미 인식 중지 처리됨
+        // 일반 앱 전환으로 돌아온 경우:
+        // - 인식 결과가 있으면 → 인식 중지 (이미 결과가 나왔으니)
+        // - 인식 결과가 없으면 → 인식 계속 (아직 결과가 없으니)
+        if (isRecognizing) {
+          if (recognitionResult) {
+            // 인식 결과가 이미 있으면 중지
+            console.log('[MusicRecognitionScreen] 📱 Recognition result exists, stopping recognition...');
+            shouldContinueRecognitionRef.current = false;
+            stopRecognition();
+          } else {
+            // 인식 결과가 없으면 계속 인식
+            console.log('[MusicRecognitionScreen] 📱 No recognition result yet, continuing recognition...');
+            shouldContinueRecognitionRef.current = true;
+            // UI 상태 업데이트 (포그라운드에 있으므로 안전)
+            setIsRecognizing(true);
+          }
         }
       }
       
@@ -373,7 +405,7 @@ export default function MusicRecognitionScreen({ navigation }) {
     return () => {
       subscription.remove();
     };
-  }, [isRecognizing, countdown]);
+  }, [isRecognizing]);
 
   // 알림 리스너 설정
   useEffect(() => {
@@ -435,15 +467,12 @@ export default function MusicRecognitionScreen({ navigation }) {
       if (recordingTimeoutRef.current) {
         clearTimeout(recordingTimeoutRef.current);
       }
-      if (countdownTimerRef.current) {
-        clearInterval(countdownTimerRef.current);
-      }
     };
   }, []);
 
   // 펄스 애니메이션
   useEffect(() => {
-    if (isRecognizing || countdown !== null) {
+    if (isRecognizing) {
       const pulse = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
@@ -463,7 +492,7 @@ export default function MusicRecognitionScreen({ navigation }) {
     } else {
       pulseAnim.setValue(1);
     }
-  }, [isRecognizing, countdown]);
+  }, [isRecognizing]);
 
   // 마이크 권한 확인 및 요청 (Android)
   const requestMicrophonePermission = async () => {
@@ -574,8 +603,8 @@ export default function MusicRecognitionScreen({ navigation }) {
     }
   };
 
-  // 실제 음악 인식 시작 (카운트다운 후 호출)
-  const startRecognitionInternal = async () => {
+  // 음악 인식 시작
+  const startRecognition = async () => {
     try {
       console.log('[MusicRecognitionScreen] 🎵 Starting music recognition...');
       console.log('[MusicRecognitionScreen] ========================================');
@@ -710,8 +739,11 @@ export default function MusicRecognitionScreen({ navigation }) {
         }
       }
       
-      // 인식 시작
-      setIsRecognizing(true);
+      // 인식 시작 (포그라운드에 있을 때만 UI 상태 업데이트)
+      // 백그라운드에서 UI 상태를 변경하면 에러가 발생할 수 있으므로 안전하게 처리
+      if (appStateRef.current === 'active') {
+        setIsRecognizing(true);
+      }
       console.log('[MusicRecognitionScreen] ✅ State cleared, starting new recognition');
 
       if (Platform.OS === 'android' && ACRCloudModule) {
@@ -724,7 +756,10 @@ export default function MusicRecognitionScreen({ navigation }) {
         
         if (!startResult) {
           console.error('[MusicRecognitionScreen] ❌ Failed to start recognition');
-          Alert.alert(t.error, t.musicRecognitionStartError);
+          Alert.alert(
+            t.notice || '알림',
+            t.musicRecognitionStartError || '음악 인식을 시작할 수 없습니다.'
+          );
           setIsRecognizing(false);
           return;
         }
@@ -741,18 +776,18 @@ export default function MusicRecognitionScreen({ navigation }) {
         console.log('[MusicRecognitionScreen] 🚫 If NO volume messages appear, audio is NOT being received');
         console.log('[MusicRecognitionScreen] ========================================');
         
-        // 최대 15초 후 자동 중지 (인식 결과를 받으면 자동으로 중지되므로 타임아웃은 백업용)
+        // 최대 25초 후 자동 중지 (인식 결과를 받으면 자동으로 중지되므로 타임아웃은 백업용)
         recordingTimeoutRef.current = setTimeout(() => {
-          console.log('[MusicRecognitionScreen] ⏰ Auto-stopping recognition after 15 seconds (no result received)');
+          console.log('[MusicRecognitionScreen] ⏰ Auto-stopping recognition after 25 seconds (no result received)');
           stopRecognition();
           
           // 결과가 없으면 알림 표시
           if (!recognitionResult) {
             Alert.alert(
-              t.notice,
-              t.musicRecognitionFailed,
+              t.notice || '알림',
+              t.musicRecognitionFailed || '음악을 인식하지 못했습니다.\n\n- 음악이 재생 중인지 확인하세요\n- 마이크가 음악 소리를 들을 수 있는지 확인하세요\n- 주변이 너무 시끄럽지 않은지 확인하세요',
               [{ 
-                text: t.ok,
+                text: t.ok || '확인',
                 onPress: () => {
                   // 다음 인식을 위해 상태 초기화
                   setRecognitionResult(null);
@@ -761,7 +796,7 @@ export default function MusicRecognitionScreen({ navigation }) {
               }]
             );
           }
-        }, 15000); // 15초로 설정 (인식 결과를 받으면 자동 중지되므로)
+        }, 25000); // 25초로 설정 (인식 결과를 받으면 자동 중지되므로)
       } else {
         // iOS 또는 ACRCloud가 없는 경우: expo-av로 녹음만 (실제 인식은 서버에서)
         const { recording: newRecording } = await Audio.Recording.createAsync(
@@ -770,63 +805,25 @@ export default function MusicRecognitionScreen({ navigation }) {
         setRecording(newRecording);
         console.log('[MusicRecognitionScreen] Recording started');
 
-        // 최대 15초 후 자동 중지
+        // 최대 25초 후 자동 중지
         recordingTimeoutRef.current = setTimeout(async () => {
           await stopRecognition();
-        }, 15000);
+        }, 25000);
       }
     } catch (error) {
       console.error('[MusicRecognitionScreen] Error starting recognition:', error);
-      Alert.alert(t.error, t.musicRecognitionStartError);
+      Alert.alert(
+        t.notice || '알림',
+        t.musicRecognitionStartError || '음악 인식을 시작할 수 없습니다.'
+      );
       setIsRecognizing(false);
-      setCountdown(null); // 카운트다운도 초기화
     }
-  };
-
-  // 음악 인식 시작 (카운트다운 포함)
-  const startRecognition = async () => {
-    // 대기 중인 인식 플래그 초기화
-    pendingRecognitionRef.current = false;
-    
-    // 카운트다운 시작 (3초)
-    setCountdown(3);
-    
-    // 카운트다운 타이머
-    countdownTimerRef.current = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev === null || prev <= 1) {
-          // 카운트다운 종료
-          if (countdownTimerRef.current) {
-            clearInterval(countdownTimerRef.current);
-            countdownTimerRef.current = null;
-          }
-          // 실제 인식 시작 (포그라운드에서만)
-          setCountdown(null);
-          // 앱이 포그라운드에 있을 때만 인식 시작
-          if (appStateRef.current === 'active') {
-            startRecognitionInternal();
-          } else {
-            // 백그라운드에 있으면 포그라운드로 돌아왔을 때 시작하도록 플래그 설정
-            pendingRecognitionRef.current = true;
-          }
-          return null;
-        }
-        return prev - 1;
-      });
-    }, 1000);
   };
 
   // 음악 인식 중지
   const stopRecognition = async () => {
     try {
       console.log('[MusicRecognitionScreen] 🛑 Stopping recognition...');
-      
-      // 카운트다운 중지
-      if (countdownTimerRef.current) {
-        clearInterval(countdownTimerRef.current);
-        countdownTimerRef.current = null;
-      }
-      setCountdown(null);
       
       // 인식 계속 플래그 비활성화
       shouldContinueRecognitionRef.current = false;
@@ -868,7 +865,10 @@ export default function MusicRecognitionScreen({ navigation }) {
       console.log('[MusicRecognitionScreen] ✅ Ready for next recognition');
     } catch (error) {
       console.error('[MusicRecognitionScreen] ❌ Error stopping recognition:', error);
-      Alert.alert(t.error, t.musicRecognitionStopError || '인식 중지 중 오류가 발생했습니다.');
+      Alert.alert(
+        t.notice || '알림',
+        t.musicRecognitionStopError || '음악 인식을 중지할 수 없습니다.'
+      );
       setIsRecognizing(false);
     }
   };
@@ -1017,10 +1017,10 @@ export default function MusicRecognitionScreen({ navigation }) {
           <TouchableOpacity
             style={[
               styles.recognitionButton,
-              (isRecognizing || countdown !== null) && styles.recognitionButtonActive,
+              isRecognizing && styles.recognitionButtonActive,
             ]}
             onPress={isRecognizing ? stopRecognition : startRecognition}
-            disabled={loadingYoutube || countdown !== null}
+            disabled={loadingYoutube}
           >
             <Animated.View
               style={[
@@ -1028,49 +1028,35 @@ export default function MusicRecognitionScreen({ navigation }) {
                 { transform: [{ scale: pulseAnim }] },
               ]}
             >
-              {countdown !== null ? (
-                <Text style={styles.countdownText}>{countdown}</Text>
-              ) : (
-                <Ionicons
-                  name={isRecognizing ? 'stop' : 'mic'}
-                  size={64}
-                  color="#fff"
-                />
-              )}
+              <Ionicons
+                name={isRecognizing ? 'stop' : 'mic'}
+                size={64}
+                color="#fff"
+              />
             </Animated.View>
           </TouchableOpacity>
 
           <Text style={styles.recognitionText}>
-            {countdown !== null
-              ? t.musicRecognitionCountdown.replace('{count}', countdown)
-              : isRecognizing
+            {isRecognizing
               ? t.musicRecognitionListening
               : t.musicRecognitionTapToStart}
           </Text>
 
-              {(isRecognizing || countdown !== null) && (
+              {isRecognizing && (
             <View style={styles.recognitionHints}>
-              {countdown !== null ? (
-                <Text style={styles.recognitionHint}>
-                  {t.musicRecognitionCountdownStart}
-                </Text>
-              ) : (
-                <>
-                  <Text style={styles.recognitionHint}>
-                    {t.musicRecognitionListeningHint}
-                  </Text>
-                  <Text style={styles.recognitionHint}>
-                    {t.musicRecognitionHowToUse}
-                  </Text>
-                  <Text style={styles.recognitionHint}>
-                    {t.musicRecognitionVolumeCheck}
-                  </Text>
-                </>
-              )}
+              <Text style={styles.recognitionHint}>
+                {t.musicRecognitionListeningHint}
+              </Text>
+              <Text style={styles.recognitionHint}>
+                {t.musicRecognitionHowToUse}
+              </Text>
+              <Text style={styles.recognitionHint}>
+                {t.musicRecognitionVolumeCheck}
+              </Text>
             </View>
           )}
 
-          {!isRecognizing && countdown === null && (
+          {!isRecognizing && (
             <View style={styles.recognitionHints}>
               <Text style={styles.recognitionHint}>
                 {t.musicRecognitionInstructions}
@@ -1516,10 +1502,5 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '600',
-  },
-  countdownText: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    color: '#fff',
   },
 });
