@@ -6,6 +6,7 @@ const path = require('path');
 const fs = require('fs');
 
 const execAsync = promisify(exec);
+const { middleware: requestLoggerMiddleware, getRecent, getRecentFromFile, LOG_PATH, LOG_DIR, MAX_LOG_SIZE } = require('./request-logger');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -18,6 +19,12 @@ if (PROXY_URL) {
   console.log(`[Server] 프록시 사용: ${PROXY_URL}`);
 } else {
   console.log('[Server] 프록시 미사용 (직접 연결)');
+}
+if (LOG_PATH) {
+  const maxSizeMB = Math.round(MAX_LOG_SIZE / 1024 / 1024);
+  console.log(`[Server] 요청 로그 파일 저장: ${LOG_PATH} (리스타트 후에도 유지, 최대 ${maxSizeMB}MB)`);
+} else {
+  console.log('[Server] 요청 로그: 메모리만 사용 (LOG_DIR 또는 Railway Volume 미설정)');
 }
 
 // yt-dlp 인자 배열에 프록시 옵션 추가하는 헬퍼 함수
@@ -71,6 +78,7 @@ console.log(`[Server] Will try player_clients in order: ${PLAYER_CLIENTS.join(' 
 // 미들웨어
 app.use(cors());
 app.use(express.json());
+app.use(requestLoggerMiddleware);
 
 // IP 차단 테스트 엔드포인트
 app.get('/api/test-ip', async (req, res) => {
@@ -1310,11 +1318,43 @@ app.post('/api/autocomplete', async (req, res) => {
 });
 
 // Health check
+// 관리자용 요청 로그 조회 (리스타트 후 사용자 사용 여부 확인)
+// LOG_DIR(또는 Railway Volume) 설정 시 requests.log 파일에도 저장되어 재시작 후에도 확인 가능
+const ADMIN_SECRET = process.env.ADMIN_SECRET || null;
+app.get('/api/admin/requests', (req, res) => {
+  if (!ADMIN_SECRET) {
+    return res.status(404).json({ error: 'ADMIN_SECRET 미설정' });
+  }
+  const key = req.query.key;
+  if (key !== ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
+  const fromFile = req.query.fromFile === '1' || req.query.fromFile === 'true';
+  const fromDate = req.query.fromDate || null; // ISO 8601 형식: 2026-01-28T00:00:00Z
+  const toDate = req.query.toDate || null;     // ISO 8601 형식: 2026-01-28T23:59:59Z
+  const recent = fromFile ? getRecentFromFile(limit, fromDate, toDate) : getRecent(limit);
+  res.json({
+    count: recent.length,
+    source: fromFile ? 'file' : 'memory',
+    logFile: LOG_PATH || null,
+    fromDate: fromDate || null,
+    toDate: toDate || null,
+    requests: recent,
+  });
+});
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// 관리자 로그 조회 웹 UI
+app.get('/admin/logs', (req, res) => {
+  res.sendFile(path.join(__dirname, 'admin-logs.html'));
 });
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[Server] YouTube Downloader Server running on port ${PORT}`);
   console.log(`[Server] Accessible at http://localhost:${PORT}`);
+  console.log(`[Server] Admin logs UI: http://localhost:${PORT}/admin/logs`);
 });

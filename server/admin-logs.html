@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>요청 로그 조회</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+        
+        input, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        
+        @media (max-width: 768px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin-right: 10px;
+        }
+        
+        .btn:hover {
+            background: #5568d3;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+        }
+        
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            display: none;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .results {
+            margin-top: 30px;
+        }
+        
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .results-count {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        th {
+            background: #f8f9fa;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 13px;
+            color: #666;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 13px;
+        }
+        
+        tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .url-cell {
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .ip-cell {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        
+        .path-cell {
+            font-family: 'Courier New', monospace;
+            color: #667eea;
+            font-size: 12px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .empty {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 요청 로그 조회</h1>
+        <p class="subtitle">서버 요청 로그를 조회하고 분석하세요</p>
+        
+        <form id="logForm">
+            <div class="form-group">
+                <label for="adminKey">관리자 키 (ADMIN_SECRET)</label>
+                <input type="password" id="adminKey" placeholder="관리자 키를 입력하세요" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="source">로그 소스</label>
+                <select id="source">
+                    <option value="memory">메모리 (최근 500건, 리스타트 시 초기화)</option>
+                    <option value="file">파일 (리스타트 후에도 유지)</option>
+                </select>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="limit">조회 개수</label>
+                    <input type="number" id="limit" value="100" min="1" max="500">
+                </div>
+                <div class="form-group">
+                    <label for="fromDate">시작 날짜 (선택)</label>
+                    <input type="datetime-local" id="fromDate">
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="toDate">종료 날짜 (선택)</label>
+                <input type="datetime-local" id="toDate">
+            </div>
+            
+            <button type="submit" class="btn">🔍 조회</button>
+            <button type="button" class="btn btn-secondary" onclick="clearResults()">🗑️ 결과 지우기</button>
+        </form>
+        
+        <div id="status" class="status"></div>
+        
+        <div id="results" class="results" style="display: none;">
+            <div class="results-header">
+                <h2>조회 결과</h2>
+                <span id="resultsCount" class="results-count"></span>
+            </div>
+            <div id="resultsTable"></div>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = window.location.origin;
+        
+        function showStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.className = `status ${type}`;
+            status.textContent = message;
+            status.style.display = 'block';
+        }
+        
+        function hideStatus() {
+            document.getElementById('status').style.display = 'none';
+        }
+        
+        function formatDate(dateString) {
+            if (!dateString) return '-';
+            const date = new Date(dateString);
+            return date.toLocaleString('ko-KR', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+        
+        function formatUrl(url) {
+            if (!url) return '-';
+            if (url.length > 50) {
+                return url.substring(0, 47) + '...';
+            }
+            return url;
+        }
+        
+        function renderTable(requests) {
+            const tableDiv = document.getElementById('resultsTable');
+            
+            if (requests.length === 0) {
+                tableDiv.innerHTML = '<div class="empty">조회된 로그가 없습니다.</div>';
+                return;
+            }
+            
+            let html = '<table><thead><tr>';
+            html += '<th>시간</th>';
+            html += '<th>IP</th>';
+            html += '<th>메서드</th>';
+            html += '<th>경로</th>';
+            html += '<th>URL</th>';
+            html += '</tr></thead><tbody>';
+            
+            requests.forEach(req => {
+                html += '<tr>';
+                html += `<td>${formatDate(req.at)}</td>`;
+                html += `<td class="ip-cell">${req.ip || '-'}</td>`;
+                html += `<td>${req.method || '-'}</td>`;
+                html += `<td class="path-cell">${req.path || '-'}</td>`;
+                html += `<td class="url-cell" title="${req.url || req.q || '-'}">${formatUrl(req.url || req.q || '-')}</td>`;
+                html += '</tr>';
+            });
+            
+            html += '</tbody></table>';
+            tableDiv.innerHTML = html;
+        }
+        
+        function clearResults() {
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('resultsTable').innerHTML = '';
+            document.getElementById('resultsCount').textContent = '';
+            hideStatus();
+        }
+        
+        document.getElementById('logForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const adminKey = document.getElementById('adminKey').value;
+            const source = document.getElementById('source').value;
+            const limit = document.getElementById('limit').value;
+            const fromDate = document.getElementById('fromDate').value;
+            const toDate = document.getElementById('toDate').value;
+            
+            if (!adminKey) {
+                showStatus('관리자 키를 입력하세요.', 'error');
+                return;
+            }
+            
+            showStatus('조회 중...', 'info');
+            
+            try {
+                let url = `${API_BASE}/api/admin/requests?key=${encodeURIComponent(adminKey)}&limit=${limit}`;
+                
+                if (source === 'file') {
+                    url += '&fromFile=1';
+                }
+                
+                if (fromDate) {
+                    const from = new Date(fromDate);
+                    url += `&fromDate=${from.toISOString()}`;
+                }
+                
+                if (toDate) {
+                    const to = new Date(toDate);
+                    url += `&toDate=${to.toISOString()}`;
+                }
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || '조회 실패');
+                }
+                
+                document.getElementById('results').style.display = 'block';
+                document.getElementById('resultsCount').textContent = `총 ${data.count}건 (소스: ${data.source})`;
+                
+                renderTable(data.requests);
+                
+                showStatus(`✅ ${data.count}건의 로그를 조회했습니다.`, 'success');
+            } catch (error) {
+                showStatus(`❌ 오류: ${error.message}`, 'error');
+                document.getElementById('results').style.display = 'none';
+            }
+        });
+        
+        // 오늘 날짜를 기본값으로 설정
+        const today = new Date();
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        
+        document.getElementById('toDate').value = tomorrow.toISOString().slice(0, 16);
+    </script>
+</body>
+</html>

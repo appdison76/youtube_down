@@ -72,6 +72,102 @@ Railway 로그 화면에서:
    - Railway 서버가 실행 중인지 확인
    - 방화벽/네트워크 설정 확인
 
+## 📝 요청 로그 (리스타트 후에도 확인)
+
+Railway 콘솔 로그는 **리스타트하면 사라집니다.**  
+다운로드/검색 등 **실제 사용 요청**은 별도로 기록해 두고, **재시작 후에도** 볼 수 있습니다.
+
+### 1. 메모리 로그 (기본)
+
+- **최근 500건**만 메모리에 유지
+- 리스타트하면 **초기화됨**
+
+### 2. 파일 로그 (리스타트 후에도 유지)
+
+- **`LOG_DIR`** 환경 변수에 경로를 넣으면, 해당 경로에 `requests.log` 저장
+- Railway **Volume**을 쓰면 재시작/재배포 후에도 유지
+- **용량 자동 관리**: 파일이 **10MB** 넘으면 오래된 로그 자동 삭제 (최근 50%만 유지)
+  - `MAX_LOG_SIZE_MB` 환경 변수로 변경 가능 (예: `MAX_LOG_SIZE_MB=20` → 20MB)
+
+**Railway Volume 설정 예:**
+
+1. Railway 프로젝트 → 서비스 → **Volumes** 추가
+2. 마운트 경로 예: `/data`
+3. 서비스 **Variables**에 추가:
+   - `LOG_DIR=/data`
+   - (선택) `MAX_LOG_SIZE_MB=20` (기본 10MB)
+4. 재배포 후 `[Server] 요청 로그 파일 저장: /data/requests.log (리스타트 후에도 유지, 최대 10MB)` 로그 확인
+
+### 3. 조회 방법
+
+#### 방법 1: 웹 UI (권장) 🌐
+
+**브라우저에서 접속:**
+```
+https://youtubedown-production.up.railway.app/admin/logs
+```
+
+- 관리자 키 입력
+- 로그 소스 선택 (메모리/파일)
+- 날짜 범위 선택 (옵션)
+- 조회 버튼 클릭
+
+**기능:**
+- ✅ 직관적인 웹 인터페이스
+- ✅ 날짜 범위 필터링
+- ✅ 테이블 형태로 결과 표시
+- ✅ IP, 시간, 경로, URL 확인
+
+#### 방법 2: API 직접 호출
+
+**`GET /api/admin/requests`**
+
+- **필수:** `ADMIN_SECRET` 환경 변수 설정
+- **쿼리:** `?key=ADMIN_SECRET값`  
+  - `&limit=100` (기본 100, 최대 500)  
+  - `&fromFile=1` → **파일 로그**에서 조회 (리스타트 후 확인용)
+  - `&fromDate=2026-01-28T00:00:00Z` → 시작 날짜 (ISO 8601)
+  - `&toDate=2026-01-28T23:59:59Z` → 종료 날짜 (ISO 8601)
+
+**API 호출 예시:**
+
+```bash
+# 메모리 로그 (최근 100건)
+curl "https://youtubedown-production.up.railway.app/api/admin/requests?key=내비밀키&limit=100"
+
+# 파일 로그 (최근 200건)
+curl "https://youtubedown-production.up.railway.app/api/admin/requests?key=내비밀키&fromFile=1&limit=200"
+
+# 특정 날짜 범위 (옛날 로그 조회)
+curl "https://youtubedown-production.up.railway.app/api/admin/requests?key=내비밀키&fromFile=1&fromDate=2026-01-27T00:00:00Z&toDate=2026-01-27T23:59:59Z&limit=500"
+```
+
+**응답 예:**
+
+```json
+{
+  "count": 10,
+  "source": "memory",
+  "logFile": "/data/requests.log",
+  "requests": [
+    { "at": "2026-01-28T12:00:00.000Z", "ip": "1.2.3.4", "method": "GET", "path": "/api/download/audio", "url": "https://youtube.com/..." }
+  ]
+}
+```
+
+- **`source`**: `memory`(재시작 후 초기화) / `file`(파일에서 읽음, 재시작 후에도 유지)
+- **`ip`**: 요청 클라이언트 IP (본인 제외한 사용자 확인용)
+
+### 4. 정리
+
+| 구분 | 리스타트 후 |
+|------|-------------|
+| Railway 콘솔 로그 | ❌ 사라짐 |
+| 메모리 요청 로그 (`/api/admin/requests`) | ❌ 사라짐 |
+| 파일 요청 로그 (`LOG_DIR` + `fromFile=1`) | ✅ 유지 (Volume 사용 시) |
+
+---
+
 ## 📝 현재 서버 정보
 
 - **Railway URL**: `https://youtubedown-production.up.railway.app`
