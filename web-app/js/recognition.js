@@ -26,6 +26,7 @@ recognitionBtn.addEventListener('click', async () => {
 async function startRecognition() {
     // 먼저 권한 상태를 다시 확인 (설정에서 변경했을 수 있으므로)
     let permissionStatus = 'prompt';
+    
     try {
         if (navigator.permissions && navigator.permissions.query) {
             const result = await navigator.permissions.query({ name: 'microphone' });
@@ -35,11 +36,14 @@ async function startRecognition() {
             // 권한 상태에 따라 플래그 업데이트
             if (result.state === 'denied') {
                 permissionDenied = true;
-                recognitionStatus.innerHTML = '마이크 권한이 거부되었습니다.<br><br><strong>간단한 해결 방법:</strong><br>1. 주소창 왼쪽 아이콘 클릭 → "사이트 설정" → "마이크" 허용<br>2. 또는 브라우저 메뉴(⋮) → "사이트 설정" → "마이크" 허용<br><br><small style="color: #666;">💡 권한을 허용하면 자동으로 감지됩니다 (5초마다 확인)</small><br><br><button onclick="openBrowserSettings()" style="margin-top: 8px; padding: 10px 20px; background: #FF0000; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">상세 설정 방법 보기</button><br><button onclick="startRecognition()" style="margin-top: 8px; padding: 10px 20px; background: #2196F3; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">권한 허용 후 다시 시도</button><br><button onclick="location.reload()" style="margin-top: 8px; padding: 10px 20px; background: #9E9E9E; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">페이지 새로고침</button>';
-                return;
+                // 권한이 거부된 경우에도 getUserMedia를 시도해볼 수 있도록 함
+                // (사용자가 설정에서 권한을 변경했을 수 있으므로)
+                // 메시지는 getUserMedia 실패 후에만 표시
+                console.log('Permission denied, but will try getUserMedia anyway');
             } else if (result.state === 'granted') {
                 // 권한이 허용된 경우 플래그 리셋
                 permissionDenied = false;
+                shouldProceed = true;
             }
             
             // 권한 상태 변경 감지 리스너 추가
@@ -54,7 +58,7 @@ async function startRecognition() {
                     }
                     // 상태 메시지 업데이트 및 재시도 버튼 표시
                     if (recognitionStatus.innerHTML && (recognitionStatus.innerHTML.includes('브라우저 설정') || recognitionStatus.innerHTML.includes('권한이 거부'))) {
-                        recognitionStatus.innerHTML = '✅ 마이크 권한이 허용되었습니다!<br><br><button onclick="startRecognition()" style="margin-top: 8px; padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">지금 시작하기</button>';
+                        recognitionStatus.innerHTML = '✅ 마이크 권한이 허용되었습니다!<br><br><button onclick="window.startRecognition()" style="margin-top: 8px; padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">지금 시작하기</button>';
                     }
                 } else if (result.state === 'denied') {
                     permissionDenied = true;
@@ -74,7 +78,7 @@ async function startRecognition() {
                             clearInterval(permissionCheckInterval);
                             permissionCheckInterval = null;
                             if (recognitionStatus.innerHTML && (recognitionStatus.innerHTML.includes('브라우저 설정') || recognitionStatus.innerHTML.includes('권한이 거부'))) {
-                                recognitionStatus.innerHTML = '✅ 마이크 권한이 허용되었습니다!<br><br><button onclick="startRecognition()" style="margin-top: 8px; padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">지금 시작하기</button>';
+                                recognitionStatus.innerHTML = '✅ 마이크 권한이 허용되었습니다!<br><br><button onclick="window.startRecognition()" style="margin-top: 8px; padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">지금 시작하기</button>';
                             }
                         }
                     } catch (e) {
@@ -193,7 +197,7 @@ async function startRecognition() {
             } else {
                 // HTML로 버튼 포함
                 errorMessage = null; // HTML 메시지 사용
-                recognitionStatus.innerHTML = '마이크 권한이 거부되었습니다.<br><br><strong>간단한 해결 방법:</strong><br>1. 주소창 왼쪽 아이콘 클릭 → "사이트 설정" → "마이크" 허용<br>2. 또는 브라우저 메뉴(⋮) → "사이트 설정" → "마이크" 허용<br><br><small style="color: #666;">💡 권한을 허용하면 자동으로 감지됩니다 (5초마다 확인)</small><br><br><button onclick="openBrowserSettings()" style="margin-top: 8px; padding: 10px 20px; background: #FF0000; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">상세 설정 방법 보기</button><br><button onclick="startRecognition()" style="margin-top: 8px; padding: 10px 20px; background: #2196F3; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">권한 허용 후 다시 시도</button><br><button onclick="location.reload()" style="margin-top: 8px; padding: 10px 20px; background: #9E9E9E; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">페이지 새로고침</button>';
+                recognitionStatus.innerHTML = '마이크 권한이 거부되었습니다.<br><br><strong>해결 방법:</strong><br>브라우저 메뉴(⋮) → "사이트 설정" 또는 "권한" → "마이크" 허용<br><br><small style="color: #666;">💡 권한을 허용하면 자동으로 감지됩니다 (5초마다 확인)<br>또는 페이지를 새로고침하세요.</small><br><br><button onclick="openBrowserSettings()" style="margin-top: 8px; padding: 10px 20px; background: #FF0000; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">상세 설정 방법 보기</button><br><button onclick="location.reload()" style="margin-top: 8px; padding: 10px 20px; background: #2196F3; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">페이지 새로고침</button>';
             }
         } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
             errorMessage = '마이크를 찾을 수 없습니다.';
@@ -227,6 +231,9 @@ async function startRecognition() {
         }
     }
 }
+
+// 전역 스코프에 함수 할당 (onclick에서 호출 가능하도록)
+window.startRecognition = startRecognition;
 
 function stopRecognition() {
     if (mediaRecorder && isRecording) {
