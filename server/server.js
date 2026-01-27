@@ -710,18 +710,24 @@ app.get('/api/download/audio', async (req, res) => {
     // yt-dlp를 사용하여 오디오 다운로드 및 스트리밍
     // Railway 서버 환경을 고려한 더 유연한 포맷 선택
     // Railway의 클라우드 IP는 YouTube에서 제한을 받을 수 있어 여러 폴백 옵션 제공
-    // 더 유연한 포맷 선택: 오디오 전용 포맷부터 비디오+오디오까지 다양한 옵션 시도
+    // 오디오 전용 포맷 우선 시도 (용량 절약)
     // 포맷 선택자 우선순위:
-    // 1. bestaudio (모든 오디오 포맷) - 우선 시도
-    // 2. bestaudio[ext=m4a] (M4A 오디오)
-    // 3. bestaudio[ext=mp3] (MP3 오디오)
+    // 1. bestaudio (모든 오디오 포맷) - 최우선
+    // 2. bestaudio[ext=m4a] (M4A 오디오, 가장 작은 용량)
+    // 3. bestaudio[ext=opus] (Opus 오디오, 작은 용량)
     // 4. bestaudio[ext=webm] (WebM 오디오)
-    // 5. bestaudio[ext=opus] (Opus 오디오)
-    // 6. best[height<=720]/bestvideo[height<=720]+bestaudio (저화질 비디오+오디오) - 폴백
-    // 7. best (최고 품질, 비디오+오디오) - 최종 폴백
+    // 5. bestaudio[ext=mp3] (MP3 오디오)
     // 주의: 오디오만 선택 시 일부 영상에서 "format not available" 오류 발생 가능
-    //       따라서 비디오+오디오 옵션을 폴백으로 포함하여 안정성 확보
-    let formatSelector = 'bestaudio/bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio[ext=webm]/bestaudio[ext=opus]/best[height<=720]/bestvideo[height<=720]+bestaudio/best';
+    //       하지만 스트리밍 모드에서 --extract-audio가 제대로 작동하지 않으므로
+    //       오디오만 포맷을 우선 시도하고, 실패 시에만 비디오+오디오로 폴백
+    //       비디오+오디오 폴백 시에는 용량이 크지만 안정성을 위해 필요
+    // 다운로드 성공을 최우선으로 하는 포맷 선택자
+    // 오디오만 포맷을 빠르게 시도하되, 실패 시 즉시 비디오+오디오로 폴백
+    // 포맷 선택자 우선순위:
+    // 1. 오디오만 포맷 (최소한으로 시도, 용량 절약)
+    // 2. 비디오+오디오 폴백 (240p → 360p → 480p → 720p → 최고품질)
+    //    반드시 받을 수 있도록 보장 (다운로드 성공이 최우선)
+    let formatSelector = 'bestaudio/best[height<=240]/bestvideo[height<=240]+bestaudio/best[height<=360]/bestvideo[height<=360]+bestaudio/best[height<=480]/bestvideo[height<=480]+bestaudio/best[height<=720]/bestvideo[height<=720]+bestaudio/best';
     
     // android를 먼저 시도 (가장 안정적), 실패 시 나머지 랜덤 순서로 시도
     const androidFirst = ['android', ...shuffleArray(PLAYER_CLIENTS.filter(c => c !== 'android'))];
@@ -757,10 +763,11 @@ app.get('/api/download/audio', async (req, res) => {
           '--add-header', 'Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           '--no-check-certificate',
           '--no-playlist',
-          // 비디오+오디오로 폴백 시 ffmpeg로 오디오만 추출 (용량 절약)
-          '--extract-audio',
-          '--audio-format', 'm4a',
-          '--audio-quality', '0',  // 최고 품질
+          // 스트리밍 모드에서는 --extract-audio가 제대로 작동하지 않을 수 있음
+          // 대신 포맷 선택자를 더 엄격하게 하여 오디오만 받도록 시도
+          // 비디오+오디오로 폴백 시에도 오디오만 추출하려면
+          // 임시 파일로 저장 후 추출하는 방식이 필요하지만, 스트리밍에서는 복잡함
+          // 따라서 포맷 선택자를 더 엄격하게 수정
           '-o', '-',
           url
         ];
