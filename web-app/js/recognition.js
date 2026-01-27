@@ -34,7 +34,7 @@ async function startRecognition() {
             // 권한 상태에 따라 플래그 업데이트
             if (result.state === 'denied') {
                 permissionDenied = true;
-                recognitionStatus.innerHTML = '마이크 권한이 거부되었습니다.<br><br>브라우저 메뉴(⋮) 또는 주소창 아이콘을 눌러 마이크 권한을 허용해주세요.<br><br><button onclick="openBrowserSettings()" style="margin-top: 8px; padding: 10px 20px; background: #FF0000; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">설정 방법 보기</button><br><button onclick="startRecognition()" style="margin-top: 8px; padding: 10px 20px; background: #2196F3; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">권한 허용 후 다시 시도</button>';
+                recognitionStatus.innerHTML = '마이크 권한이 거부되었습니다.<br><br>주소창 아이콘 또는 브라우저 메뉴에서 마이크 권한을 허용해주세요.<br><small style="color: #666;">(브라우저 버전에 따라 메뉴 위치가 다를 수 있습니다)</small><br><br><button onclick="openBrowserSettings()" style="margin-top: 8px; padding: 10px 20px; background: #FF0000; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">상세 설정 방법 보기</button><br><button onclick="startRecognition()" style="margin-top: 8px; padding: 10px 20px; background: #2196F3; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">권한 허용 후 다시 시도</button>';
                 return;
             } else if (result.state === 'granted') {
                 // 권한이 허용된 경우 플래그 리셋
@@ -165,7 +165,7 @@ async function startRecognition() {
             } else {
                 // HTML로 버튼 포함
                 errorMessage = null; // HTML 메시지 사용
-                recognitionStatus.innerHTML = '마이크 권한이 거부되었습니다.<br><br>브라우저 메뉴(⋮) 또는 주소창 아이콘을 눌러 마이크 권한을 허용해주세요.<br><br><button onclick="openBrowserSettings()" style="margin-top: 8px; padding: 10px 20px; background: #FF0000; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">설정 방법 보기</button><br><button onclick="startRecognition()" style="margin-top: 8px; padding: 10px 20px; background: #2196F3; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">권한 허용 후 다시 시도</button>';
+                recognitionStatus.innerHTML = '마이크 권한이 거부되었습니다.<br><br>주소창 아이콘 또는 브라우저 메뉴에서 마이크 권한을 허용해주세요.<br><small style="color: #666;">(브라우저 버전에 따라 메뉴 위치가 다를 수 있습니다)</small><br><br><button onclick="openBrowserSettings()" style="margin-top: 8px; padding: 10px 20px; background: #FF0000; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">상세 설정 방법 보기</button><br><button onclick="startRecognition()" style="margin-top: 8px; padding: 10px 20px; background: #2196F3; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">권한 허용 후 다시 시도</button>';
             }
         } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
             errorMessage = '마이크를 찾을 수 없습니다.';
