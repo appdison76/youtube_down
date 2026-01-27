@@ -3,6 +3,7 @@ let mediaRecorder = null;
 let audioChunks = [];
 let isRecording = false;
 let permissionDenied = false; // 권한 거부 상태 추적
+let permissionCheckInterval = null; // 권한 상태 주기적 확인
 
 const recognitionBtn = document.getElementById('recognition-btn');
 const recognitionStatus = document.getElementById('recognition-status');
@@ -34,7 +35,7 @@ async function startRecognition() {
             // 권한 상태에 따라 플래그 업데이트
             if (result.state === 'denied') {
                 permissionDenied = true;
-                recognitionStatus.innerHTML = '마이크 권한이 거부되었습니다.<br><br>주소창 아이콘 또는 브라우저 메뉴에서 마이크 권한을 허용해주세요.<br><small style="color: #666;">(브라우저 버전에 따라 메뉴 위치가 다를 수 있습니다)</small><br><br><button onclick="openBrowserSettings()" style="margin-top: 8px; padding: 10px 20px; background: #FF0000; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">상세 설정 방법 보기</button><br><button onclick="startRecognition()" style="margin-top: 8px; padding: 10px 20px; background: #2196F3; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">권한 허용 후 다시 시도</button>';
+                recognitionStatus.innerHTML = '마이크 권한이 거부되었습니다.<br><br><strong>간단한 해결 방법:</strong><br>1. 주소창 왼쪽 아이콘 클릭 → "사이트 설정" → "마이크" 허용<br>2. 또는 브라우저 메뉴(⋮) → "사이트 설정" → "마이크" 허용<br><br><small style="color: #666;">💡 권한을 허용하면 자동으로 감지됩니다 (5초마다 확인)</small><br><br><button onclick="openBrowserSettings()" style="margin-top: 8px; padding: 10px 20px; background: #FF0000; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">상세 설정 방법 보기</button><br><button onclick="startRecognition()" style="margin-top: 8px; padding: 10px 20px; background: #2196F3; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">권한 허용 후 다시 시도</button><br><button onclick="location.reload()" style="margin-top: 8px; padding: 10px 20px; background: #9E9E9E; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">페이지 새로고침</button>';
                 return;
             } else if (result.state === 'granted') {
                 // 권한이 허용된 경우 플래그 리셋
@@ -46,14 +47,41 @@ async function startRecognition() {
                 console.log('Permission state changed to:', result.state);
                 if (result.state === 'granted') {
                     permissionDenied = false;
+                    // 주기적 확인 중지
+                    if (permissionCheckInterval) {
+                        clearInterval(permissionCheckInterval);
+                        permissionCheckInterval = null;
+                    }
                     // 상태 메시지 업데이트 및 재시도 버튼 표시
-                    if (recognitionStatus.innerHTML && recognitionStatus.innerHTML.includes('브라우저 설정')) {
-                        recognitionStatus.innerHTML = '마이크 권한이 허용되었습니다!<br><br><button onclick="startRecognition()" style="margin-top: 8px; padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">다시 시도하기</button>';
+                    if (recognitionStatus.innerHTML && (recognitionStatus.innerHTML.includes('브라우저 설정') || recognitionStatus.innerHTML.includes('권한이 거부'))) {
+                        recognitionStatus.innerHTML = '✅ 마이크 권한이 허용되었습니다!<br><br><button onclick="startRecognition()" style="margin-top: 8px; padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">지금 시작하기</button>';
                     }
                 } else if (result.state === 'denied') {
                     permissionDenied = true;
                 }
             };
+            
+            // 권한이 거부된 경우 주기적으로 상태 확인 (5초마다)
+            if (result.state === 'denied') {
+                if (permissionCheckInterval) {
+                    clearInterval(permissionCheckInterval);
+                }
+                permissionCheckInterval = setInterval(async () => {
+                    try {
+                        const checkResult = await navigator.permissions.query({ name: 'microphone' });
+                        if (checkResult.state === 'granted') {
+                            permissionDenied = false;
+                            clearInterval(permissionCheckInterval);
+                            permissionCheckInterval = null;
+                            if (recognitionStatus.innerHTML && (recognitionStatus.innerHTML.includes('브라우저 설정') || recognitionStatus.innerHTML.includes('권한이 거부'))) {
+                                recognitionStatus.innerHTML = '✅ 마이크 권한이 허용되었습니다!<br><br><button onclick="startRecognition()" style="margin-top: 8px; padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">지금 시작하기</button>';
+                            }
+                        }
+                    } catch (e) {
+                        console.log('Permission check failed:', e);
+                    }
+                }, 5000); // 5초마다 확인
+            }
         }
     } catch (e) {
         console.log('Permission query not supported, proceeding...');
@@ -165,7 +193,7 @@ async function startRecognition() {
             } else {
                 // HTML로 버튼 포함
                 errorMessage = null; // HTML 메시지 사용
-                recognitionStatus.innerHTML = '마이크 권한이 거부되었습니다.<br><br>주소창 아이콘 또는 브라우저 메뉴에서 마이크 권한을 허용해주세요.<br><small style="color: #666;">(브라우저 버전에 따라 메뉴 위치가 다를 수 있습니다)</small><br><br><button onclick="openBrowserSettings()" style="margin-top: 8px; padding: 10px 20px; background: #FF0000; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">상세 설정 방법 보기</button><br><button onclick="startRecognition()" style="margin-top: 8px; padding: 10px 20px; background: #2196F3; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">권한 허용 후 다시 시도</button>';
+                recognitionStatus.innerHTML = '마이크 권한이 거부되었습니다.<br><br><strong>간단한 해결 방법:</strong><br>1. 주소창 왼쪽 아이콘 클릭 → "사이트 설정" → "마이크" 허용<br>2. 또는 브라우저 메뉴(⋮) → "사이트 설정" → "마이크" 허용<br><br><small style="color: #666;">💡 권한을 허용하면 자동으로 감지됩니다 (5초마다 확인)</small><br><br><button onclick="openBrowserSettings()" style="margin-top: 8px; padding: 10px 20px; background: #FF0000; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">상세 설정 방법 보기</button><br><button onclick="startRecognition()" style="margin-top: 8px; padding: 10px 20px; background: #2196F3; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">권한 허용 후 다시 시도</button><br><button onclick="location.reload()" style="margin-top: 8px; padding: 10px 20px; background: #9E9E9E; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">페이지 새로고침</button>';
             }
         } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
             errorMessage = '마이크를 찾을 수 없습니다.';
