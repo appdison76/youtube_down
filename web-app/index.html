@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>멜로디 스냅 - 음악 찾기</title>
+    <meta name="description" content="음악을 찾고, YouTube에서 검색하고, 다운로드하세요.">
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="css/styles.css">
+    <script>
+        // API 서버 URL 설정 (Railway 서버 URL로 변경 필요)
+        window.API_BASE_URL = 'https://your-railway-server.railway.app';
+    </script>
+</head>
+<body>
+    <!-- 헤더 -->
+    <header class="app-header">
+        <div class="header-content">
+            <div class="header-left">
+                <div class="logo-container">
+                    <img src="logo.png?v=2" alt="Melody Snap" onerror="this.style.display='none'" />
+                </div>
+                <div class="header-title-container">
+                    <div class="header-title">Melody Snap</div>
+                </div>
+            </div>
+            <nav class="nav-tabs">
+                <button class="nav-tab active" data-page="recognition">
+                    <span class="nav-icon">🎵</span>
+                    <span class="nav-text">음악 찾기</span>
+                </button>
+                <button class="nav-tab" data-page="search">
+                    <span class="nav-icon">🔍</span>
+                    <span class="nav-text">검색</span>
+                </button>
+                <button class="nav-tab" data-page="save">
+                    <span class="nav-icon">💾</span>
+                    <span class="nav-text">저장</span>
+                </button>
+                <button class="nav-tab" data-page="library">
+                    <span class="nav-icon">📚</span>
+                    <span class="nav-text">내 저장소</span>
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- 메인 컨텐츠 -->
+    <main class="container">
+        <!-- 음악 찾기 화면 -->
+        <div id="recognition-page" class="page active">
+            <div class="recognition-area">
+                <button id="recognition-btn" class="recognition-button">
+                    <ion-icon name="mic" id="mic-icon" class="recognition-icon"></ion-icon>
+                    <ion-icon name="stop" id="stop-icon" class="recognition-icon" style="display: none;"></ion-icon>
+                </button>
+                <p class="recognition-text" id="recognition-status">음악 찾기를 시작하세요</p>
+                <div id="recognition-result" class="recognition-result" style="display: none;">
+                    <h3>인식된 곡</h3>
+                    <div class="result-card">
+                        <img id="result-thumbnail" src="" alt="썸네일" />
+                        <div class="result-info">
+                            <h4 id="result-title"></h4>
+                            <p id="result-artist"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 검색 화면 -->
+        <div id="search-page" class="page" style="display: none;">
+            <div class="search-area">
+                <input type="text" id="search-input" class="search-input" placeholder="YouTube 검색..." />
+                <button id="search-btn" class="search-button">검색</button>
+                <div id="search-results" class="search-results"></div>
+            </div>
+        </div>
+
+        <!-- 저장 화면 -->
+        <div id="save-page" class="page" style="display: none;">
+            <div class="save-area">
+                <input type="text" id="url-input" class="url-input" placeholder="YouTube URL 입력 또는 붙여넣기" />
+                <button id="url-submit-btn" class="url-submit-button">가져오기</button>
+                <div id="video-info" class="video-info" style="display: none;">
+                    <img id="video-thumbnail" src="" alt="썸네일" />
+                    <div class="video-details">
+                        <h3 id="video-title"></h3>
+                        <p id="video-author"></p>
+                        <div class="video-actions">
+                            <button id="download-video-btn" class="action-btn">영상 다운로드</button>
+                            <button id="download-audio-btn" class="action-btn">음악 다운로드</button>
+                            <button id="favorite-btn" class="action-btn">찜하기</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 내 저장소 화면 -->
+        <div id="library-page" class="page" style="display: none;">
+            <div class="library-area">
+                <div class="library-filters">
+                    <button class="filter-btn active" data-filter="all">전체</button>
+                    <button class="filter-btn" data-filter="favorite">찜하기</button>
+                    <button class="filter-btn" data-filter="downloaded">다운로드</button>
+                </div>
+                <input type="text" id="library-search" class="library-search" placeholder="검색..." />
+                <div id="library-items" class="library-items"></div>
+            </div>
+        </div>
+    </main>
+
+    <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+    <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
+    <script src="js/indexeddb.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/recognition.js"></script>
+    <script src="js/search.js"></script>
+    <script src="js/save.js"></script>
+    <script src="js/library.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

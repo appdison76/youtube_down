@@ -1,0 +1,22 @@
+{
+  "name": "멜로디 스냅",
+  "short_name": "멜로디 스냅",
+  "description": "음악을 찾고, YouTube에서 검색하고, 다운로드하세요.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#FF0000",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "../install-page/logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "../install-page/logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

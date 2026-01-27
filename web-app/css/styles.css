@@ -1,0 +1,494 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif;
+    background: #f5f5f5;
+    color: #333;
+    line-height: 1.6;
+}
+
+/* 헤더 */
+.app-header {
+    background: #FF0000;
+    color: white;
+    padding: 12px 16px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    border-bottom: 1px solid #cc0000;
+}
+
+.header-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+    .header-content {
+        flex-wrap: wrap;
+    }
+    
+    .nav-tabs {
+        order: 3;
+        width: 100%;
+        margin-top: 8px;
+        justify-content: space-around;
+    }
+    
+    .nav-tab {
+        flex: 1;
+        min-width: 0;
+    }
+    
+    .nav-text {
+        font-size: 10px;
+    }
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+
+.logo-container {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-right: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.logo-container img {
+    width: 44px;
+    height: 44px;
+    object-fit: cover;
+}
+
+.header-title-container {
+    flex: 1;
+}
+
+.header-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: white;
+    white-space: nowrap;
+}
+
+.nav-tabs {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.nav-tab {
+    padding: 8px 12px;
+    background: rgba(255,255,255,0.2);
+    border: none;
+    border-radius: 8px;
+    color: white;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-width: 60px;
+}
+
+.nav-icon {
+    font-size: 20px;
+    line-height: 1;
+}
+
+.nav-text {
+    font-size: 11px;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.nav-tab:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+.nav-tab.active {
+    background: white;
+    color: #FF0000;
+}
+
+/* 컨테이너 */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.page {
+    display: none;
+}
+
+.page.active {
+    display: block;
+}
+
+/* 음악 찾기 화면 */
+.recognition-area {
+    text-align: center;
+    padding: 40px 20px;
+}
+
+.recognition-button {
+    width: 120px;
+    height: 120px;
+    border-radius: 60px;
+    background: #FF0000;
+    border: none;
+    color: white;
+    cursor: pointer;
+    transition: all 0.3s;
+    box-shadow: 0 4px 15px rgba(255,0,0,0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+}
+
+.recognition-icon {
+    font-size: 64px;
+    width: 64px;
+    height: 64px;
+    color: white;
+    display: block;
+}
+
+.recognition-button:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 20px rgba(255,0,0,0.4);
+}
+
+.recognition-button.recording {
+    background: #cc0000;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { 
+        transform: scale(1);
+    }
+    50% { 
+        transform: scale(1.2);
+    }
+}
+
+.recognition-text {
+    margin-top: 24px;
+    font-size: 18px;
+    font-weight: 600;
+    color: #333;
+}
+
+.recognition-result {
+    margin-top: 30px;
+    text-align: left;
+}
+
+.recognition-result h3 {
+    margin-bottom: 16px;
+    font-size: 20px;
+}
+
+.result-card {
+    background: white;
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    gap: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.result-card img {
+    width: 120px;
+    height: 120px;
+    border-radius: 8px;
+    object-fit: cover;
+}
+
+.result-info {
+    flex: 1;
+}
+
+.result-info h4 {
+    font-size: 18px;
+    margin-bottom: 8px;
+}
+
+.result-info p {
+    color: #666;
+    font-size: 14px;
+}
+
+/* 검색 화면 */
+.search-area {
+    padding: 20px;
+}
+
+.search-input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 16px;
+    margin-bottom: 16px;
+}
+
+.search-button {
+    width: 100%;
+    padding: 12px;
+    background: #FF0000;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.search-results {
+    margin-top: 20px;
+}
+
+.search-result-item {
+    background: white;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+    display: flex;
+    gap: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.search-result-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.search-result-item img {
+    width: 120px;
+    height: 90px;
+    border-radius: 8px;
+    object-fit: cover;
+}
+
+.search-result-info {
+    flex: 1;
+}
+
+.search-result-info h4 {
+    font-size: 16px;
+    margin-bottom: 8px;
+}
+
+.search-result-info p {
+    color: #666;
+    font-size: 14px;
+}
+
+/* 저장 화면 */
+.save-area {
+    padding: 20px;
+}
+
+.url-input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 16px;
+    margin-bottom: 16px;
+}
+
+.url-submit-button {
+    width: 100%;
+    padding: 12px;
+    background: #FF0000;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.video-info {
+    margin-top: 20px;
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.video-info img {
+    width: 100%;
+    max-width: 400px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+.video-details h3 {
+    font-size: 20px;
+    margin-bottom: 8px;
+}
+
+.video-details p {
+    color: #666;
+    margin-bottom: 16px;
+}
+
+.video-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.action-btn {
+    flex: 1;
+    min-width: 120px;
+    padding: 12px;
+    background: #FF0000;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.action-btn:hover {
+    background: #cc0000;
+}
+
+/* 내 저장소 화면 */
+.library-area {
+    padding: 20px;
+}
+
+.library-filters {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.filter-btn {
+    padding: 8px 16px;
+    background: white;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.filter-btn.active {
+    background: #FF0000;
+    color: white;
+    border-color: #FF0000;
+}
+
+.library-search {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 16px;
+    margin-bottom: 16px;
+}
+
+.library-items {
+    display: grid;
+    gap: 12px;
+}
+
+.library-item {
+    background: white;
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    gap: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.library-item img {
+    width: 120px;
+    height: 90px;
+    border-radius: 8px;
+    object-fit: cover;
+}
+
+.library-item-info {
+    flex: 1;
+}
+
+.library-item-info h4 {
+    font-size: 16px;
+    margin-bottom: 8px;
+}
+
+.library-item-info p {
+    color: #666;
+    font-size: 14px;
+    margin-bottom: 4px;
+}
+
+.library-item-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    background: #FFE5E5;
+    color: #FF0000;
+    border-radius: 4px;
+    font-size: 12px;
+    margin-top: 8px;
+}
+
+/* 반응형 */
+@media (max-width: 768px) {
+    .header-content {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .nav-tabs {
+        width: 100%;
+    }
+    
+    .nav-tab {
+        flex: 1;
+        text-align: center;
+    }
+    
+    .video-actions {
+        flex-direction: column;
+    }
+    
+    .action-btn {
+        width: 100%;
+    }
+}
