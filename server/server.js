@@ -712,13 +712,15 @@ app.get('/api/download/audio', async (req, res) => {
     // Railway의 클라우드 IP는 YouTube에서 제한을 받을 수 있어 여러 폴백 옵션 제공
     // 더 유연한 포맷 선택: 오디오 전용 포맷부터 비디오+오디오까지 다양한 옵션 시도
     // 포맷 선택자 우선순위:
-    // 1. bestaudio (모든 오디오 포맷)
+    // 1. bestaudio (모든 오디오 포맷) - 우선 시도
     // 2. bestaudio[ext=m4a] (M4A 오디오)
     // 3. bestaudio[ext=mp3] (MP3 오디오)
     // 4. bestaudio[ext=webm] (WebM 오디오)
     // 5. bestaudio[ext=opus] (Opus 오디오)
-    // 6. best[height<=720]/bestvideo[height<=720]+bestaudio (저화질 비디오+오디오)
-    // 7. best (최고 품질, 비디오+오디오)
+    // 6. best[height<=720]/bestvideo[height<=720]+bestaudio (저화질 비디오+오디오) - 폴백
+    // 7. best (최고 품질, 비디오+오디오) - 최종 폴백
+    // 주의: 오디오만 선택 시 일부 영상에서 "format not available" 오류 발생 가능
+    //       따라서 비디오+오디오 옵션을 폴백으로 포함하여 안정성 확보
     let formatSelector = 'bestaudio/bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio[ext=webm]/bestaudio[ext=opus]/best[height<=720]/bestvideo[height<=720]+bestaudio/best';
     
     // android를 먼저 시도 (가장 안정적), 실패 시 나머지 랜덤 순서로 시도
@@ -755,6 +757,10 @@ app.get('/api/download/audio', async (req, res) => {
           '--add-header', 'Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           '--no-check-certificate',
           '--no-playlist',
+          // 비디오+오디오로 폴백 시 ffmpeg로 오디오만 추출 (용량 절약)
+          '--extract-audio',
+          '--audio-format', 'm4a',
+          '--audio-quality', '0',  // 최고 품질
           '-o', '-',
           url
         ];

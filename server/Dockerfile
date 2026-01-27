@@ -1,9 +1,9 @@
 # Python 3.11을 베이스로 사용하고 Node.js 설치
 FROM python:3.11-slim
 
-# Node.js 18 설치
+# Node.js 18 설치 및 ffmpeg 설치 (오디오 추출용)
 RUN apt-get update && \
-    apt-get install -y curl && \
+    apt-get install -y curl ffmpeg && \
     curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
     apt-get install -y nodejs && \
     apt-get clean && \
