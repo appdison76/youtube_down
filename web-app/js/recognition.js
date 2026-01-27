@@ -42,7 +42,7 @@ async function startRecognition() {
             // 이미 거부된 경우
             if (result.state === 'denied') {
                 permissionDenied = true;
-                recognitionStatus.innerHTML = '마이크 권한이 거부되었습니다.<br><br>브라우저 설정에서 마이크 권한을 허용해주세요.<br><br><button onclick="openBrowserSettings()" style="margin-top: 8px; padding: 8px 16px; background: #FF0000; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px;">브라우저 설정 열기</button>';
+                recognitionStatus.innerHTML = '마이크 권한이 거부되었습니다.<br><br>주소창 왼쪽의 🔒 아이콘을 눌러 마이크 권한을 허용해주세요.<br><br><button onclick="openBrowserSettings()" style="margin-top: 8px; padding: 10px 20px; background: #FF0000; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">설정 방법 보기</button>';
                 return;
             }
         }
@@ -154,7 +154,7 @@ async function startRecognition() {
             } else {
                 // HTML로 버튼 포함
                 errorMessage = null; // HTML 메시지 사용
-                recognitionStatus.innerHTML = '마이크 권한이 거부되었습니다.<br><br>브라우저 설정에서 마이크 권한을 허용해주세요.<br><br><button onclick="openBrowserSettings()" style="margin-top: 8px; padding: 8px 16px; background: #FF0000; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px;">브라우저 설정 열기</button>';
+                recognitionStatus.innerHTML = '마이크 권한이 거부되었습니다.<br><br>주소창 왼쪽의 🔒 아이콘을 눌러 마이크 권한을 허용해주세요.<br><br><button onclick="openBrowserSettings()" style="margin-top: 8px; padding: 10px 20px; background: #FF0000; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold;">설정 방법 보기</button>';
             }
         } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
             errorMessage = '마이크를 찾을 수 없습니다.';

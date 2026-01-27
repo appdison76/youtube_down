@@ -121,20 +121,107 @@
     <script src="js/library.js"></script>
     <script src="js/app.js"></script>
     <script>
-        // 브라우저 설정 열기 (플랫폼별)
+        // 브라우저 설정 안내 (직접 열 수 없으므로 명확한 안내 제공)
         function openBrowserSettings() {
             const userAgent = navigator.userAgent.toLowerCase();
+            let message = '';
             
             if (userAgent.includes('android')) {
                 // Android Chrome
-                alert('설정 방법:\n\n1. Chrome 메뉴(⋮) → 설정\n2. 사이트 설정 → 마이크\n3. 이 사이트의 마이크 권한 허용\n\n또는 주소창 왼쪽의 자물쇠 아이콘을 눌러 마이크 권한을 허용하세요.');
+                message = '📱 Android Chrome 설정 방법:\n\n' +
+                         '방법 1 (가장 쉬움):\n' +
+                         '→ 주소창 왼쪽의 🔒 자물쇠 아이콘을 누르세요\n' +
+                         '→ "마이크" 항목을 찾아 "허용"으로 변경하세요\n\n' +
+                         '방법 2:\n' +
+                         '→ Chrome 메뉴(⋮) → 설정\n' +
+                         '→ 사이트 설정 → 마이크\n' +
+                         '→ 이 사이트의 마이크 권한 허용';
             } else if (userAgent.includes('iphone') || userAgent.includes('ipad')) {
                 // iOS Safari
-                alert('설정 방법:\n\n1. 설정 앱 → Safari\n2. 카메라/마이크 허용\n3. 또는 Safari에서 주소창 왼쪽의 "aA" 아이콘 → 사이트 설정 → 마이크 허용');
+                message = '📱 iOS Safari 설정 방법:\n\n' +
+                         '방법 1 (가장 쉬움):\n' +
+                         '→ 주소창 왼쪽의 "aA" 아이콘을 누르세요\n' +
+                         '→ "사이트 설정" → "마이크" 허용\n\n' +
+                         '방법 2:\n' +
+                         '→ 설정 앱 → Safari\n' +
+                         '→ 카메라/마이크 허용 확인';
             } else {
                 // Desktop
-                alert('설정 방법:\n\n1. 주소창 왼쪽의 자물쇠 아이콘 클릭\n2. 마이크 권한 허용\n\n또는 브라우저 설정에서 사이트 권한 → 마이크에서 이 사이트 허용');
+                message = '💻 데스크톱 브라우저 설정 방법:\n\n' +
+                         '방법 1 (가장 쉬움):\n' +
+                         '→ 주소창 왼쪽의 🔒 자물쇠 아이콘을 클릭하세요\n' +
+                         '→ "마이크" 항목을 찾아 "허용"으로 변경하세요\n\n' +
+                         '방법 2 (Chrome):\n' +
+                         '→ 주소창에 chrome://settings/content/microphone 입력\n' +
+                         '→ 이 사이트를 허용 목록에 추가';
             }
+            
+            // 모달 스타일의 안내 표시
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0,0,0,0.7);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10000;
+                padding: 20px;
+            `;
+            
+            const content = document.createElement('div');
+            content.style.cssText = `
+                background: white;
+                padding: 24px;
+                border-radius: 12px;
+                max-width: 400px;
+                width: 100%;
+                max-height: 80vh;
+                overflow-y: auto;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            `;
+            
+            const text = document.createElement('div');
+            text.style.cssText = `
+                white-space: pre-line;
+                line-height: 1.6;
+                color: #333;
+                font-size: 14px;
+                margin-bottom: 16px;
+            `;
+            text.textContent = message;
+            
+            const closeBtn = document.createElement('button');
+            closeBtn.textContent = '닫기';
+            closeBtn.style.cssText = `
+                width: 100%;
+                padding: 12px;
+                background: #FF0000;
+                color: white;
+                border: none;
+                border-radius: 8px;
+                font-size: 16px;
+                cursor: pointer;
+                font-weight: bold;
+            `;
+            closeBtn.onclick = () => {
+                document.body.removeChild(modal);
+            };
+            
+            content.appendChild(text);
+            content.appendChild(closeBtn);
+            modal.appendChild(content);
+            document.body.appendChild(modal);
+            
+            // 모달 외부 클릭 시 닫기
+            modal.onclick = (e) => {
+                if (e.target === modal) {
+                    document.body.removeChild(modal);
+                }
+            };
         }
     </script>
 </body>
