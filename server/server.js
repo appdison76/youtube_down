@@ -261,6 +261,13 @@ app.post('/api/video-info', async (req, res) => {
           '--retries', '3',
           '--fragment-retries', '3',
           '--socket-timeout', '30',
+          '--extractor-retries', '3',
+          '--sleep-interval', '1',
+          '--max-sleep-interval', '3',
+          '--sleep-subtitles', '1',
+          '--referer', 'https://www.youtube.com/',
+          '--add-header', 'Accept-Language:en-US,en;q=0.9',
+          '--add-header', 'Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           url
         ];
         addProxyArgs(args);
@@ -349,8 +356,8 @@ app.get('/api/download/video', async (req, res) => {
 
     console.log('[Server] Downloading video:', url, 'quality:', quality);
 
-    // 다운로드 시작 전 짧은 지연 (패턴 감지 방지)
-    await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 500));
+    // 다운로드 시작 전 지연 (패턴 감지 방지) - 더 긴 지연
+    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
 
     // 헤더 설정
     res.setHeader('Content-Disposition', 'attachment; filename="video.mp4"');
@@ -384,11 +391,16 @@ app.get('/api/download/video', async (req, res) => {
           '--retries', '3',
           '--fragment-retries', '3',
           '--socket-timeout', '30',
+          '--extractor-retries', '3',
+          '--sleep-interval', '1',
+          '--max-sleep-interval', '3',
           '--http-chunk-size', '10M',
           '--concurrent-fragments', '1',
           '--throttled-rate', '1M',
           '--user-agent', userAgent,
           '--referer', 'https://www.youtube.com/',
+          '--add-header', 'Accept-Language:en-US,en;q=0.9',
+          '--add-header', 'Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           '--no-check-certificate',
           '-o', '-',
           url
@@ -540,7 +552,7 @@ app.get('/api/download/video', async (req, res) => {
           let resolved = false;
           startTimeout = setTimeout(() => {
             if (!hasStarted && !hasBotError && !resolved) {
-              console.log(`[Server] ⚠️ ${playerClient} did not start within 5 seconds`);
+              console.log(`[Server] ⚠️ ${playerClient} did not start within 10 seconds`);
               if (!processKilled) {
                 processKilled = true;
                 ytdlpProcess.kill('SIGTERM');
@@ -548,7 +560,7 @@ app.get('/api/download/video', async (req, res) => {
               resolved = true;
               resolve({ error: 'timeout', client: playerClient });
             }
-          }, 5000);
+          }, 10000); // 5초 -> 10초로 증가
           
           const stdoutHandler = (chunk) => {
             if (!hasBotError && !resolved) {
@@ -617,9 +629,9 @@ app.get('/api/download/video', async (req, res) => {
           console.log(`[Server] ⚠️ ${playerClient} failed, trying next client...`);
           lastError = new Error(`Failed with ${playerClient}: ${result.error}`);
           
-          // 다음 client로 전환하기 전에 짧은 지연 (패턴 감지 방지)
+          // 다음 client로 전환하기 전에 지연 (패턴 감지 방지) - 더 긴 지연
           if (triedClients.length < androidFirst.length) {
-            await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 500)); // 0.5~1초 랜덤 지연
+            await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000)); // 1~3초 랜덤 지연
           }
           continue;
         }
@@ -686,8 +698,8 @@ app.get('/api/download/audio', async (req, res) => {
 
     console.log('[Server] Downloading audio:', url, 'quality:', quality);
 
-    // 다운로드 시작 전 짧은 지연 (패턴 감지 방지)
-    await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 500));
+    // 다운로드 시작 전 지연 (패턴 감지 방지) - 더 긴 지연
+    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
 
     // 헤더 설정
     res.setHeader('Content-Disposition', 'attachment; filename="audio.m4a"');
@@ -731,11 +743,16 @@ app.get('/api/download/audio', async (req, res) => {
           '--retries', '3',
           '--fragment-retries', '3',
           '--socket-timeout', '30',
+          '--extractor-retries', '3',
+          '--sleep-interval', '1',
+          '--max-sleep-interval', '3',
           '--http-chunk-size', '10M',
           '--concurrent-fragments', '1',
           '--throttled-rate', '1M',
           '--user-agent', userAgent,
           '--referer', 'https://www.youtube.com/',
+          '--add-header', 'Accept-Language:en-US,en;q=0.9',
+          '--add-header', 'Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           '--no-check-certificate',
           '--no-playlist',
           '-o', '-',
@@ -888,7 +905,7 @@ app.get('/api/download/audio', async (req, res) => {
           let resolved = false;
           startTimeout = setTimeout(() => {
             if (!hasStarted && !hasBotError && !resolved) {
-              console.log(`[Server] ⚠️ ${playerClient} did not start within 5 seconds`);
+              console.log(`[Server] ⚠️ ${playerClient} did not start within 10 seconds`);
               if (!processKilled) {
                 processKilled = true;
                 ytdlpProcess.kill('SIGTERM');
@@ -896,7 +913,7 @@ app.get('/api/download/audio', async (req, res) => {
               resolved = true;
               resolve({ error: 'timeout', client: playerClient });
             }
-          }, 5000);
+          }, 10000); // 5초 -> 10초로 증가
           
           const stdoutHandler = (chunk) => {
             if (!hasBotError && !resolved) {
@@ -965,9 +982,9 @@ app.get('/api/download/audio', async (req, res) => {
           console.log(`[Server] ⚠️ ${playerClient} failed, trying next client...`);
           lastError = new Error(`Failed with ${playerClient}: ${result.error}`);
           
-          // 다음 client로 전환하기 전에 짧은 지연 (패턴 감지 방지)
+          // 다음 client로 전환하기 전에 지연 (패턴 감지 방지) - 더 긴 지연
           if (triedClients.length < androidFirst.length) {
-            await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 500)); // 0.5~1초 랜덤 지연
+            await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000)); // 1~3초 랜덤 지연
           }
           continue;
         }
