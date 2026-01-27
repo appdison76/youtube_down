@@ -120,5 +120,22 @@
     <script src="js/save.js"></script>
     <script src="js/library.js"></script>
     <script src="js/app.js"></script>
+    <script>
+        // 브라우저 설정 열기 (플랫폼별)
+        function openBrowserSettings() {
+            const userAgent = navigator.userAgent.toLowerCase();
+            
+            if (userAgent.includes('android')) {
+                // Android Chrome
+                alert('설정 방법:\n\n1. Chrome 메뉴(⋮) → 설정\n2. 사이트 설정 → 마이크\n3. 이 사이트의 마이크 권한 허용\n\n또는 주소창 왼쪽의 자물쇠 아이콘을 눌러 마이크 권한을 허용하세요.');
+            } else if (userAgent.includes('iphone') || userAgent.includes('ipad')) {
+                // iOS Safari
+                alert('설정 방법:\n\n1. 설정 앱 → Safari\n2. 카메라/마이크 허용\n3. 또는 Safari에서 주소창 왼쪽의 "aA" 아이콘 → 사이트 설정 → 마이크 허용');
+            } else {
+                // Desktop
+                alert('설정 방법:\n\n1. 주소창 왼쪽의 자물쇠 아이콘 클릭\n2. 마이크 권한 허용\n\n또는 브라우저 설정에서 사이트 권한 → 마이크에서 이 사이트 허용');
+            }
+        }
+    </script>
 </body>
 </html>
