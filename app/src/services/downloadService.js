@@ -2,7 +2,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 import MediaStoreModule from '../modules/MediaStoreModule';
-import { getApiBaseUrl } from '../config/api';
+import { getApiBaseUrl, getApiBaseUrls, fetchWithFallback } from '../config/api';
 
 const DOWNLOAD_DIR = `${FileSystem.documentDirectory}downloads/`;
 const METADATA_DIR = `${FileSystem.documentDirectory}metadata/`;
@@ -513,12 +513,14 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
       expectedSize = null;
     }
     
-    // 동적으로 API URL 가져오기
-    const apiBaseUrl = await getApiBaseUrl();
-    console.log('[downloadService] Using API base URL for video download:', apiBaseUrl);
-    
-    // 백엔드 서버에서 직접 다운로드
-    const downloadUrl = `${apiBaseUrl}/api/download/video?url=${encodeURIComponent(videoUrl)}&quality=highestvideo`;
+    // 이중화: URL 목록 순서대로 시도 (primary 실패 시 Railway 등)
+    const baseUrls = await getApiBaseUrls();
+    let lastDownloadError = null;
+    for (let urlIndex = 0; urlIndex < baseUrls.length; urlIndex++) {
+      const apiBaseUrl = baseUrls[urlIndex];
+      console.log('[downloadService] Using API base URL for video download (#', urlIndex + 1, '/', baseUrls.length, '):', apiBaseUrl);
+      try {
+    const downloadUrl = `${apiBaseUrl.replace(/\/$/, '')}/api/download/video?url=${encodeURIComponent(videoUrl)}&quality=highestvideo`;
     
     console.log('[downloadService] Downloading from:', downloadUrl);
     console.log('[downloadService] Saving to:', fileUri);
@@ -552,9 +554,8 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
         }
       }
     } catch (preCheckError) {
-      console.error('[downloadService] Pre-check failed:', preCheckError);
-      // pre-check 실패는 다운로드를 막지 않음 (일부 서버는 HEAD를 지원하지 않을 수 있음)
-      // 하지만 명확한 에러 메시지가 있으면 throw
+      // 이중화 시 첫 URL 실패는 예상 가능 → warn으로만 (에러 오버레이 방지)
+      console.warn('[downloadService] Pre-check failed:', preCheckError?.message || preCheckError);
       if (preCheckError.message && preCheckError.message.includes('백엔드')) {
         throw preCheckError;
       }
@@ -790,6 +791,21 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
     } else {
       throw new Error('다운로드가 완료되지 않았습니다.');
     }
+      } catch (urlError) {
+        lastDownloadError = urlError;
+        if (progressInterval) {
+          clearInterval(progressInterval);
+          progressInterval = null;
+        }
+        console.warn('[downloadService] Video download failed for URL #' + (urlIndex + 1), apiBaseUrl, urlError?.message);
+        if (urlIndex < baseUrls.length - 1) {
+          console.log('[downloadService] Trying next URL...');
+        }
+      }
+    }
+    if (lastDownloadError) {
+      throw lastDownloadError;
+    }
     } catch (error) {
     console.error('[downloadService] Error downloading video:', error);
     
@@ -909,12 +925,14 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
       expectedSize = null;
     }
     
-    // 동적으로 API URL 가져오기
-    const apiBaseUrl = await getApiBaseUrl();
-    console.log('[downloadService] Using API base URL for audio download:', apiBaseUrl);
-    
-    // 백엔드 서버에서 직접 다운로드
-    const downloadUrl = `${apiBaseUrl}/api/download/audio?url=${encodeURIComponent(videoUrl)}&quality=highestaudio`;
+    // 이중화: URL 목록 순서대로 시도 (primary 실패 시 Railway 등)
+    const baseUrls = await getApiBaseUrls();
+    let lastDownloadError = null;
+    for (let urlIndex = 0; urlIndex < baseUrls.length; urlIndex++) {
+      const apiBaseUrl = baseUrls[urlIndex];
+      console.log('[downloadService] Using API base URL for audio download (#', urlIndex + 1, '/', baseUrls.length, '):', apiBaseUrl);
+      try {
+    const downloadUrl = `${apiBaseUrl.replace(/\/$/, '')}/api/download/audio?url=${encodeURIComponent(videoUrl)}&quality=highestaudio`;
     
     console.log('[downloadService] Downloading from:', downloadUrl);
     console.log('[downloadService] Saving to:', fileUri);
@@ -1081,6 +1099,21 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
       } else {
       throw new Error('다운로드가 완료되지 않았습니다.');
       }
+      } catch (urlError) {
+        lastDownloadError = urlError;
+        if (progressInterval) {
+          clearInterval(progressInterval);
+          progressInterval = null;
+        }
+        console.warn('[downloadService] Audio download failed for URL #' + (urlIndex + 1), apiBaseUrl, urlError?.message);
+        if (urlIndex < baseUrls.length - 1) {
+          console.log('[downloadService] Trying next URL...');
+        }
+      }
+    }
+    if (lastDownloadError) {
+      throw lastDownloadError;
+    }
     } catch (error) {
     console.error('[downloadService] Error downloading audio:', error);
     
@@ -1339,13 +1372,11 @@ export const deleteThumbnailCacheIfUnused = async (videoId) => {
   }
 };
 
-// 영상 검색
+// 영상 검색 (이중화: primary 실패 시 Railway 등 다음 URL로 재시도)
 export const searchVideos = async (searchQuery, maxResults = 20) => {
   try {
     console.log('[downloadService] Searching videos for:', searchQuery);
-    const apiBaseUrl = await getApiBaseUrl();
-    
-    const response = await fetch(`${apiBaseUrl}/api/search`, {
+    const response = await fetchWithFallback('/api/search', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1355,7 +1386,6 @@ export const searchVideos = async (searchQuery, maxResults = 20) => {
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      // 서버의 message를 우선 사용 (제한 초과 등의 경우)
       throw new Error(errorData.message || errorData.error || '검색에 실패했습니다.');
     }
     
@@ -1380,7 +1410,7 @@ export const searchVideos = async (searchQuery, maxResults = 20) => {
   }
 };
 
-// 자동완성 가져오기
+// 자동완성 가져오기 (이중화: primary 실패 시 다음 URL로 재시도)
 export const getAutocomplete = async (query) => {
   try {
     if (!query || query.trim().length < 2) {
@@ -1388,9 +1418,7 @@ export const getAutocomplete = async (query) => {
     }
 
     console.log('[downloadService] Getting autocomplete for:', query);
-    const apiBaseUrl = await getApiBaseUrl();
-    
-    const response = await fetch(`${apiBaseUrl}/api/autocomplete`, {
+    const response = await fetchWithFallback('/api/autocomplete', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

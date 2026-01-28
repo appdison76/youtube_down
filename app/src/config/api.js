@@ -52,14 +52,18 @@ const loadConfig = async () => {
 
       const config = await response.json();
       
-      if (config && config.apiBaseUrl) {
+      if (config && (config.apiBaseUrl || (config.apiBaseUrls && config.apiBaseUrls.length > 0))) {
         console.log('[API Config] ✅ Config loaded successfully from', CONFIG_URL);
-        console.log('[API Config] ✅ API Base URL:', config.apiBaseUrl);
+        if (config.apiBaseUrls?.length) {
+          console.log('[API Config] ✅ API Base URLs (ordered):', config.apiBaseUrls.length, config.apiBaseUrls);
+        } else {
+          console.log('[API Config] ✅ API Base URL:', config.apiBaseUrl);
+        }
         cachedConfig = config;
         return config;
       } else {
-        console.error('[API Config] ❌ Invalid config format: apiBaseUrl not found in', config);
-        throw new Error('Invalid config format: apiBaseUrl not found');
+        console.error('[API Config] ❌ Invalid config format: apiBaseUrl/apiBaseUrls not found in', config);
+        throw new Error('Invalid config format: apiBaseUrl or apiBaseUrls not found');
       }
     } catch (error) {
       console.warn('[API Config] ❌ Failed to load external config from', CONFIG_URL);
@@ -67,11 +71,13 @@ const loadConfig = async () => {
       console.warn('[API Config] Using default config');
       console.warn('[API Config] __DEV__ mode:', __DEV__);
       
-      // 실패 시 기본값 사용
+      // 실패 시 기본값 사용 (단일 URL + Railway fallback)
       const fallbackUrl = __DEV__ ? DEFAULT_CONFIG.DEVELOPMENT : DEFAULT_CONFIG.PRODUCTION;
+      const railwayUrl = DEFAULT_CONFIG.PRODUCTION;
       console.warn('[API Config] Fallback URL:', fallbackUrl);
       return {
         apiBaseUrl: fallbackUrl,
+        apiBaseUrls: fallbackUrl === railwayUrl ? [fallbackUrl] : [fallbackUrl, railwayUrl],
         source: 'default',
       };
     }
@@ -87,9 +93,12 @@ export const refreshConfig = async () => {
   configLoadPromise = null;
   try {
     const config = await loadConfig();
-    if (config && config.apiBaseUrl) {
-      apiBaseUrlSync = config.apiBaseUrl;
-      console.log('[API Config] 🔄 Config refreshed. API Base URL:', config.apiBaseUrl);
+    if (config) {
+      const firstUrl = config.apiBaseUrls?.[0] ?? config.apiBaseUrl;
+      if (firstUrl) {
+        apiBaseUrlSync = firstUrl;
+        console.log('[API Config] 🔄 Config refreshed. API Base URL:', firstUrl);
+      }
     }
     return config;
   } catch (e) {
@@ -98,22 +107,54 @@ export const refreshConfig = async () => {
   }
 };
 
-// API_BASE_URL을 동적으로 가져오는 함수
+// API_BASE_URL을 동적으로 가져오는 함수 (단일 URL, 기존 호환)
 export const getApiBaseUrl = async () => {
-  // 모든 환경에서 외부 설정 로드 시도 (개발 빌드에서도 Railway 서버 사용 가능)
+  const urls = await getApiBaseUrls();
+  return urls[0] || (__DEV__ ? DEFAULT_CONFIG.DEVELOPMENT : DEFAULT_CONFIG.PRODUCTION);
+};
+
+/** URL 목록 반환 (이중화: primary 실패 시 다음 URL 시도). config.apiBaseUrls 배열 또는 apiBaseUrl + Railway */
+export const getApiBaseUrls = async () => {
   try {
-    console.log('[API Config] Loading external config (mode:', __DEV__ ? 'DEV' : 'PROD', ')...');
     const config = await loadConfig();
-    const apiUrl = config.apiBaseUrl || (__DEV__ ? DEFAULT_CONFIG.DEVELOPMENT : DEFAULT_CONFIG.PRODUCTION);
-    console.log('[API Config] ✅ Using API URL:', apiUrl, 'Source:', config.source || 'external');
-    return apiUrl;
+    if (config.apiBaseUrls && Array.isArray(config.apiBaseUrls) && config.apiBaseUrls.length > 0) {
+      return config.apiBaseUrls.filter(Boolean);
+    }
+    const primary = config.apiBaseUrl || (__DEV__ ? DEFAULT_CONFIG.DEVELOPMENT : DEFAULT_CONFIG.PRODUCTION);
+    const railway = DEFAULT_CONFIG.PRODUCTION;
+    return primary === railway ? [primary] : [primary, railway];
   } catch (error) {
-    console.error('[API Config] ❌ Error getting API base URL:', error);
-    // 실패 시 환경에 따라 기본값 사용
-    const fallbackUrl = __DEV__ ? DEFAULT_CONFIG.DEVELOPMENT : DEFAULT_CONFIG.PRODUCTION;
-    console.log('[API Config] Falling back to default URL:', fallbackUrl);
-    return fallbackUrl;
+    console.error('[API Config] ❌ Error getting API base URLs:', error);
+    const fallback = __DEV__ ? DEFAULT_CONFIG.DEVELOPMENT : DEFAULT_CONFIG.PRODUCTION;
+    return fallback === DEFAULT_CONFIG.PRODUCTION ? [fallback] : [fallback, DEFAULT_CONFIG.PRODUCTION];
   }
+};
+
+/** fetch 실패 시 다음 URL로 재시도. path는 '/api/search' 형태, init는 fetch init */
+export const fetchWithFallback = async (path, init = {}) => {
+  const baseUrls = await getApiBaseUrls();
+  let lastError = null;
+  for (let i = 0; i < baseUrls.length; i++) {
+    const base = baseUrls[i].replace(/\/$/, '');
+    const url = base + (path.startsWith('/') ? path : '/' + path);
+    try {
+      const res = await fetch(url, init);
+      if (res.ok) {
+        if (i > 0) {
+          console.log('[API Config] ✅ Fallback succeeded with URL #' + (i + 1), base);
+        }
+        return res;
+      }
+      throw new Error(`HTTP ${res.status}`);
+    } catch (e) {
+      lastError = e;
+      console.warn('[API Config] ⚠️ Request failed for', base, e?.message || e);
+      if (i < baseUrls.length - 1) {
+        console.log('[API Config] Trying next URL...');
+      }
+    }
+  }
+  throw lastError || new Error('All API URLs failed');
 };
 
 // 동기 버전 (초기값으로 사용, 이후 getApiBaseUrl로 업데이트)
@@ -150,6 +191,8 @@ export default {
   DEFAULT_CONFIG,
   loadConfig,
   getApiBaseUrl,
+  getApiBaseUrls,
+  fetchWithFallback,
   refreshConfig,
 };
 
