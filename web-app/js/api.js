@@ -108,6 +108,15 @@ function downloadAudio(url) {
   return getDownloadBaseUrl().then(base => base + '/api/download/audio?url=' + encodeURIComponent(url));
 }
 
+// ngrok 등이 HTML 에러 페이지를 200으로 줄 수 있음 → 실제 미디어인지 검사
+function isLikelyMediaResponse(res, blob) {
+  const ct = (res.headers.get('content-type') || '').toLowerCase();
+  if (ct.includes('text/html')) return false;
+  if (blob && blob.type && blob.type.toLowerCase().includes('text/html')) return false;
+  if (blob && blob.size < 5000) return false; // 에러 HTML은 보통 수 KB 이하
+  return true;
+}
+
 // 이중화: primary 실패 시 Railway로 blob 다운로드 (버튼에서 사용 권장)
 async function downloadVideoWithFallback(videoUrl, suggestedFileName = 'video.mp4') {
   const baseUrls = await getApiBaseUrls();
@@ -119,6 +128,7 @@ async function downloadVideoWithFallback(videoUrl, suggestedFileName = 'video.mp
       const res = await fetch(url);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const blob = await res.blob();
+      if (!isLikelyMediaResponse(res, blob)) throw new Error('Invalid response (e.g. ngrok error page)');
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = suggestedFileName || 'video.mp4';
@@ -145,6 +155,7 @@ async function downloadAudioWithFallback(videoUrl, suggestedFileName = 'audio.m4
       const res = await fetch(url);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const blob = await res.blob();
+      if (!isLikelyMediaResponse(res, blob)) throw new Error('Invalid response (e.g. ngrok error page)');
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = suggestedFileName || 'audio.m4a';
