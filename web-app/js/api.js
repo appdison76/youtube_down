@@ -37,7 +37,7 @@ async function getApiBaseUrls() {
 }
 
 // ngrok 인터스티셜 회피용 헤더 (무료 구간) - fetchWithFallback에서도 사용
-const NGROK_HEADERS = { 'ngrok-skip-browser-warning': 'true', 'User-Agent': 'MelodySnap/1.0 (API client)' };
+const NGROK_HEADERS = { 'ngrok-skip-browser-warning': 'true' };
 
 async function fetchWithFallback(path, init = {}) {
   const baseUrls = await getApiBaseUrls();
@@ -126,6 +126,7 @@ async function downloadVideoWithFallback(videoUrl, suggestedFileName = 'video.mp
       const ct = (res.headers.get('content-type') || '').toLowerCase();
       if (ct.includes('text/html')) throw new Error('ngrok interstitial (HTML)');
       const blob = await res.blob();
+      if (blob.size < 500 * 1024) throw new Error('incomplete (connection dropped?, size=' + blob.size + ')');
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = suggestedFileName || 'video.mp4';
@@ -154,6 +155,7 @@ async function downloadAudioWithFallback(videoUrl, suggestedFileName = 'audio.m4
       const ct = (res.headers.get('content-type') || '').toLowerCase();
       if (ct.includes('text/html')) throw new Error('ngrok interstitial (HTML)');
       const blob = await res.blob();
+      if (blob.size < 200 * 1024) throw new Error('incomplete (connection dropped?, size=' + blob.size + ')');
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = suggestedFileName || 'audio.m4a';
