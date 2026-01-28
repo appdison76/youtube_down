@@ -40,8 +40,8 @@ const getAudioModeConfig = () => ({
   staysActiveInBackground: true,
   playsInSilentModeIOS: true,
   shouldDuckAndroid: true,
-  interruptionModeIOS: InterruptionModeIOS.DuckOthers,
-  interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+  interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+  interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
   playThroughEarpieceAndroid: false,
 });
 
@@ -292,7 +292,10 @@ export default function DownloadsScreen({ navigation }) {
 
       // 기존 재생 중지 (다른 필터에서 재생 중이거나 새로 시작하는 경우)
       if (soundRef.current) {
-        await soundRef.current.unloadAsync();
+        try {
+          await soundRef.current.stopAsync();
+          await soundRef.current.unloadAsync();
+        } catch (e) { /* 이미 정리된 경우 등 */ }
         soundRef.current = null;
       }
 
@@ -357,22 +360,25 @@ export default function DownloadsScreen({ navigation }) {
         throw new Error('File not found');
       }
 
-      // 기존 sound 정리 (곡 변경 시 기존 재생 중지)
+      // 기존 sound 정리 (곡 변경 시 기존 재생 중지) — stop → unload로 세션 완전 해제
       if (soundRef.current) {
         try {
+          await soundRef.current.stopAsync();
           await soundRef.current.unloadAsync();
-          soundRef.current = null;
-          isPlayingRef.current = false;
-          setIsPlaying(false);
           console.log('[DownloadsScreen] Stopped previous playback for track change');
         } catch (unloadError) {
-          console.warn('[DownloadsScreen] Error unloading previous sound:', unloadError);
+          console.warn('[DownloadsScreen] Error stopping/unloading previous sound:', unloadError);
           // 계속 진행 (새 곡 재생 시도)
         }
+        soundRef.current = null;
+        isPlayingRef.current = false;
+        setIsPlaying(false);
       }
-      
-      // 이전 재생 정리 완료 후 플래그 설정 (race condition 방지)
+
       isPlayingRef.current = true;
+
+      // 무음의 틈 직후: OS에 "곧 새 소리 낼 거야" 리마인드 (유령 재생 방지)
+      await Audio.setAudioModeAsync(getAudioModeConfig());
 
       // 새로운 sound 로드 및 재생
       console.log('[DownloadsScreen] Loading new sound from:', file.fileUri);
@@ -857,7 +863,10 @@ export default function DownloadsScreen({ navigation }) {
   const handleStopPlaylist = async () => {
     try {
       if (soundRef.current) {
-        await soundRef.current.unloadAsync();
+        try {
+          await soundRef.current.stopAsync();
+          await soundRef.current.unloadAsync();
+        } catch (e) { /* 이미 정리된 경우 등 */ }
         soundRef.current = null;
       }
       setSound(null);
@@ -890,9 +899,9 @@ export default function DownloadsScreen({ navigation }) {
         // 앱 리로드 시 백그라운드 스레드에서 실행될 수 있으므로 안전하게 처리
         const cleanup = async () => {
           try {
-            // soundRef.current를 로컬 변수에 저장 (null 체크 방지)
             const sound = soundRef.current;
             if (sound) {
+              await sound.stopAsync();
               await sound.unloadAsync();
             }
           } catch (error) {

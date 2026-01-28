@@ -37,8 +37,8 @@ const getAudioModeConfig = () => ({
   staysActiveInBackground: true,
   playsInSilentModeIOS: true,
   shouldDuckAndroid: true,
-  interruptionModeIOS: InterruptionModeIOS.DuckOthers,
-  interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+  interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+  interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
   playThroughEarpieceAndroid: false,
 });
 
@@ -426,17 +426,20 @@ export default function LocalFilesScreen({ navigation }) {
 
       await mediaSessionService.ensureInitialized();
 
-      // 이전 재생 정리
+      // 이전 재생 정리 — stop → unload로 세션 완전 해제 (유령 재생 방지)
       if (soundRef.current) {
         try {
+          await soundRef.current.stopAsync();
           await soundRef.current.unloadAsync();
         } catch (unloadError) {
-          console.warn('[LocalFilesScreen] Error unloading previous sound:', unloadError);
+          console.warn('[LocalFilesScreen] Error stopping/unloading previous sound:', unloadError);
         }
+        soundRef.current = null;
       }
-      
-      // 이전 재생 정리 완료 후 플래그 설정 (race condition 방지)
+
       isPlayingRef.current = true;
+
+      await Audio.setAudioModeAsync(getAudioModeConfig());
 
       // localFileService에서 이미 content:// URI를 반환하므로 그대로 사용
       // file:// URI는 사용하지 않음 (Scoped Storage 제한)
