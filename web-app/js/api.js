@@ -100,6 +100,16 @@ async function getDownloadBaseUrl() {
   return urls[0].replace(/\/$/, '');
 }
 
+// 웹: 다운로드는 Railway 먼저 (ngrok 요청 시 브라우저가 그 페이지로 이동하는 문제 회피)
+async function getDownloadBaseUrls() {
+  const urls = await getApiBaseUrls();
+  if (urls.length <= 1) return urls;
+  const railway = DEFAULT_RAILWAY.replace(/\/$/, '');
+  const primary = urls[0].replace(/\/$/, '');
+  if (primary === railway) return urls;
+  return [railway, primary];
+}
+
 function downloadVideo(url) {
   return getDownloadBaseUrl().then(base => base + '/api/download/video?url=' + encodeURIComponent(url));
 }
@@ -122,9 +132,9 @@ async function isLikelyMediaResponse(res, blob) {
   return true;
 }
 
-// 이중화: primary 실패 시 Railway로 blob 다운로드 (버튼에서 사용 권장)
+// 이중화: 웹은 Railway 먼저 → primary (ngrok 요청 시 페이지 이동 방지)
 async function downloadVideoWithFallback(videoUrl, suggestedFileName = 'video.mp4') {
-  const baseUrls = await getApiBaseUrls();
+  const baseUrls = await getDownloadBaseUrls();
   let lastError = null;
   for (let i = 0; i < baseUrls.length; i++) {
     const base = baseUrls[i].replace(/\/$/, '');
@@ -151,7 +161,7 @@ async function downloadVideoWithFallback(videoUrl, suggestedFileName = 'video.mp
 }
 
 async function downloadAudioWithFallback(videoUrl, suggestedFileName = 'audio.m4a') {
-  const baseUrls = await getApiBaseUrls();
+  const baseUrls = await getDownloadBaseUrls();
   let lastError = null;
   for (let i = 0; i < baseUrls.length; i++) {
     const base = baseUrls[i].replace(/\/$/, '');
