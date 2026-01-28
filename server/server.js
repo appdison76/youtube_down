@@ -1,8 +1,9 @@
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
 const { spawn, exec } = require('child_process');
 const { promisify } = require('util');
-const path = require('path');
 const fs = require('fs');
 
 const execAsync = promisify(exec);
@@ -1377,6 +1378,10 @@ app.get('/api/ngrok-url', async (req, res) => {
 app.listen(PORT, '0.0.0.0', async () => {
   console.log(`[Server] YouTube Downloader Server running on port ${PORT}`);
   console.log(`[Server] Accessible at http://localhost:${PORT}`);
+  console.log(``);
+  console.log(`[Server] 📋 환경 변수:`);
+  console.log(`[Server]   YOUTUBE_API_KEY: ${process.env.YOUTUBE_API_KEY ? '✅ set' : '❌ not set (검색 불가)'}`);
+  console.log(`[Server]   DAILY_LIMIT: ${DAILY_LIMIT} (검색 일일 제한)`);
   console.log(``);
   console.log(`[Server] 📋 ============================================`);
   console.log(`[Server] 📋 Ngrok URL 확인 방법:`);
