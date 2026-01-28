@@ -39,11 +39,13 @@ async function getApiBaseUrls() {
 async function fetchWithFallback(path, init = {}) {
   const baseUrls = await getApiBaseUrls();
   let lastError = null;
+  const headers = { ...init.headers, 'ngrok-skip-browser-warning': 'true' };
+  const initWithNgrok = { ...init, headers };
   for (let i = 0; i < baseUrls.length; i++) {
     const base = baseUrls[i].replace(/\/$/, '');
     const url = base + (path.startsWith('/') ? path : '/' + path);
     try {
-      const res = await fetch(url, init);
+      const res = await fetch(url, initWithNgrok);
       if (res.ok) {
         if (i > 0) console.log('[web-app API] Fallback succeeded with URL #' + (i + 1), base);
         return res;
@@ -116,7 +118,7 @@ async function downloadVideoWithFallback(videoUrl, suggestedFileName = 'video.mp
     const base = baseUrls[i].replace(/\/$/, '');
     const url = base + '/api/download/video?url=' + encodeURIComponent(videoUrl) + '&quality=highestvideo';
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, { headers: { 'ngrok-skip-browser-warning': 'true' } });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const blob = await res.blob();
       const a = document.createElement('a');
@@ -142,7 +144,7 @@ async function downloadAudioWithFallback(videoUrl, suggestedFileName = 'audio.m4
     const base = baseUrls[i].replace(/\/$/, '');
     const url = base + '/api/download/audio?url=' + encodeURIComponent(videoUrl) + '&quality=highestaudio';
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, { headers: { 'ngrok-skip-browser-warning': 'true' } });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const blob = await res.blob();
       const a = document.createElement('a');
