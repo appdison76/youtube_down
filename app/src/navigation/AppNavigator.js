@@ -6,7 +6,6 @@ import { Ionicons } from '@expo/vector-icons';
 import SearchScreen from '../screens/SearchScreen';
 import FavoritesScreen from '../screens/FavoritesScreen';
 import DownloadsScreen from '../screens/DownloadsScreen';
-// import LocalFilesScreen from '../screens/LocalFilesScreen'; // 내폰 탭 (주석처리 - 나중에 사용 가능)
 import VideoSearchScreen from '../screens/VideoSearchScreen';
 import MusicRecognitionScreen from '../screens/MusicRecognitionScreen';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -27,8 +26,6 @@ function MainTabs() {
         return t.tabSave;
       case 'Downloads':
         return t.tabMyFiles;
-      // case 'LocalFiles': // 내폰 탭 (주석처리 - 나중에 사용 가능)
-      //   return t.tabLocalFiles;
       case 'Favorites':
         return t.tabFavorites;
       case 'MusicRecognition':
@@ -55,9 +52,6 @@ function MainTabs() {
           } else if (route.name === 'MusicRecognition') {
             iconName = focused ? 'musical-notes' : 'musical-notes-outline';
           }
-          // else if (route.name === 'LocalFiles') { // 내폰 탭 (주석처리 - 나중에 사용 가능)
-          //   iconName = focused ? 'phone-portrait' : 'phone-portrait-outline';
-          // }
 
           return <Ionicons name={iconName} size={size} color={color} />;
         },
@@ -87,11 +81,6 @@ function MainTabs() {
         name="Favorites" 
         component={FavoritesScreen}
       />
-      {/* 내폰 탭 (주석처리 - 나중에 사용 가능) */}
-      {/* <Tab.Screen 
-        name="LocalFiles" 
-        component={LocalFilesScreen}
-      /> */}
     </Tab.Navigator>
   );
 }

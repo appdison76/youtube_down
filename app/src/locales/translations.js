@@ -144,7 +144,6 @@ export const translations = {
     tabSearch: '검색',
     tabSave: '저장',
     tabMyFiles: '내 파일',
-    tabLocalFiles: '내폰',
     tabFavorites: '찜하기',
     tabMusicRecognition: '음악 찾기',
     
@@ -345,7 +344,6 @@ export const translations = {
     tabSearch: 'Search',
     tabSave: 'Save',
     tabMyFiles: 'My Files',
-    tabLocalFiles: 'My Phone',
     tabFavorites: 'Favorites',
     tabMusicRecognition: 'Find Music',
     
@@ -546,7 +544,6 @@ export const translations = {
     tabSearch: '検索',
     tabSave: '保存',
     tabMyFiles: 'マイファイル',
-    tabLocalFiles: 'マイフォン',
     tabFavorites: 'お気に入り',
     tabMusicRecognition: '音楽検索',
     
@@ -749,7 +746,6 @@ export const translations = {
     tabSearch: '搜索',
     tabSave: '保存',
     tabMyFiles: '我的文件',
-    tabLocalFiles: '我的手机',
     tabFavorites: '收藏',
     tabMusicRecognition: '找音乐',
     
