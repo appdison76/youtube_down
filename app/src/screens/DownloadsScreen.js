@@ -37,6 +37,7 @@ import { translations } from '../locales/translations';
 
 /** 백그라운드·잠금화면 재생용 오디오 모드 (세션 복구·포커스 재요청에 사용) */
 const getAudioModeConfig = () => ({
+  allowsRecordingIOS: false,
   staysActiveInBackground: true,
   playsInSilentModeIOS: true,
   shouldDuckAndroid: true,
@@ -360,7 +361,47 @@ export default function DownloadsScreen({ navigation }) {
         throw new Error('File not found');
       }
 
-      // 기존 sound 정리 (곡 변경 시 기존 재생 중지) — stop → unload로 세션 완전 해제
+      isPlayingRef.current = true;
+
+      // 무음의 틈 직후: OS에 "곧 새 소리 낼 거야" 리마인드 (유령 재생 방지)
+      await Audio.setAudioModeAsync(getAudioModeConfig());
+
+      // 새 곡 먼저 로드 (unload/load 공백 최소화 — OS가 세션 닫는 틈 막기)
+      const isAudioFocusError = (e) =>
+        (e?.message && String(e.message).includes('AudioFocusNotAcquiredException')) ||
+        (e?.message && String(e.message).includes('Audio focus could not be acquired'));
+
+      let newSound = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          if (attempt > 0) {
+            await new Promise((r) => setTimeout(r, 450));
+            await Audio.setAudioModeAsync(getAudioModeConfig());
+            console.log('[DownloadsScreen] Retrying after AudioFocusNotAcquiredException...');
+          }
+          console.log('[DownloadsScreen] Loading new sound from:', file.fileUri, attempt > 0 ? '(retry)' : '');
+          const result = await Audio.Sound.createAsync(
+            { uri: file.fileUri },
+            { shouldPlay: true, volume: 1.0 }
+          );
+          newSound = result.sound;
+          await newSound.playAsync();
+          break;
+        } catch (e) {
+          if (newSound) {
+            try { await newSound.unloadAsync(); } catch (_) {}
+            newSound = null;
+          }
+          if (isAudioFocusError(e) && attempt === 0) {
+            console.warn('[DownloadsScreen] AudioFocusNotAcquiredException, retrying in 450ms...', e?.message);
+            continue;
+          }
+          throw e;
+        }
+      }
+      if (!newSound) throw new Error('Failed to create sound');
+
+      // 이전 곡 해제 (새 곡 로드 후 unload — 공백 최소화)
       if (soundRef.current) {
         try {
           await soundRef.current.stopAsync();
@@ -368,24 +409,9 @@ export default function DownloadsScreen({ navigation }) {
           console.log('[DownloadsScreen] Stopped previous playback for track change');
         } catch (unloadError) {
           console.warn('[DownloadsScreen] Error stopping/unloading previous sound:', unloadError);
-          // 계속 진행 (새 곡 재생 시도)
         }
         soundRef.current = null;
-        isPlayingRef.current = false;
-        setIsPlaying(false);
       }
-
-      isPlayingRef.current = true;
-
-      // 무음의 틈 직후: OS에 "곧 새 소리 낼 거야" 리마인드 (유령 재생 방지)
-      await Audio.setAudioModeAsync(getAudioModeConfig());
-
-      // 새로운 sound 로드 및 재생
-      console.log('[DownloadsScreen] Loading new sound from:', file.fileUri);
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: file.fileUri },
-        { shouldPlay: true }
-      );
 
       // 성공적으로 로드된 후에만 상태 업데이트
       soundRef.current = newSound;
@@ -481,7 +507,7 @@ export default function DownloadsScreen({ navigation }) {
         }
         
         if (status.didJustFinish && !status.isLooping) {
-          handleNext();
+          setTimeout(() => handleNext(), 150);
         }
       });
     } catch (error) {
@@ -714,7 +740,13 @@ export default function DownloadsScreen({ navigation }) {
             await playAudioFile(nextFile, nextIndex);
             console.log('[DownloadsScreen] Successfully played next file');
           } catch (playError) {
-            console.error('[DownloadsScreen] Error in playAudioFile during handleNext:', playError);
+            const isAudioFocus = (playError?.message && String(playError.message).includes('AudioFocusNotAcquiredException')) ||
+              (playError?.message && String(playError.message).includes('Audio focus could not be acquired'));
+            if (isAudioFocus) {
+              console.warn('[DownloadsScreen] Audio focus not acquired during handleNext (복귀 직후 등):', playError?.message);
+            } else {
+              console.error('[DownloadsScreen] Error in playAudioFile during handleNext:', playError);
+            }
             // playAudioFile 실패 시 현재 곡의 알림 유지
             if (currentFile) {
               console.log('[DownloadsScreen] Maintaining current file notification after playAudioFile error');
@@ -1037,6 +1069,15 @@ export default function DownloadsScreen({ navigation }) {
           soundRef.current.playAsync().catch(e =>
             console.warn('[DownloadsScreen] AppState play nudge:', e)
           );
+        } else if (!soundRef.current && playlistRef.current.length > 0) {
+          const pl = playlistRef.current;
+          const idx = Math.max(0, Math.min(currentIndexRef.current, pl.length - 1));
+          const file = pl[idx];
+          if (file) {
+            playAudioFile(file, idx).catch(e =>
+              console.warn('[DownloadsScreen] AppState 복귀 시 재생 재시작 실패:', e?.message)
+            );
+          }
         }
       }
     });

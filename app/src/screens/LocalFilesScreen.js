@@ -34,6 +34,7 @@ import MediaStoreModule from '../modules/MediaStoreModule';
 
 /** 백그라운드·잠금화면 재생용 오디오 모드 (세션 복구·포커스 재요청에 사용) */
 const getAudioModeConfig = () => ({
+  allowsRecordingIOS: false,
   staysActiveInBackground: true,
   playsInSilentModeIOS: true,
   shouldDuckAndroid: true,
@@ -401,6 +402,15 @@ export default function LocalFilesScreen({ navigation }) {
           soundRef.current.playAsync().catch(e =>
             console.warn('[LocalFilesScreen] AppState play nudge:', e)
           );
+        } else if (!soundRef.current && playlistRef.current.length > 0) {
+          const pl = playlistRef.current;
+          const idx = Math.max(0, Math.min(currentIndexRef.current, pl.length - 1));
+          const file = pl[idx];
+          if (file) {
+            playAudioFile(file, idx).catch(e =>
+              console.warn('[LocalFilesScreen] AppState 복귀 시 재생 재시작 실패:', e?.message)
+            );
+          }
         }
       }
     });
@@ -426,17 +436,6 @@ export default function LocalFilesScreen({ navigation }) {
 
       await mediaSessionService.ensureInitialized();
 
-      // 이전 재생 정리 — stop → unload로 세션 완전 해제 (유령 재생 방지)
-      if (soundRef.current) {
-        try {
-          await soundRef.current.stopAsync();
-          await soundRef.current.unloadAsync();
-        } catch (unloadError) {
-          console.warn('[LocalFilesScreen] Error stopping/unloading previous sound:', unloadError);
-        }
-        soundRef.current = null;
-      }
-
       isPlayingRef.current = true;
 
       await Audio.setAudioModeAsync(getAudioModeConfig());
@@ -451,11 +450,49 @@ export default function LocalFilesScreen({ navigation }) {
         playUri = file.fileUri; // 그래도 원래 값 사용 (fallback)
       }
 
-      console.log('[LocalFilesScreen] Playing audio from URI:', playUri);
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: playUri },
-        { shouldPlay: true }
-      );
+      const isAudioFocusError = (e) =>
+        (e?.message && String(e.message).includes('AudioFocusNotAcquiredException')) ||
+        (e?.message && String(e.message).includes('Audio focus could not be acquired'));
+
+      let newSound = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          if (attempt > 0) {
+            await new Promise((r) => setTimeout(r, 450));
+            await Audio.setAudioModeAsync(getAudioModeConfig());
+            console.log('[LocalFilesScreen] Retrying after AudioFocusNotAcquiredException...');
+          }
+          console.log('[LocalFilesScreen] Playing audio from URI:', playUri, attempt > 0 ? '(retry)' : '');
+          const result = await Audio.Sound.createAsync(
+            { uri: playUri },
+            { shouldPlay: true, volume: 1.0 }
+          );
+          newSound = result.sound;
+          await newSound.playAsync();
+          break;
+        } catch (e) {
+          if (newSound) {
+            try { await newSound.unloadAsync(); } catch (_) {}
+            newSound = null;
+          }
+          if (isAudioFocusError(e) && attempt === 0) {
+            console.warn('[LocalFilesScreen] AudioFocusNotAcquiredException, retrying in 450ms...', e?.message);
+            continue;
+          }
+          throw e;
+        }
+      }
+      if (!newSound) throw new Error('Failed to create sound');
+
+      if (soundRef.current) {
+        try {
+          await soundRef.current.stopAsync();
+          await soundRef.current.unloadAsync();
+        } catch (unloadError) {
+          console.warn('[LocalFilesScreen] Error stopping/unloading previous sound:', unloadError);
+        }
+        soundRef.current = null;
+      }
 
       soundRef.current = newSound;
       setSound(newSound);
@@ -481,15 +518,21 @@ export default function LocalFilesScreen({ navigation }) {
           isPlayingRef.current = false;
         }
         if (status.didJustFinish && !status.isLooping) {
-          handleNext();
+          setTimeout(() => handleNext(), 150);
         }
       });
     } catch (error) {
-      isPlayingRef.current = false; // 오류 발생 시에도 플래그 해제
-      console.error('[LocalFilesScreen] Error playing audio:', error);
-      
+      isPlayingRef.current = false;
+      const isAudioFocus = (error?.message && String(error.message).includes('AudioFocusNotAcquiredException')) ||
+        (error?.message && String(error.message).includes('Audio focus could not be acquired'));
+      if (isAudioFocus) {
+        console.warn('[LocalFilesScreen] Audio focus not acquired (복귀 직후 등):', error?.message);
+      } else {
+        console.error('[LocalFilesScreen] Error playing audio:', error);
+      }
+
       // UnrecognizedInputFormatException 등 ExoPlayer 오류인 경우 외부 플레이어로 폴백
-      if (error.message && (
+      if (!isAudioFocus && error.message && (
         error.message.includes('UnrecognizedInputFormatException') ||
         error.message.includes('extractors') ||
         error.message.includes('could read the stream')
