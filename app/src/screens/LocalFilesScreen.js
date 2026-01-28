@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
-import { Audio } from 'expo-av';
+import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 import AdBanner from '../components/AdBanner';
 import MiniPlayer from '../components/MiniPlayer';
 import LanguageSelector from '../components/LanguageSelector';
@@ -31,6 +31,16 @@ import mediaSessionService from '../services/mediaSessionService';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../locales/translations';
 import MediaStoreModule from '../modules/MediaStoreModule';
+
+/** 백그라운드·잠금화면 재생용 오디오 모드 (세션 복구·포커스 재요청에 사용) */
+const getAudioModeConfig = () => ({
+  staysActiveInBackground: true,
+  playsInSilentModeIOS: true,
+  shouldDuckAndroid: true,
+  interruptionModeIOS: InterruptionModeIOS.DuckOthers,
+  interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+  playThroughEarpieceAndroid: false,
+});
 
 export default function LocalFilesScreen({ navigation }) {
   const { currentLanguage } = useLanguage();
@@ -362,11 +372,7 @@ export default function LocalFilesScreen({ navigation }) {
     };
     initPermission();
 
-    Audio.setAudioModeAsync({
-      staysActiveInBackground: true,
-      playsInSilentModeIOS: true,
-      shouldDuckAndroid: true,
-    }).catch(error => {
+    Audio.setAudioModeAsync(getAudioModeConfig()).catch(error => {
       console.error('[LocalFilesScreen] Error setting audio mode:', error);
     });
 
@@ -383,7 +389,24 @@ export default function LocalFilesScreen({ navigation }) {
       onStop: handleStopPlaylist,
     });
 
+    let appStatePrev = AppState.currentState;
+    const appStateSub = AppState.addEventListener('change', (nextState) => {
+      const prev = appStatePrev;
+      appStatePrev = nextState;
+      if ((prev === 'background' || prev === 'inactive') && nextState === 'active') {
+        Audio.setAudioModeAsync(getAudioModeConfig()).catch(e =>
+          console.warn('[LocalFilesScreen] AppState audio reset:', e)
+        );
+        if (soundRef.current && isPlayingRef.current) {
+          soundRef.current.playAsync().catch(e =>
+            console.warn('[LocalFilesScreen] AppState play nudge:', e)
+          );
+        }
+      }
+    });
+
     return () => {
+      appStateSub?.remove?.();
       mediaSessionService.dismiss().catch(error => {
         console.error('[LocalFilesScreen] Error dismissing media session:', error);
       });
@@ -399,11 +422,7 @@ export default function LocalFilesScreen({ navigation }) {
     }
     
     try {
-      await Audio.setAudioModeAsync({
-        staysActiveInBackground: true,
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
-      });
+      await Audio.setAudioModeAsync(getAudioModeConfig());
 
       await mediaSessionService.ensureInitialized();
 
@@ -538,6 +557,7 @@ export default function LocalFilesScreen({ navigation }) {
   const handlePlay = async () => {
     try {
       if (!soundRef.current) return;
+      await Audio.setAudioModeAsync(getAudioModeConfig());
       await soundRef.current.playAsync();
       setIsPlaying(true);
       const currentPlaylistForPause = playlistRef.current.length > 0 ? playlistRef.current : playlist;
@@ -555,6 +575,7 @@ export default function LocalFilesScreen({ navigation }) {
   const handlePause = async () => {
     try {
       if (!soundRef.current) return;
+      await Audio.setAudioModeAsync(getAudioModeConfig());
       await soundRef.current.pauseAsync();
       setIsPlaying(false);
       const currentPlaylistForPause = playlistRef.current.length > 0 ? playlistRef.current : playlist;

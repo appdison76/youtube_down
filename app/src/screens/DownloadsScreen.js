@@ -21,7 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as FileSystem from 'expo-file-system/legacy';
-import { Audio } from 'expo-av';
+import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 import AdBanner from '../components/AdBanner';
 import MiniPlayer from '../components/MiniPlayer';
 import LanguageSelector from '../components/LanguageSelector';
@@ -34,6 +34,16 @@ import MediaStoreModule from '../modules/MediaStoreModule';
 import mediaSessionService from '../services/mediaSessionService';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../locales/translations';
+
+/** 백그라운드·잠금화면 재생용 오디오 모드 (세션 복구·포커스 재요청에 사용) */
+const getAudioModeConfig = () => ({
+  staysActiveInBackground: true,
+  playsInSilentModeIOS: true,
+  shouldDuckAndroid: true,
+  interruptionModeIOS: InterruptionModeIOS.DuckOthers,
+  interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+  playThroughEarpieceAndroid: false,
+});
 
 // 썸네일 이미지 컴포넌트 (영상 URL 실패 시 캐시로 폴백)
 const ThumbnailImage = ({ sourceUri, cacheUri, style }) => {
@@ -323,11 +333,7 @@ export default function DownloadsScreen({ navigation }) {
     
     try {
       // 백그라운드 오디오 재생 활성화 (재생 시작 전 확인)
-      await Audio.setAudioModeAsync({
-        staysActiveInBackground: true,
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
-      });
+      await Audio.setAudioModeAsync(getAudioModeConfig());
 
       // MediaSession 초기화 확인 (재생 시작 전)
       await mediaSessionService.ensureInitialized();
@@ -512,11 +518,13 @@ export default function DownloadsScreen({ navigation }) {
         return;
       }
 
-      // 실제 오디오 상태 확인
+      // 오디오 포커스·세션 재요청 (소리 없는 재생 복구용)
+      await Audio.setAudioModeAsync(getAudioModeConfig());
+
+      // 실제 오디오 상태 확인 (참고용 로그)
       const status = await soundRef.current.getStatusAsync();
       if (status.isPlaying) {
-        console.log('[DownloadsScreen] Already playing, skipping');
-        return;
+        console.log('[DownloadsScreen] Native reports already playing; calling playAsync anyway (silent-playback recovery)');
       }
 
       await soundRef.current.playAsync();
@@ -553,7 +561,8 @@ export default function DownloadsScreen({ navigation }) {
         return;
       }
 
-      // 실제 오디오 상태 확인
+      await Audio.setAudioModeAsync(getAudioModeConfig());
+
       const status = await soundRef.current.getStatusAsync();
       if (!status.isPlaying) {
         console.log('[DownloadsScreen] Already paused, skipping');
@@ -932,11 +941,7 @@ export default function DownloadsScreen({ navigation }) {
     loadPlaylists();
     
     // 백그라운드 오디오 재생 활성화
-    Audio.setAudioModeAsync({
-      staysActiveInBackground: true,
-      playsInSilentModeIOS: true,
-      shouldDuckAndroid: true,
-    }).catch(error => {
+    Audio.setAudioModeAsync(getAudioModeConfig()).catch(error => {
       console.error('[DownloadsScreen] Error setting audio mode:', error);
     });
 
@@ -979,9 +984,10 @@ export default function DownloadsScreen({ navigation }) {
         // 알림 즉시 갱신 (버튼 상태 고정)
         await mediaSessionService.showNotification();
         
-        // 4. SEEK 전에 재생 중이었다면 재생 계속
+        // 4. SEEK 전에 재생 중이었다면 재생 계속 (세션 복구용 모드 재설정 후)
         if (wasPlaying) {
           try {
+            await Audio.setAudioModeAsync(getAudioModeConfig());
             await soundRef.current.playAsync();
           } catch (playError) {
             console.warn('[DownloadsScreen] Error resuming playback after seek:', playError);
@@ -1009,8 +1015,25 @@ export default function DownloadsScreen({ navigation }) {
       onSeek: handleSeek,
     });
 
-    // 컴포넌트 언마운트 시 MediaSession 해제
+    // 백그라운드 → 포그라운드 복귀 시 오디오 세션 재설정 (소리 없는 재생·Play/Pause 먹통 방지)
+    let appStatePrev = AppState.currentState;
+    const appStateSub = AppState.addEventListener('change', (nextState) => {
+      const prev = appStatePrev;
+      appStatePrev = nextState;
+      if ((prev === 'background' || prev === 'inactive') && nextState === 'active') {
+        Audio.setAudioModeAsync(getAudioModeConfig()).catch(e =>
+          console.warn('[DownloadsScreen] AppState audio reset:', e)
+        );
+        if (soundRef.current && isPlayingRef.current) {
+          soundRef.current.playAsync().catch(e =>
+            console.warn('[DownloadsScreen] AppState play nudge:', e)
+          );
+        }
+      }
+    });
+
     return () => {
+      appStateSub?.remove?.();
       mediaSessionService.dismiss().catch(error => {
         console.error('[DownloadsScreen] Error dismissing media session:', error);
       });
