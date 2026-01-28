@@ -61,36 +61,58 @@ async function handleUrlSubmit() {
     }
 }
 
-downloadVideoBtn.addEventListener('click', () => {
+downloadVideoBtn.addEventListener('click', async () => {
     if (!currentVideoUrl) return;
-    window.open(downloadVideo(currentVideoUrl), '_blank');
-    
-    // 다운로드 목록에 추가
-    addItem({
-        id: currentVideoId,
-        title: videoTitle.textContent,
-        author: videoAuthor.textContent,
-        thumbnail: videoThumbnail.src,
-        url: currentVideoUrl,
-        type: 'downloaded',
-        format: 'video',
-    });
+    const btn = downloadVideoBtn;
+    const origText = btn.textContent;
+    btn.textContent = '다운로드 중...';
+    btn.disabled = true;
+    try {
+        const name = (videoTitle.textContent || 'video').replace(/[<>:"/\\|?*]/g, '_').slice(0, 100) + '.mp4';
+        await downloadVideoWithFallback(currentVideoUrl, name);
+        addItem({
+            id: currentVideoId,
+            title: videoTitle.textContent,
+            author: videoAuthor.textContent,
+            thumbnail: videoThumbnail.src,
+            url: currentVideoUrl,
+            type: 'downloaded',
+            format: 'video',
+        });
+    } catch (e) {
+        console.error('영상 다운로드 실패:', e);
+        alert('다운로드에 실패했습니다. ' + (e?.message || ''));
+    } finally {
+        btn.textContent = origText;
+        btn.disabled = false;
+    }
 });
 
-downloadAudioBtn.addEventListener('click', () => {
+downloadAudioBtn.addEventListener('click', async () => {
     if (!currentVideoUrl) return;
-    window.open(downloadAudio(currentVideoUrl), '_blank');
-    
-    // 다운로드 목록에 추가
-    addItem({
-        id: currentVideoId,
-        title: videoTitle.textContent,
-        author: videoAuthor.textContent,
-        thumbnail: videoThumbnail.src,
-        url: currentVideoUrl,
-        type: 'downloaded',
-        format: 'audio',
-    });
+    const btn = downloadAudioBtn;
+    const origText = btn.textContent;
+    btn.textContent = '다운로드 중...';
+    btn.disabled = true;
+    try {
+        const name = (videoTitle.textContent || 'audio').replace(/[<>:"/\\|?*]/g, '_').slice(0, 100) + '.m4a';
+        await downloadAudioWithFallback(currentVideoUrl, name);
+        addItem({
+            id: currentVideoId,
+            title: videoTitle.textContent,
+            author: videoAuthor.textContent,
+            thumbnail: videoThumbnail.src,
+            url: currentVideoUrl,
+            type: 'downloaded',
+            format: 'audio',
+        });
+    } catch (e) {
+        console.error('음악 다운로드 실패:', e);
+        alert('다운로드에 실패했습니다. ' + (e?.message || ''));
+    } finally {
+        btn.textContent = origText;
+        btn.disabled = false;
+    }
 });
 
 favoriteBtn.addEventListener('click', async () => {
