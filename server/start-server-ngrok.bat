@@ -2,6 +2,13 @@
 title YouTube Down - Server + Ngrok
 cd /d "%~dp0"
 
+REM ============================================
+REM 유료 버전 사용 시: 아래 NGROK_DOMAIN 값을 설정하세요
+REM 예: set NGROK_DOMAIN=yourname.ngrok-free.app
+REM 무료 버전 사용 시: 이 줄을 주석 처리하거나 비워두세요
+REM ============================================
+REM set NGROK_DOMAIN=yourname.ngrok-free.app
+
 netstat -ano | findstr ":3000" >nul 2>&1
 if %errorlevel% equ 0 (
   echo [*] Port 3000 in use - server already running. Starting ngrok only.

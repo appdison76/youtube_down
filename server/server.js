@@ -1314,7 +1314,131 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+// ngrok URL 자동 감지 함수
+const getNgrokUrl = async () => {
+  try {
+    const response = await fetch('http://localhost:4040/api/tunnels');
+    if (!response.ok) {
+      return null;
+    }
+    const data = await response.json();
+    if (data.tunnels && data.tunnels.length > 0) {
+      // https 터널 우선, 없으면 http
+      const httpsTunnel = data.tunnels.find(t => t.proto === 'https');
+      const tunnel = httpsTunnel || data.tunnels[0];
+      return tunnel.public_url;
+    }
+    return null;
+  } catch (error) {
+    return null;
+  }
+};
+
+// config.json의 현재 apiBaseUrl 읽기
+const getCurrentConfigUrl = () => {
+  try {
+    const configPath = path.join(__dirname, '..', 'install-page', 'config.json');
+    if (fs.existsSync(configPath)) {
+      const configContent = fs.readFileSync(configPath, 'utf8');
+      const config = JSON.parse(configContent);
+      return config.apiBaseUrl || null;
+    }
+    return null;
+  } catch (error) {
+    return null;
+  }
+};
+
+// ngrok URL 확인 API (현재 ngrok URL을 확인할 수 있는 엔드포인트)
+app.get('/api/ngrok-url', async (req, res) => {
+  try {
+    const ngrokUrl = await getNgrokUrl();
+    if (ngrokUrl) {
+      res.json({ 
+        success: true, 
+        url: ngrokUrl,
+        message: 'Ngrok URL detected'
+      });
+    } else {
+      res.json({ 
+        success: false, 
+        url: null,
+        message: 'Ngrok not detected. Make sure ngrok is running on port 4040.'
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+app.listen(PORT, '0.0.0.0', async () => {
   console.log(`[Server] YouTube Downloader Server running on port ${PORT}`);
   console.log(`[Server] Accessible at http://localhost:${PORT}`);
+  console.log(``);
+  console.log(`[Server] 📋 ============================================`);
+  console.log(`[Server] 📋 Ngrok URL 확인 방법:`);
+  console.log(`[Server] 📋 1. API: http://localhost:${PORT}/api/ngrok-url`);
+  console.log(`[Server] 📋 2. Web UI: http://localhost:4040`);
+  console.log(`[Server] 📋 ============================================`);
+  console.log(``);
+  
+  let lastNgrokUrl = null;
+  
+  // ngrok URL 주기적 감지 함수 (30초마다 체크)
+  const checkNgrokUrl = async () => {
+    const ngrokUrl = await getNgrokUrl();
+    const currentConfigUrl = getCurrentConfigUrl();
+    
+    if (ngrokUrl) {
+      if (lastNgrokUrl === null) {
+        // 첫 감지
+        console.log(`[Server] 🌐 Ngrok URL detected: ${ngrokUrl}`);
+        if (currentConfigUrl) {
+          if (currentConfigUrl === ngrokUrl) {
+            console.log(`[Server] ✅ config.json matches: ${currentConfigUrl}`);
+          } else {
+            console.log(`[Server] ⚠️  config.json mismatch:`);
+            console.log(`[Server]    현재 config.json: ${currentConfigUrl}`);
+            console.log(`[Server]    감지된 ngrok URL: ${ngrokUrl}`);
+            console.log(`[Server] 💡 Update config.json with: "apiBaseUrl": "${ngrokUrl}"`);
+          }
+        } else {
+          console.log(`[Server] 💡 Update config.json with: "apiBaseUrl": "${ngrokUrl}"`);
+        }
+        lastNgrokUrl = ngrokUrl;
+      } else if (lastNgrokUrl !== ngrokUrl) {
+        // URL 변경 감지!
+        console.log(`[Server] ⚠️  Ngrok URL CHANGED!`);
+        console.log(`[Server] 🔴 Old URL: ${lastNgrokUrl}`);
+        console.log(`[Server] 🟢 New URL: ${ngrokUrl}`);
+        if (currentConfigUrl) {
+          if (currentConfigUrl === ngrokUrl) {
+            console.log(`[Server] ✅ config.json already matches: ${currentConfigUrl}`);
+          } else {
+            console.log(`[Server] ⚠️  config.json mismatch:`);
+            console.log(`[Server]    현재 config.json: ${currentConfigUrl}`);
+            console.log(`[Server]    감지된 ngrok URL: ${ngrokUrl}`);
+            console.log(`[Server] 💡 IMPORTANT: Update config.json with: "apiBaseUrl": "${ngrokUrl}"`);
+          }
+        } else {
+          console.log(`[Server] 💡 IMPORTANT: Update config.json with: "apiBaseUrl": "${ngrokUrl}"`);
+        }
+        lastNgrokUrl = ngrokUrl;
+      }
+      // URL이 변경되지 않았으면 아무것도 표시하지 않음
+    } else if (lastNgrokUrl !== null) {
+      // ngrok 연결 끊김
+      console.log(`[Server] ⚠️  Ngrok connection lost. Waiting for reconnection...`);
+      lastNgrokUrl = null;
+    }
+  };
+  
+  // 5초 후 첫 체크 (ngrok 시작 시간 고려)
+  setTimeout(checkNgrokUrl, 5000);
+  
+  // 이후 30초마다 주기적으로 체크
+  setInterval(checkNgrokUrl, 30000);
 });
