@@ -36,10 +36,13 @@ async function getApiBaseUrls() {
   return primary === DEFAULT_RAILWAY ? [primary] : [primary, DEFAULT_RAILWAY];
 }
 
+// ngrok 인터스티셜 회피용 헤더 (무료 구간) - fetchWithFallback에서도 사용
+const NGROK_HEADERS = { 'ngrok-skip-browser-warning': 'true', 'User-Agent': 'MelodySnap/1.0 (API client)' };
+
 async function fetchWithFallback(path, init = {}) {
   const baseUrls = await getApiBaseUrls();
   let lastError = null;
-  const headers = { ...init.headers, 'ngrok-skip-browser-warning': 'true' };
+  const headers = { ...NGROK_HEADERS, ...init.headers };
   const initWithNgrok = { ...init, headers };
   for (let i = 0; i < baseUrls.length; i++) {
     const base = baseUrls[i].replace(/\/$/, '');
@@ -118,8 +121,10 @@ async function downloadVideoWithFallback(videoUrl, suggestedFileName = 'video.mp
     const base = baseUrls[i].replace(/\/$/, '');
     const url = base + '/api/download/video?url=' + encodeURIComponent(videoUrl) + '&quality=highestvideo';
     try {
-      const res = await fetch(url, { headers: { 'ngrok-skip-browser-warning': 'true' } });
+      const res = await fetch(url, { headers: NGROK_HEADERS });
       if (!res.ok) throw new Error('HTTP ' + res.status);
+      const ct = (res.headers.get('content-type') || '').toLowerCase();
+      if (ct.includes('text/html')) throw new Error('ngrok interstitial (HTML)');
       const blob = await res.blob();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -144,8 +149,10 @@ async function downloadAudioWithFallback(videoUrl, suggestedFileName = 'audio.m4
     const base = baseUrls[i].replace(/\/$/, '');
     const url = base + '/api/download/audio?url=' + encodeURIComponent(videoUrl) + '&quality=highestaudio';
     try {
-      const res = await fetch(url, { headers: { 'ngrok-skip-browser-warning': 'true' } });
+      const res = await fetch(url, { headers: NGROK_HEADERS });
       if (!res.ok) throw new Error('HTTP ' + res.status);
+      const ct = (res.headers.get('content-type') || '').toLowerCase();
+      if (ct.includes('text/html')) throw new Error('ngrok interstitial (HTML)');
       const blob = await res.blob();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
