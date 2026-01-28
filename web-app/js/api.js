@@ -109,11 +109,16 @@ function downloadAudio(url) {
 }
 
 // ngrok 등이 HTML 에러 페이지를 200으로 줄 수 있음 → 실제 미디어인지 검사
-function isLikelyMediaResponse(res, blob) {
+async function isLikelyMediaResponse(res, blob) {
   const ct = (res.headers.get('content-type') || '').toLowerCase();
   if (ct.includes('text/html')) return false;
   if (blob && blob.type && blob.type.toLowerCase().includes('text/html')) return false;
   if (blob && blob.size < 5000) return false; // 에러 HTML은 보통 수 KB 이하
+  // Content-Type이 없거나 애매할 때: 앞부분이 HTML이면 실패 (Visit Site / ERR_NGROK 등)
+  if (blob && blob.size > 0 && blob.size < 500000) {
+    const head = await blob.slice(0, 300).text();
+    if (/<\s*\!?\s*html|<\s*\!?\s*DOCTYPE|<\s*title|ngrok|Visit Site|ERR_NGROK/i.test(head)) return false;
+  }
   return true;
 }
 
@@ -128,7 +133,7 @@ async function downloadVideoWithFallback(videoUrl, suggestedFileName = 'video.mp
       const res = await fetch(url);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const blob = await res.blob();
-      if (!isLikelyMediaResponse(res, blob)) throw new Error('Invalid response (e.g. ngrok error page)');
+      if (!(await isLikelyMediaResponse(res, blob))) throw new Error('Invalid response (e.g. ngrok error page)');
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = suggestedFileName || 'video.mp4';
@@ -155,7 +160,7 @@ async function downloadAudioWithFallback(videoUrl, suggestedFileName = 'audio.m4
       const res = await fetch(url);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const blob = await res.blob();
-      if (!isLikelyMediaResponse(res, blob)) throw new Error('Invalid response (e.g. ngrok error page)');
+      if (!(await isLikelyMediaResponse(res, blob))) throw new Error('Invalid response (e.g. ngrok error page)');
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = suggestedFileName || 'audio.m4a';
