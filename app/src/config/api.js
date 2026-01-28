@@ -2,6 +2,8 @@
 // 서버 주소는 외부 config.json 파일에서 동적으로 로드합니다
 // 앱 재설치 없이 서버 주소 변경 가능
 
+import { AppState } from 'react-native';
+
 // 외부 설정 파일 URL (version.json과 동일한 위치)
 const CONFIG_URL = 'https://appdison76.github.io/youtube_down/install-page/config.json';
 
@@ -35,10 +37,12 @@ const loadConfig = async () => {
     try {
       console.log('[API Config] Loading config from:', CONFIG_URL);
       
-      const response = await fetch(CONFIG_URL, {
+      const url = `${CONFIG_URL}?t=${Date.now()}`;
+      const response = await fetch(url, {
         method: 'GET',
         headers: {
           'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
         },
       });
 
@@ -77,6 +81,23 @@ const loadConfig = async () => {
   return result;
 };
 
+/** 캐시 무시하고 config 다시 불러오기 (앱 끄지 않고 서버 주소 갱신) */
+export const refreshConfig = async () => {
+  cachedConfig = null;
+  configLoadPromise = null;
+  try {
+    const config = await loadConfig();
+    if (config && config.apiBaseUrl) {
+      apiBaseUrlSync = config.apiBaseUrl;
+      console.log('[API Config] 🔄 Config refreshed. API Base URL:', config.apiBaseUrl);
+    }
+    return config;
+  } catch (e) {
+    console.warn('[API Config] Refresh failed:', e?.message);
+    return null;
+  }
+};
+
 // API_BASE_URL을 동적으로 가져오는 함수
 export const getApiBaseUrl = async () => {
   // 모든 환경에서 외부 설정 로드 시도 (개발 빌드에서도 Railway 서버 사용 가능)
@@ -111,6 +132,15 @@ loadConfig().then(config => {
   apiBaseUrlSync = __DEV__ ? DEFAULT_CONFIG.DEVELOPMENT : DEFAULT_CONFIG.PRODUCTION;
 });
 
+// 앱이 포그라운드로 돌아올 때 config 새로 불러오기 (껐다 켜지 않아도 서버 주소 갱신)
+let appStatePrev = AppState.currentState;
+AppState.addEventListener('change', (nextState) => {
+  if (appStatePrev.match(/inactive|background/) && nextState === 'active') {
+    refreshConfig();
+  }
+  appStatePrev = nextState;
+});
+
 // 동기 버전 export (기존 코드 호환성)
 export const API_BASE_URL = apiBaseUrlSync;
 
@@ -120,5 +150,6 @@ export default {
   DEFAULT_CONFIG,
   loadConfig,
   getApiBaseUrl,
+  refreshConfig,
 };
 
