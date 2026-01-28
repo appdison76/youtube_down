@@ -123,10 +123,7 @@ async function downloadVideoWithFallback(videoUrl, suggestedFileName = 'video.mp
     try {
       const res = await fetch(url, { headers: NGROK_HEADERS });
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      const ct = (res.headers.get('content-type') || '').toLowerCase();
-      if (ct.includes('text/html')) throw new Error('ngrok interstitial (HTML)');
       const blob = await res.blob();
-      if (blob.size < 500 * 1024) throw new Error('incomplete (connection dropped?, size=' + blob.size + ')');
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = suggestedFileName || 'video.mp4';
@@ -152,10 +149,7 @@ async function downloadAudioWithFallback(videoUrl, suggestedFileName = 'audio.m4
     try {
       const res = await fetch(url, { headers: NGROK_HEADERS });
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      const ct = (res.headers.get('content-type') || '').toLowerCase();
-      if (ct.includes('text/html')) throw new Error('ngrok interstitial (HTML)');
       const blob = await res.blob();
-      if (blob.size < 200 * 1024) throw new Error('incomplete (connection dropped?, size=' + blob.size + ')');
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = suggestedFileName || 'audio.m4a';
