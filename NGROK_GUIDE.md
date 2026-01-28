@@ -19,7 +19,7 @@
 
 ### 방법 2: 수동 실행
 1. 터미널에서 `server` 폴더로 이동
-2. `node server.js` 실행 (서버 시작)
+2. `node server_local.js` 실행 (로컬 전용 서버)
 3. 별도 터미널에서 `C:\ngrok\ngrok.exe http 3000` 실행
 
 ---
@@ -138,5 +138,6 @@ http://localhost:4040
 
 - `server/start-server-ngrok.bat`: 서버 + ngrok 자동 시작 스크립트
 - `server/run-ngrok.bat`: ngrok 실행 스크립트
-- `server/server.js`: 서버 메인 파일 (ngrok URL 자동 감지 기능 포함)
+- `server/server.js`: Railway/공통 서버 (검색, 다운로드 등). Railway는 `npm start` → `server.js` 실행
+- `server/server_local.js`: 로컬 전용 진입점 (.env, ngrok URL 감지, config.json 비교). 배치 파일에서 실행
 - `install-page/config.json`: 앱이 사용하는 서버 주소 설정 파일

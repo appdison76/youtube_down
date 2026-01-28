@@ -17,7 +17,7 @@ if %errorlevel% equ 0 (
   echo Done. Ngrok window opened. Check it for the public URL.
 ) else (
   echo [1/2] Starting API server...
-  start "" cmd /k "node server.js"
+  start "" cmd /k "node server_local.js"
   timeout /t 5 /nobreak >nul
   echo [2/2] Starting ngrok...
   start "" "%~dp0run-ngrok.bat"
