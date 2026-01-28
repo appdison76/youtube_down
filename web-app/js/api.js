@@ -36,19 +36,14 @@ async function getApiBaseUrls() {
   return primary === DEFAULT_RAILWAY ? [primary] : [primary, DEFAULT_RAILWAY];
 }
 
-// ngrok 인터스티셜 회피용 헤더 (무료 구간) - fetchWithFallback에서도 사용
-const NGROK_HEADERS = { 'ngrok-skip-browser-warning': 'true' };
-
 async function fetchWithFallback(path, init = {}) {
   const baseUrls = await getApiBaseUrls();
   let lastError = null;
-  const headers = { ...NGROK_HEADERS, ...init.headers };
-  const initWithNgrok = { ...init, headers };
   for (let i = 0; i < baseUrls.length; i++) {
     const base = baseUrls[i].replace(/\/$/, '');
     const url = base + (path.startsWith('/') ? path : '/' + path);
     try {
-      const res = await fetch(url, initWithNgrok);
+      const res = await fetch(url, init);
       if (res.ok) {
         if (i > 0) console.log('[web-app API] Fallback succeeded with URL #' + (i + 1), base);
         return res;
@@ -121,7 +116,7 @@ async function downloadVideoWithFallback(videoUrl, suggestedFileName = 'video.mp
     const base = baseUrls[i].replace(/\/$/, '');
     const url = base + '/api/download/video?url=' + encodeURIComponent(videoUrl) + '&quality=highestvideo';
     try {
-      const res = await fetch(url, { headers: NGROK_HEADERS });
+      const res = await fetch(url);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const blob = await res.blob();
       const a = document.createElement('a');
@@ -147,7 +142,7 @@ async function downloadAudioWithFallback(videoUrl, suggestedFileName = 'audio.m4
     const base = baseUrls[i].replace(/\/$/, '');
     const url = base + '/api/download/audio?url=' + encodeURIComponent(videoUrl) + '&quality=highestaudio';
     try {
-      const res = await fetch(url, { headers: NGROK_HEADERS });
+      const res = await fetch(url);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const blob = await res.blob();
       const a = document.createElement('a');
