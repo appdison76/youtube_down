@@ -63,13 +63,10 @@ async function handleUrlSubmit() {
 
 downloadVideoBtn.addEventListener('click', async () => {
     if (!currentVideoUrl) return;
-    const btn = downloadVideoBtn;
-    const origText = btn.textContent;
-    btn.textContent = '다운로드 중...';
-    btn.disabled = true;
     try {
-        const name = (videoTitle.textContent || 'video').replace(/[<>:"/\\|?*]/g, '_').slice(0, 100) + '.mp4';
-        await downloadVideoWithFallback(currentVideoUrl, name);
+        const base = await getDownloadBaseUrl();
+        const url = base + '/api/download/video?url=' + encodeURIComponent(currentVideoUrl) + '&quality=highestvideo';
+        window.open(url);
         addItem({
             id: currentVideoId,
             title: videoTitle.textContent,
@@ -82,21 +79,15 @@ downloadVideoBtn.addEventListener('click', async () => {
     } catch (e) {
         console.error('영상 다운로드 실패:', e);
         alert('다운로드에 실패했습니다. ' + (e?.message || ''));
-    } finally {
-        btn.textContent = origText;
-        btn.disabled = false;
     }
 });
 
 downloadAudioBtn.addEventListener('click', async () => {
     if (!currentVideoUrl) return;
-    const btn = downloadAudioBtn;
-    const origText = btn.textContent;
-    btn.textContent = '다운로드 중...';
-    btn.disabled = true;
     try {
-        const name = (videoTitle.textContent || 'audio').replace(/[<>:"/\\|?*]/g, '_').slice(0, 100) + '.m4a';
-        await downloadAudioWithFallback(currentVideoUrl, name);
+        const base = await getDownloadBaseUrl();
+        const url = base + '/api/download/audio?url=' + encodeURIComponent(currentVideoUrl) + '&quality=highestaudio';
+        window.open(url);
         addItem({
             id: currentVideoId,
             title: videoTitle.textContent,
@@ -109,9 +100,6 @@ downloadAudioBtn.addEventListener('click', async () => {
     } catch (e) {
         console.error('음악 다운로드 실패:', e);
         alert('다운로드에 실패했습니다. ' + (e?.message || ''));
-    } finally {
-        btn.textContent = origText;
-        btn.disabled = false;
     }
 });
 
