@@ -100,14 +100,9 @@ async function getDownloadBaseUrl() {
   return urls[0].replace(/\/$/, '');
 }
 
-// 웹: 다운로드는 Railway 먼저 (ngrok 요청 시 브라우저가 그 페이지로 이동하는 문제 회피)
+// 웹: 다운로드는 Railway만 사용 (ngrok 요청 시 브라우저가 그 페이지로 이동하는 문제 완전 회피)
 async function getDownloadBaseUrls() {
-  const urls = await getApiBaseUrls();
-  if (urls.length <= 1) return urls;
-  const railway = DEFAULT_RAILWAY.replace(/\/$/, '');
-  const primary = urls[0].replace(/\/$/, '');
-  if (primary === railway) return urls;
-  return [railway, primary];
+  return [DEFAULT_RAILWAY.replace(/\/$/, '')];
 }
 
 function downloadVideo(url) {
