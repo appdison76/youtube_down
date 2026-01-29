@@ -1,8 +1,9 @@
 @echo off
-title YouTube Down - Server + Cloudflare Tunnel
+chcp 65001 >nul
+title YouTube Down - Server (Cloudflare Tunnel)
 cd /d "%~dp0"
 
-REM 3000 사용 중이면 해당 프로세스 종료 후 서버+터널 띄움
+REM 3000 사용 중이면 해당 프로세스 종료
 netstat -ano | findstr ":3000" | findstr "LISTENING" >nul 2>&1
 if %errorlevel% equ 0 (
   echo [*] Port 3000 in use - killing process...
@@ -10,11 +11,15 @@ if %errorlevel% equ 0 (
   timeout /t 2 /nobreak >nul
 )
 
-echo [1/2] Starting API server...
-start "" cmd /k "cd /d %~dp0 && node server_local.js"
-timeout /t 5 /nobreak >nul
-echo [2/2] Starting Cloudflare Tunnel...
-start "" "%~dp0run-cloudflare.bat"
 echo.
-echo Done. Server: localhost:3000  -  Tunnel URL: check Cloudflare window or http://localhost:3000/api/tunnel-url
-echo Do NOT close the Server / Cloudflare windows. You can close this one.
+echo ========================================
+echo   YouTube Down - melodysnap.mediacommercelab.com
+echo ========================================
+echo   접속 전 확인: services.msc 에서 cloudflared "시작됨"
+echo ========================================
+echo.
+start "" cmd /k "cd /d %~dp0 && node server_local.js"
+echo.
+echo 서버 실행됨. 접속: https://melodysnap.mediacommercelab.com
+echo 서버 창 닫지 마세요.
+exit

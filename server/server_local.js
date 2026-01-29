@@ -66,12 +66,12 @@ const getCurrentConfigUrl = () => {
 
 app.get('/api/tunnel-url', async (req, res) => {
   try {
-    const url = await getPublicUrl();
-    const source = getTunnelUrl() ? 'cloudflare' : 'ngrok';
+    let url = await getPublicUrl();
+    if (!url) url = getCurrentConfigUrl();
     if (url) {
-      res.json({ success: true, url, source, message: source === 'cloudflare' ? 'Cloudflare Tunnel URL' : 'Ngrok URL detected' });
+      res.json({ success: true, url, message: 'Config or tunnel URL' });
     } else {
-      res.json({ success: false, url: null, message: 'No tunnel. Run Cloudflare Tunnel (run-cloudflare.bat) or ngrok.' });
+      res.json({ success: false, url: null, message: 'config.json에 apiBaseUrl을 설정하세요.' });
     }
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -100,12 +100,11 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`[Server]   YOUTUBE_API_KEY: ${process.env.YOUTUBE_API_KEY ? '✅ set' : '❌ not set (검색 불가)'}`);
   console.log(`[Server]   DAILY_LIMIT: ${DAILY_LIMIT} (검색 일일 제한)`);
   console.log(``);
-  console.log(`[Server] 📋 ============================================`);
-  console.log(`[Server] 📋 터널 URL 확인 (Cloudflare 기본):`);
-  console.log(`[Server] 📋 1. API: http://localhost:${PORT}/api/tunnel-url`);
-  console.log(`[Server] 📋 2. Cloudflare: run-cloudflare.bat → tunnel-url.txt`);
-  console.log(`[Server] 📋 (ngrok 사용 시: /api/ngrok-url 또는 http://localhost:4040)`);
-  console.log(`[Server] 📋 ============================================`);
+  const configUrl = getCurrentConfigUrl();
+  if (configUrl) {
+    console.log(`[Server] 📋 접속 주소: ${configUrl}`);
+    console.log(`[Server] 📋 cloudflared 서비스(services.msc)가 "시작됨"인지 확인하세요.`);
+  }
   console.log(``);
 
   let lastPublicUrl = null;
@@ -114,7 +113,7 @@ app.listen(PORT, '0.0.0.0', () => {
     const publicUrl = await getPublicUrl();
     const currentConfigUrl = getCurrentConfigUrl();
 
-    const isFixedHostname = currentConfigUrl && currentConfigUrl.includes('cfargotunnel.com');
+    const isFixedHostname = currentConfigUrl && !currentConfigUrl.includes('trycloudflare.com');
     if (publicUrl) {
       if (lastPublicUrl === null) {
         if (isFixedHostname) {
@@ -127,7 +126,7 @@ app.listen(PORT, '0.0.0.0', () => {
           if (currentConfigUrl === publicUrl) {
             console.log(`[Server] ✅ config.json matches: ${currentConfigUrl}`);
           } else if (isFixedHostname) {
-            console.log(`[Server] ✅ App uses config URL (tunnel-url.txt ignored)`);
+            console.log(`[Server] ✅ App uses config URL`);
           } else {
             console.log(`[Server] ⚠️  config.json mismatch:`);
             console.log(`[Server]    현재 config.json: ${currentConfigUrl}`);
