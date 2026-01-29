@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system/legacy';
+﻿import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 import MediaStoreModule from '../modules/MediaStoreModule';
@@ -7,6 +7,22 @@ import { getApiBaseUrl, getApiBaseUrls, fetchWithFallback } from '../config/api'
 const DOWNLOAD_DIR = `${FileSystem.documentDirectory}downloads/`;
 const METADATA_DIR = `${FileSystem.documentDirectory}metadata/`;
 const THUMBNAIL_CACHE_DIR = `${FileSystem.documentDirectory}thumbnails/`;
+
+// 다운로드된 파일이 실제 MP4/M4A인지 시그니처(ftyp)로 검사 (200이어도 HTML/JSON 에러면 실패)
+const isLikelyMp4OrM4a = async (fileUri, fileSize) => {
+  if (!fileSize || fileSize < 8) return false;
+  if (fileSize >= 100 * 1024) return true; // 100KB 이상은 읽지 않고 통과
+  try {
+    const base64 = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.Base64 });
+    const first12 = base64.substring(0, 12);
+    const binary = atob(first12);
+    return binary.length >= 8 &&
+      binary.charCodeAt(4) === 0x66 && binary.charCodeAt(5) === 0x74 &&
+      binary.charCodeAt(6) === 0x79 && binary.charCodeAt(7) === 0x70; // 'ftyp'
+  } catch (e) {
+    return false;
+  }
+};
 
 // HTML 엔티티 디코딩 함수
 const decodeHtmlEntities = (text) => {
@@ -514,6 +530,11 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
     }
     
     // 이중화: URL 목록 순서대로 시도 (primary 실패 시 Railway 등)
+    // → 다음 URL로 가는 실패 유형:
+    //   1) HTTP 실패: 네트워크 끊김, 404/500, 타임아웃 → downloadAsync() 실패 → catch → 다음 URL
+    //   2) Pre-check 실패: HEAD 응답 status !== 200, Content-Length === 0, Content-Type에 'video'/'audio' 없음 또는 JSON 에러 → 다음 URL (비디오·오디오 공통)
+    //   3) 파일 크기 실패: 저장 파일 < 8바이트 → throw → 다음 URL
+    //   4) 타입(ftyp) 실패: 저장 파일이 MP4/M4A 시그니처(ftyp) 아님 → HTML/JSON 에러 페이지가 저장된 경우 → throw → 다음 URL
     const baseUrls = await getApiBaseUrls();
     let lastDownloadError = null;
     for (let urlIndex = 0; urlIndex < baseUrls.length; urlIndex++) {
@@ -674,75 +695,23 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
         throw new Error('다운로드된 파일을 찾을 수 없습니다. 다운로드를 다시 시도해주세요.');
       }
       
-      if (!fileInfo.size || fileInfo.size === 0) {
-        console.error('[downloadService] Downloaded file size is zero:', fileInfo.size, 'bytes');
-        console.error('[downloadService] Download URL was:', downloadUrl);
-        console.error('[downloadService] Max downloaded size during progress:', maxDownloadedSize, 'bytes');
-        console.error('[downloadService] Result status:', result.status);
-        
-        // 백엔드 API 응답 확인 - 실제 응답 본문 읽기
-        try {
-          const testResponse = await fetch(downloadUrl);
-          console.error('[downloadService] Test fetch status:', testResponse.status, testResponse.statusText);
-          console.error('[downloadService] Test fetch headers:', Object.fromEntries(testResponse.headers.entries()));
-          
-          const contentType = testResponse.headers.get('content-type') || '';
-          const contentLength = testResponse.headers.get('content-length');
-          console.error('[downloadService] Content-Type:', contentType);
-          console.error('[downloadService] Content-Length:', contentLength);
-          
-          // Content-Length가 0이면 명확한 에러
-          if (contentLength && parseInt(contentLength) === 0) {
-            throw new Error('백엔드 서버가 0 바이트 파일을 반환합니다. 해당 영상을 다운로드할 수 없을 수 있습니다.');
-          }
-          
-          // JSON 응답인 경우 (에러 메시지일 수 있음)
-          if (contentType.includes('application/json')) {
-            const errorData = await testResponse.json().catch(() => ({}));
-            console.error('[downloadService] Backend error response:', JSON.stringify(errorData, null, 2));
-            throw new Error(errorData.error || errorData.message || '백엔드 서버에서 에러를 반환했습니다.');
-          } else if (contentType.includes('video')) {
-            // 비디오 응답인 경우 - React Native에서는 body가 ReadableStream이 아닐 수 있음
-            // Content-Length가 null이면 청크 전송이므로 실제 데이터 확인이 어려움
-            // 대신 백엔드가 video/mp4를 반환한다는 것만 확인
-            console.error('[downloadService] Backend returned video/mp4 content type');
-            console.error('[downloadService] Note: Content-Length is null, using chunked transfer encoding');
-            
-            // React Native에서는 body.getReader()가 작동하지 않을 수 있으므로
-            // FileSystem.createDownloadResumable이 제대로 작동하는지에 의존
-            // 만약 0 바이트로 저장되면 백엔드가 실제로 데이터를 보내지 않는 것
-          } else {
-            // 텍스트 응답인 경우
-            const responseText = await testResponse.text();
-            console.error('[downloadService] Backend response (first 500 chars):', responseText.substring(0, 500));
-            
-            // 응답이 비어있거나 에러 메시지인 경우
-            if (responseText.length === 0) {
-              throw new Error('백엔드 서버가 빈 응답을 반환했습니다. 해당 영상을 다운로드할 수 없을 수 있습니다.');
-            } else if (responseText.length < 100 && (responseText.includes('error') || responseText.includes('Error'))) {
-              throw new Error(`백엔드 서버 에러: ${responseText}`);
-            }
-          }
-        } catch (testError) {
-          console.error('[downloadService] Test fetch failed:', testError);
-          // testError가 이미 throw된 Error면 그대로 전달
-          if (testError instanceof Error && testError.message) {
-            throw testError;
-          }
-    }
-
-    try {
-          await FileSystem.deleteAsync(result.uri, { idempotent: true });
-        } catch (deleteError) {
-          console.warn('[downloadService] Could not delete incomplete file:', deleteError);
-        }
-        throw new Error('다운로드된 파일의 크기가 0입니다. 백엔드 서버에서 파일을 제공하지 못했을 수 있습니다. 다운로드를 다시 시도해주세요.');
+      // 200이어도 미디어가 아니면 실패 (HTML/JSON 에러 응답 등) → 다음 URL(Railway)로 재시도
+      if (!fileInfo.size || fileInfo.size < 8) {
+        console.error('[downloadService] Downloaded file too small:', fileInfo.size, 'bytes');
+        try { await FileSystem.deleteAsync(result.uri, { idempotent: true }); } catch (e) {}
+        throw new Error('다운로드된 파일이 비정상적으로 작습니다. 다시 시도합니다.');
+      }
+      const isVideoValid = await isLikelyMp4OrM4a(result.uri, fileInfo.size);
+      if (!isVideoValid) {
+        console.error('[downloadService] Downloaded file is not a valid media (no ftyp signature):', fileInfo.size, 'bytes');
+        try { await FileSystem.deleteAsync(result.uri, { idempotent: true }); } catch (e) {}
+        throw new Error('다운로드된 파일이 미디어가 아닙니다. 다시 시도합니다.');
       }
       
       await new Promise(resolve => setTimeout(resolve, 100));
       fileInfo = await FileSystem.getInfoAsync(result.uri);
       
-      if (!fileInfo.exists || fileInfo.size === 0) {
+      if (!fileInfo.exists || !fileInfo.size) {
         throw new Error('다운로드된 파일이 완전하지 않습니다. 다운로드를 다시 시도해주세요.');
       }
       
@@ -926,6 +895,11 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
     }
     
     // 이중화: URL 목록 순서대로 시도 (primary 실패 시 Railway 등)
+    // → 다음 URL로 가는 실패 유형:
+    //   1) HTTP 실패: 네트워크 끊김, 404/500, 타임아웃 → downloadAsync() 실패 → catch → 다음 URL
+    //   2) Pre-check 실패: HEAD 응답 status !== 200, Content-Length === 0, Content-Type에 'video'/'audio' 없음 또는 JSON 에러 → 다음 URL (비디오·오디오 공통)
+    //   3) 파일 크기 실패: 저장 파일 < 8바이트 → throw → 다음 URL
+    //   4) 타입(ftyp) 실패: 저장 파일이 MP4/M4A 시그니처(ftyp) 아님 → HTML/JSON 에러 페이지가 저장된 경우 → throw → 다음 URL
     const baseUrls = await getApiBaseUrls();
     let lastDownloadError = null;
     for (let urlIndex = 0; urlIndex < baseUrls.length; urlIndex++) {
@@ -936,6 +910,36 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
     
     console.log('[downloadService] Downloading from:', downloadUrl);
     console.log('[downloadService] Saving to:', fileUri);
+    
+    // 백엔드 응답 사전 확인 (HEAD 요청으로 Content-Length/Content-Type 확인) — 비디오와 동일
+    try {
+      const headResponse = await fetch(downloadUrl, { method: 'HEAD' });
+      const contentLength = headResponse.headers.get('content-length');
+      const contentType = headResponse.headers.get('content-type');
+      console.log('[downloadService] Pre-check - Status:', headResponse.status);
+      console.log('[downloadService] Pre-check - Content-Type:', contentType);
+      console.log('[downloadService] Pre-check - Content-Length:', contentLength);
+      if (headResponse.status !== 200) {
+        const errorText = await headResponse.text().catch(() => '');
+        throw new Error(`백엔드 서버가 에러를 반환했습니다 (${headResponse.status}): ${errorText || headResponse.statusText}`);
+      }
+      if (contentLength && parseInt(contentLength) === 0) {
+        throw new Error('백엔드 서버가 0 바이트 파일을 반환합니다. 해당 오디오를 다운로드할 수 없을 수 있습니다.');
+      }
+      if (!contentType || !contentType.includes('audio')) {
+        const testResponse = await fetch(downloadUrl);
+        const testContentType = testResponse.headers.get('content-type') || '';
+        if (testContentType.includes('application/json')) {
+          const errorData = await testResponse.json().catch(() => ({}));
+          throw new Error(errorData.error || errorData.message || '백엔드 서버에서 에러를 반환했습니다.');
+        }
+      }
+    } catch (preCheckError) {
+      console.warn('[downloadService] Pre-check failed:', preCheckError?.message || preCheckError);
+      if (preCheckError.message && preCheckError.message.includes('백엔드')) {
+        throw preCheckError;
+      }
+    }
     
     lastProgress = 0;
     maxDownloadedSize = 0;
@@ -1030,27 +1034,43 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
       progressInterval = null;
     }
     
+    console.log('[downloadService] Download result:', {
+      uri: result?.uri,
+      status: result?.status,
+      headers: result?.headers,
+      hasResult: !!result
+    });
+    
     if (result && result.uri) {
       let fileInfo = await FileSystem.getInfoAsync(result.uri);
+      
+      console.log('[downloadService] File info after download:', {
+        exists: fileInfo.exists,
+        size: fileInfo.size,
+        uri: result.uri
+      });
       
       if (!fileInfo.exists) {
         throw new Error('다운로드된 파일을 찾을 수 없습니다. 다운로드를 다시 시도해주세요.');
       }
       
-      if (!fileInfo.size || fileInfo.size === 0) {
-        console.error('[downloadService] Downloaded file size is zero:', fileInfo.size, 'bytes');
-        try {
-          await FileSystem.deleteAsync(result.uri, { idempotent: true });
-        } catch (deleteError) {
-          console.warn('[downloadService] Could not delete incomplete file:', deleteError);
-        }
-        throw new Error('다운로드된 파일의 크기가 0입니다. 다운로드를 다시 시도해주세요.');
+      // 200이어도 미디어가 아니면 실패 (HTML/JSON 에러 응답 등) → 다음 URL(Railway)로 재시도
+      if (!fileInfo.size || fileInfo.size < 8) {
+        console.error('[downloadService] Downloaded file too small:', fileInfo.size, 'bytes');
+        try { await FileSystem.deleteAsync(result.uri, { idempotent: true }); } catch (e) {}
+        throw new Error('다운로드된 파일이 비정상적으로 작습니다. 다시 시도합니다.');
+      }
+      const isAudioValid = await isLikelyMp4OrM4a(result.uri, fileInfo.size);
+      if (!isAudioValid) {
+        console.error('[downloadService] Downloaded file is not a valid media (no ftyp signature):', fileInfo.size, 'bytes');
+        try { await FileSystem.deleteAsync(result.uri, { idempotent: true }); } catch (e) {}
+        throw new Error('다운로드된 파일이 미디어가 아닙니다. 다시 시도합니다.');
       }
       
       await new Promise(resolve => setTimeout(resolve, 100));
       fileInfo = await FileSystem.getInfoAsync(result.uri);
       
-      if (!fileInfo.exists || fileInfo.size === 0) {
+      if (!fileInfo.exists || !fileInfo.size) {
         throw new Error('다운로드된 파일이 완전하지 않습니다. 다운로드를 다시 시도해주세요.');
       }
       

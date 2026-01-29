@@ -100,6 +100,12 @@ async function getDownloadBaseUrl() {
   return urls[0].replace(/\/$/, '');
 }
 
+// 웹: 다운로드는 Railway만 사용 (하드코딩으로 다른 코드 경로/캐시 영향 제거)
+var DOWNLOAD_BASE = 'https://youtubedown-production.up.railway.app';
+async function getDownloadBaseUrls() {
+  return [DOWNLOAD_BASE.replace(/\/$/, '')];
+}
+
 function downloadVideo(url) {
   return getDownloadBaseUrl().then(base => base + '/api/download/video?url=' + encodeURIComponent(url));
 }
@@ -108,17 +114,31 @@ function downloadAudio(url) {
   return getDownloadBaseUrl().then(base => base + '/api/download/audio?url=' + encodeURIComponent(url));
 }
 
-// 이중화: primary 실패 시 Railway로 blob 다운로드 (버튼에서 사용 권장)
+// ngrok 등이 HTML 에러 페이지를 200으로 줄 수 있음 → 실제 미디어인지 검사
+async function isLikelyMediaResponse(res, blob) {
+  const ct = (res.headers.get('content-type') || '').toLowerCase();
+  if (ct.includes('text/html')) return false;
+  if (blob && blob.type && blob.type.toLowerCase().includes('text/html')) return false;
+  if (blob && blob.size < 5000) return false; // 에러 HTML은 보통 수 KB 이하
+  // Content-Type이 없거나 애매할 때: 앞부분이 HTML이면 실패 (Visit Site / ERR_NGROK 등)
+  if (blob && blob.size > 0 && blob.size < 500000) {
+    const head = await blob.slice(0, 300).text();
+    if (/<\s*\!?\s*html|<\s*\!?\s*DOCTYPE|<\s*title|ngrok|Visit Site|ERR_NGROK/i.test(head)) return false;
+  }
+  return true;
+}
+
+// 웹 다운로드: Railway만 사용 (URL 하드코딩)
 async function downloadVideoWithFallback(videoUrl, suggestedFileName = 'video.mp4') {
-  const baseUrls = await getApiBaseUrls();
+  const base = DOWNLOAD_BASE.replace(/\/$/, '');
+  const url = base + '/api/download/video?url=' + encodeURIComponent(videoUrl) + '&quality=highestvideo';
   let lastError = null;
-  for (let i = 0; i < baseUrls.length; i++) {
-    const base = baseUrls[i].replace(/\/$/, '');
-    const url = base + '/api/download/video?url=' + encodeURIComponent(videoUrl) + '&quality=highestvideo';
+  for (let i = 0; i < 1; i++) {
     try {
       const res = await fetch(url);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const blob = await res.blob();
+      if (!(await isLikelyMediaResponse(res, blob))) throw new Error('Invalid response (e.g. ngrok error page)');
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = suggestedFileName || 'video.mp4';
@@ -128,23 +148,22 @@ async function downloadVideoWithFallback(videoUrl, suggestedFileName = 'video.mp
       return;
     } catch (e) {
       lastError = e;
-      console.warn('[web-app API] Video download failed for URL #' + (i + 1), e?.message);
-      if (i < baseUrls.length - 1) console.log('[web-app API] Trying next URL...');
+      console.warn('[web-app API] Video download failed', e?.message);
     }
   }
   throw lastError || new Error('다운로드에 실패했습니다.');
 }
 
 async function downloadAudioWithFallback(videoUrl, suggestedFileName = 'audio.m4a') {
-  const baseUrls = await getApiBaseUrls();
+  const base = DOWNLOAD_BASE.replace(/\/$/, '');
+  const url = base + '/api/download/audio?url=' + encodeURIComponent(videoUrl) + '&quality=highestaudio';
   let lastError = null;
-  for (let i = 0; i < baseUrls.length; i++) {
-    const base = baseUrls[i].replace(/\/$/, '');
-    const url = base + '/api/download/audio?url=' + encodeURIComponent(videoUrl) + '&quality=highestaudio';
+  for (let i = 0; i < 1; i++) {
     try {
       const res = await fetch(url);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const blob = await res.blob();
+      if (!(await isLikelyMediaResponse(res, blob))) throw new Error('Invalid response (e.g. ngrok error page)');
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = suggestedFileName || 'audio.m4a';
@@ -154,8 +173,7 @@ async function downloadAudioWithFallback(videoUrl, suggestedFileName = 'audio.m4
       return;
     } catch (e) {
       lastError = e;
-      console.warn('[web-app API] Audio download failed for URL #' + (i + 1), e?.message);
-      if (i < baseUrls.length - 1) console.log('[web-app API] Trying next URL...');
+      console.warn('[web-app API] Audio download failed', e?.message);
     }
   }
   throw lastError || new Error('다운로드에 실패했습니다.');

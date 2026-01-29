@@ -1,7 +1,11 @@
 {
-  "apiBaseUrl": "https://volitional-izabella-unfailing.ngrok-free.dev",
+  "apiBaseUrl": "https://melodysnap.mediacommercelab.com",
+  "apiBaseUrls": [
+    "https://melodysnap.mediacommercelab.com",
+    "https://youtubedown-production.up.railway.app"
+  ],
   "version": "1.0.4",
-  "updatedAt": "2026-01-28T00:00:00Z",
-  "description": "서버 주소 설정 파일. 노트북+ngrok 테스트용."
+  "updatedAt": "2026-01-29T00:00:00Z",
+  "description": "서버 주소 설정 파일. 로컬(melodysnap) 우선, 실패 시 Railway 폴백"
 }
 
