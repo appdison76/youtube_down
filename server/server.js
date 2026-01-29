@@ -429,14 +429,11 @@ app.get('/api/download/video', async (req, res) => {
           const stderrHandler = (data) => {
             const message = data.toString();
             
-            // 다운로드 시작 감지 - [download] 메시지가 나오면 시작된 것으로 간주
+            // 다운로드 시작 감지 - [download] 메시지가 나오면 시작된 것으로 간주 (200은 첫 실제 데이터(stdout) 시에만 전송해 0/89바이트 같은 에러 응답 방지)
             if (message.includes('[download]') && !hasStarted && !hasBotError && startResolve) {
               hasStarted = true;
               if (startTimeout) {
                 clearTimeout(startTimeout);
-              }
-              if (!res.headersSent) {
-                res.writeHead(200);
               }
               startResolve({ success: true, client: playerClient });
             }
@@ -795,14 +792,11 @@ app.get('/api/download/audio', async (req, res) => {
           const stderrHandler = (data) => {
             const message = data.toString();
             
-            // 다운로드 시작 감지 - [download] 메시지가 나오면 시작된 것으로 간주
+            // 다운로드 시작 감지 - [download] 메시지가 나오면 시작된 것으로 간주 (200은 첫 실제 데이터(stdout) 시에만 전송해 0/89바이트 같은 에러 응답 방지)
             if (message.includes('[download]') && !hasStarted && !hasBotError && startResolve) {
               hasStarted = true;
               if (startTimeout) {
                 clearTimeout(startTimeout);
-              }
-              if (!res.headersSent) {
-                res.writeHead(200);
               }
               startResolve({ success: true, client: playerClient });
             }
