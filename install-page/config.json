@@ -1,5 +1,5 @@
 {
-  "apiBaseUrl": "https://melodysnap.cfargotunnel.com",
+  "apiBaseUrl": "https://melodysnap.mediacommercelab.com",
   "version": "1.0.4",
   "updatedAt": "2026-01-29T00:00:00Z",
   "description": "서버 주소 설정 파일. 노트북+Cloudflare Tunnel"

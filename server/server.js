@@ -72,6 +72,27 @@ console.log(`[Server] Will try player_clients in order: ${PLAYER_CLIENTS.join(' 
 app.use(cors());
 app.use(express.json());
 
+// 접속 시마다 로그 (터널/외부 접속 확인용)
+app.use((req, res, next) => {
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || '-';
+  console.log(`[Server] ${req.method} ${req.path} ${ip}`);
+  next();
+});
+
+// 루트: API 서버 안내 (Cannot GET / 방지)
+app.get('/', (req, res) => {
+  res.type('text/html').send(`
+    <!DOCTYPE html>
+    <html><head><meta charset="utf-8"><title>YouTube Downloader API</title></head>
+    <body style="font-family:sans-serif;padding:2rem;max-width:600px;">
+      <h1>YouTube Downloader API</h1>
+      <p>이 서버는 API 전용입니다. 브라우저에서 직접 사용하는 페이지는 설치 페이지(install-page) 또는 앱에서 열어주세요.</p>
+      <p><a href="/health">/health</a> — 서버 상태 확인</p>
+      <p><a href="/api/tunnel-url">/api/tunnel-url</a> — 터널 URL (로컬 전용)</p>
+    </body></html>
+  `);
+});
+
 // IP 차단 테스트 엔드포인트
 app.get('/api/test-ip', async (req, res) => {
   try {
