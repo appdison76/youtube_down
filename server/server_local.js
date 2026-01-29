@@ -114,13 +114,20 @@ app.listen(PORT, '0.0.0.0', () => {
     const publicUrl = await getPublicUrl();
     const currentConfigUrl = getCurrentConfigUrl();
 
+    const isFixedHostname = currentConfigUrl && currentConfigUrl.includes('cfargotunnel.com');
     if (publicUrl) {
       if (lastPublicUrl === null) {
-        const source = getTunnelUrl() ? 'Cloudflare Tunnel' : 'Ngrok';
-        console.log(`[Server] 🌐 ${source} URL detected: ${publicUrl}`);
+        if (isFixedHostname) {
+          console.log(`[Server] 🌐 Using fixed hostname: ${currentConfigUrl}`);
+        } else {
+          const source = getTunnelUrl() ? 'Cloudflare Tunnel' : 'Ngrok';
+          console.log(`[Server] 🌐 ${source} URL detected: ${publicUrl}`);
+        }
         if (currentConfigUrl) {
           if (currentConfigUrl === publicUrl) {
             console.log(`[Server] ✅ config.json matches: ${currentConfigUrl}`);
+          } else if (isFixedHostname) {
+            console.log(`[Server] ✅ App uses config URL (tunnel-url.txt ignored)`);
           } else {
             console.log(`[Server] ⚠️  config.json mismatch:`);
             console.log(`[Server]    현재 config.json: ${currentConfigUrl}`);
@@ -132,12 +139,16 @@ app.listen(PORT, '0.0.0.0', () => {
         }
         lastPublicUrl = publicUrl;
       } else if (lastPublicUrl !== publicUrl) {
-        console.log(`[Server] ⚠️  Tunnel URL CHANGED!`);
-        console.log(`[Server] 🔴 Old URL: ${lastPublicUrl}`);
-        console.log(`[Server] 🟢 New URL: ${publicUrl}`);
+        if (!isFixedHostname) {
+          console.log(`[Server] ⚠️  Tunnel URL CHANGED!`);
+          console.log(`[Server] 🔴 Old URL: ${lastPublicUrl}`);
+          console.log(`[Server] 🟢 New URL: ${publicUrl}`);
+        }
         if (currentConfigUrl) {
           if (currentConfigUrl === publicUrl) {
             console.log(`[Server] ✅ config.json already matches: ${currentConfigUrl}`);
+          } else if (isFixedHostname) {
+            console.log(`[Server] ✅ Using fixed hostname from config: ${currentConfigUrl}`);
           } else {
             console.log(`[Server] ⚠️  config.json mismatch:`);
             console.log(`[Server]    현재 config.json: ${currentConfigUrl}`);
