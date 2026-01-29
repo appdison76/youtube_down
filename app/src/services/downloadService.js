@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system/legacy';
+﻿import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 import MediaStoreModule from '../modules/MediaStoreModule';
@@ -530,9 +530,11 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
     }
     
     // 이중화: URL 목록 순서대로 시도 (primary 실패 시 Railway 등)
-    // → 다음 URL로 가는 경우 두 가지:
-    //   1) 200 회신 못 받을 때: 네트워크 실패, 404/500, 타임아웃 → downloadAsync() 실패 → catch → 다음 URL
-    //   2) 200은 받았는데 저장된 파일이 비정상일 때: 용량 < 8바이트 or 미디어(ftyp) 아님 → throw → catch → 다음 URL
+    // → 다음 URL로 가는 실패 유형:
+    //   1) HTTP 실패: 네트워크 끊김, 404/500, 타임아웃 → downloadAsync() 실패 → catch → 다음 URL
+    //   2) Pre-check 실패: HEAD 응답 status !== 200, Content-Length === 0, Content-Type에 'video'/'audio' 없음 또는 JSON 에러 → 다음 URL (비디오·오디오 공통)
+    //   3) 파일 크기 실패: 저장 파일 < 8바이트 → throw → 다음 URL
+    //   4) 타입(ftyp) 실패: 저장 파일이 MP4/M4A 시그니처(ftyp) 아님 → HTML/JSON 에러 페이지가 저장된 경우 → throw → 다음 URL
     const baseUrls = await getApiBaseUrls();
     let lastDownloadError = null;
     for (let urlIndex = 0; urlIndex < baseUrls.length; urlIndex++) {
@@ -893,9 +895,11 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
     }
     
     // 이중화: URL 목록 순서대로 시도 (primary 실패 시 Railway 등)
-    // → 다음 URL로 가는 경우 두 가지:
-    //   1) 200 회신 못 받을 때: 네트워크 실패, 404/500, 타임아웃 → downloadAsync() 실패 → catch → 다음 URL
-    //   2) 200은 받았는데 저장된 파일이 비정상일 때: 용량 < 8바이트 or 미디어(ftyp) 아님 → throw → catch → 다음 URL
+    // → 다음 URL로 가는 실패 유형:
+    //   1) HTTP 실패: 네트워크 끊김, 404/500, 타임아웃 → downloadAsync() 실패 → catch → 다음 URL
+    //   2) Pre-check 실패: HEAD 응답 status !== 200, Content-Length === 0, Content-Type에 'video'/'audio' 없음 또는 JSON 에러 → 다음 URL (비디오·오디오 공통)
+    //   3) 파일 크기 실패: 저장 파일 < 8바이트 → throw → 다음 URL
+    //   4) 타입(ftyp) 실패: 저장 파일이 MP4/M4A 시그니처(ftyp) 아님 → HTML/JSON 에러 페이지가 저장된 경우 → throw → 다음 URL
     const baseUrls = await getApiBaseUrls();
     let lastDownloadError = null;
     for (let urlIndex = 0; urlIndex < baseUrls.length; urlIndex++) {
@@ -906,6 +910,36 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
     
     console.log('[downloadService] Downloading from:', downloadUrl);
     console.log('[downloadService] Saving to:', fileUri);
+    
+    // 백엔드 응답 사전 확인 (HEAD 요청으로 Content-Length/Content-Type 확인) — 비디오와 동일
+    try {
+      const headResponse = await fetch(downloadUrl, { method: 'HEAD' });
+      const contentLength = headResponse.headers.get('content-length');
+      const contentType = headResponse.headers.get('content-type');
+      console.log('[downloadService] Pre-check - Status:', headResponse.status);
+      console.log('[downloadService] Pre-check - Content-Type:', contentType);
+      console.log('[downloadService] Pre-check - Content-Length:', contentLength);
+      if (headResponse.status !== 200) {
+        const errorText = await headResponse.text().catch(() => '');
+        throw new Error(`백엔드 서버가 에러를 반환했습니다 (${headResponse.status}): ${errorText || headResponse.statusText}`);
+      }
+      if (contentLength && parseInt(contentLength) === 0) {
+        throw new Error('백엔드 서버가 0 바이트 파일을 반환합니다. 해당 오디오를 다운로드할 수 없을 수 있습니다.');
+      }
+      if (!contentType || !contentType.includes('audio')) {
+        const testResponse = await fetch(downloadUrl);
+        const testContentType = testResponse.headers.get('content-type') || '';
+        if (testContentType.includes('application/json')) {
+          const errorData = await testResponse.json().catch(() => ({}));
+          throw new Error(errorData.error || errorData.message || '백엔드 서버에서 에러를 반환했습니다.');
+        }
+      }
+    } catch (preCheckError) {
+      console.warn('[downloadService] Pre-check failed:', preCheckError?.message || preCheckError);
+      if (preCheckError.message && preCheckError.message.includes('백엔드')) {
+        throw preCheckError;
+      }
+    }
     
     lastProgress = 0;
     maxDownloadedSize = 0;
@@ -1000,8 +1034,21 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
       progressInterval = null;
     }
     
+    console.log('[downloadService] Download result:', {
+      uri: result?.uri,
+      status: result?.status,
+      headers: result?.headers,
+      hasResult: !!result
+    });
+    
     if (result && result.uri) {
       let fileInfo = await FileSystem.getInfoAsync(result.uri);
+      
+      console.log('[downloadService] File info after download:', {
+        exists: fileInfo.exists,
+        size: fileInfo.size,
+        uri: result.uri
+      });
       
       if (!fileInfo.exists) {
         throw new Error('다운로드된 파일을 찾을 수 없습니다. 다운로드를 다시 시도해주세요.');

@@ -2,6 +2,7 @@ node_modules/
 downloads/
 .env
 *.log
+tunnel-url.txt
 
 
 

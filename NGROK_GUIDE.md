@@ -2,6 +2,8 @@
 
 로컬 서버를 외부에서 접근할 수 있도록 ngrok을 사용하는 방법입니다.
 
+> **기본 추천**: 로컬 서버 터널은 **Cloudflare Tunnel** 사용 → [CLOUDFLARE_TUNNEL_GUIDE.md](./CLOUDFLARE_TUNNEL_GUIDE.md) (무료·대역폭 제한 거의 없음). ngrok 대안 비교 → [TUNNEL_OPTIONS.md](./TUNNEL_OPTIONS.md)
+
 ## 📋 목차
 1. [서버 시작하기](#서버-시작하기)
 2. [Ngrok URL 확인하기](#ngrok-url-확인하기)
