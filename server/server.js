@@ -366,26 +366,65 @@ app.post('/api/video-info', async (req, res) => {
   }
 });
 
+// HEAD: Pre-check용, 헤더만 반환 (yt-dlp 실행 안 함 → 두 번 받는 것 방지)
+app.head('/api/download/video', (req, res) => {
+  const { url, expectedSize } = req.query;
+  if (!url) return res.status(400).end();
+  const n = expectedSize ? parseInt(expectedSize, 10) : null;
+  const useCL = Number.isInteger(n) && n > 0;
+  const h = { 'Content-Disposition': 'attachment; filename="video.mp4"', 'Content-Type': 'video/mp4', 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache' };
+  if (useCL) h['Content-Length'] = n; else h['Transfer-Encoding'] = 'chunked';
+  res.writeHead(200, h);
+  res.end();
+});
+app.head('/api/download/audio', (req, res) => {
+  const { url, expectedSize } = req.query;
+  if (!url) return res.status(400).end();
+  const n = expectedSize ? parseInt(expectedSize, 10) : null;
+  const useCL = Number.isInteger(n) && n > 0;
+  const h = { 'Content-Disposition': 'attachment; filename="audio.m4a"', 'Content-Type': 'audio/mp4', 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache' };
+  if (useCL) h['Content-Length'] = n; else h['Transfer-Encoding'] = 'chunked';
+  res.writeHead(200, h);
+  res.end();
+});
+
 // 영상 다운로드 (스트리밍)
 app.get('/api/download/video', async (req, res) => {
   try {
-    const { url, quality } = req.query;
+    const { url, quality, expectedSize } = req.query;
     
     if (!url) {
       return res.status(400).json({ error: 'URL이 필요합니다.' });
     }
 
-    console.log('[Server] Downloading video:', url, 'quality:', quality);
+    const expectedSizeNum = expectedSize ? parseInt(expectedSize, 10) : null;
+    const useContentLength = Number.isInteger(expectedSizeNum) && expectedSizeNum > 0;
+    console.log('[Server] [VIDEO] expectedSize from query:', req.query.expectedSize, '→ parsed:', expectedSizeNum, 'useContentLength:', useContentLength);
 
+    // 헤더 객체 (HEAD/GET 공통)
+    const videoHeaders = {
+      'Content-Disposition': 'attachment; filename="video.mp4"',
+      'Content-Type': 'video/mp4',
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'no-cache',
+    };
+    if (useContentLength) {
+      videoHeaders['Content-Length'] = expectedSizeNum;
+    } else {
+      videoHeaders['Transfer-Encoding'] = 'chunked';
+    }
+
+    // HEAD 요청: 헤더만 보내고 본문 없음 → Pre-check용, yt-dlp 실행 안 함 (두 번 받는 것 방지)
+    if (req.method === 'HEAD') {
+      res.writeHead(200, videoHeaders);
+      res.end();
+      return;
+    }
+
+    console.log('[Server] Downloading video:', url, 'quality:', quality, useContentLength ? `Content-Length: ${expectedSizeNum}` : 'chunked');
     // 다운로드 시작 전 지연 (패턴 감지 방지) - 더 긴 지연
     await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
-
-    // 헤더 설정
-    res.setHeader('Content-Disposition', 'attachment; filename="video.mp4"');
-    res.setHeader('Content-Type', 'video/mp4');
-    res.setHeader('Accept-Ranges', 'bytes');
-    res.setHeader('Transfer-Encoding', 'chunked');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.writeHead(200, videoHeaders);
 
     // android를 먼저 시도 (가장 안정적), 실패 시 나머지 랜덤 순서로 시도
     const androidFirst = ['android', ...shuffleArray(PLAYER_CLIENTS.filter(c => c !== 'android'))];
@@ -707,23 +746,41 @@ app.get('/api/download/audio', async (req, res) => {
     console.log('[Server] Query params:', req.query);
     console.log('[Server] Full URL:', req.url);
     
-    const { url, quality } = req.query;
+    const { url, quality, expectedSize } = req.query;
     
     if (!url) {
       console.error('[Server] ❌ URL missing in query params');
       return res.status(400).json({ error: 'URL이 필요합니다.' });
     }
 
-    console.log('[Server] Downloading audio:', url, 'quality:', quality);
+    const expectedSizeNum = expectedSize ? parseInt(expectedSize, 10) : null;
+    const useContentLength = Number.isInteger(expectedSizeNum) && expectedSizeNum > 0;
+    console.log('[Server] [AUDIO] expectedSize from query:', req.query.expectedSize, '→ parsed:', expectedSizeNum, 'useContentLength:', useContentLength);
 
+    // 헤더 객체 (HEAD/GET 공통)
+    const audioHeaders = {
+      'Content-Disposition': 'attachment; filename="audio.m4a"',
+      'Content-Type': 'audio/mp4',
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'no-cache',
+    };
+    if (useContentLength) {
+      audioHeaders['Content-Length'] = expectedSizeNum;
+    } else {
+      audioHeaders['Transfer-Encoding'] = 'chunked';
+    }
+
+    // HEAD 요청: 헤더만 보내고 본문 없음 → Pre-check용, yt-dlp 실행 안 함 (두 번 받는 것 방지)
+    if (req.method === 'HEAD') {
+      res.writeHead(200, audioHeaders);
+      res.end();
+      return;
+    }
+
+    console.log('[Server] Downloading audio:', url, 'quality:', quality, useContentLength ? `Content-Length: ${expectedSizeNum}` : 'chunked');
     // 다운로드 시작 전 지연 (패턴 감지 방지) - 더 긴 지연
     await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
-
-    // 헤더 설정
-    res.setHeader('Content-Disposition', 'attachment; filename="audio.m4a"');
-    res.setHeader('Content-Type', 'audio/mp4');
-    res.setHeader('Accept-Ranges', 'bytes');
-    res.setHeader('Transfer-Encoding', 'chunked');
+    res.writeHead(200, audioHeaders);
 
     // yt-dlp를 사용하여 오디오 다운로드 및 스트리밍
     // Railway 서버 환경을 고려한 더 유연한 포맷 선택

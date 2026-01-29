@@ -1,4 +1,4 @@
-﻿import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 import MediaStoreModule from '../modules/MediaStoreModule';
@@ -7,6 +7,9 @@ import { getApiBaseUrl, getApiBaseUrls, fetchWithFallback } from '../config/api'
 const DOWNLOAD_DIR = `${FileSystem.documentDirectory}downloads/`;
 const METADATA_DIR = `${FileSystem.documentDirectory}metadata/`;
 const THUMBNAIL_CACHE_DIR = `${FileSystem.documentDirectory}thumbnails/`;
+
+// true = 최소 경로 테스트: video-info 없음, Pre-check 없음, 첫 URL만 (원인 파악용)
+const MINIMAL_DOWNLOAD_TEST = false;
 
 // 다운로드된 파일이 실제 MP4/M4A인지 시그니처(ftyp)로 검사 (200이어도 HTML/JSON 에러면 실패)
 const isLikelyMp4OrM4a = async (fileUri, fileSize) => {
@@ -517,69 +520,100 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
       console.warn('[downloadService] Error saving initial metadata (non-critical):', metadataError);
     }
     
-    // 예상 파일 크기 가져오기 (참고용)
-    try {
-      const videoInfo = await getVideoInfo(videoUrl);
-      expectedSize = videoInfo.filesize || null;
-      if (expectedSize) {
-        console.log('[downloadService] Expected file size:', expectedSize, 'bytes (', (expectedSize / (1024 * 1024)).toFixed(2), 'MB)');
+    // 예상 파일 크기: 서버 /api/video-info에서 조회 (MINIMAL_DOWNLOAD_TEST 시 스킵)
+    if (!MINIMAL_DOWNLOAD_TEST) {
+      try {
+        console.log('[downloadService] [VIDEO] Calling /api/video-info for filesize...');
+        const videoInfoRes = await fetchWithFallback('/api/video-info', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: videoUrl }),
+        });
+        console.log('[downloadService] [VIDEO] video-info response ok:', videoInfoRes.ok, 'status:', videoInfoRes.status);
+        if (videoInfoRes.ok) {
+          const videoInfo = await videoInfoRes.json();
+          const size = videoInfo.filesize;
+          console.log('[downloadService] [VIDEO] video-info body filesize:', size, '(raw)', 'filesize_approx:', videoInfo.filesize_approx, 'filesize_estimate:', videoInfo.filesize_estimate);
+          if (typeof size === 'number' && size > 0) {
+            expectedSize = size;
+            console.log('[downloadService] [VIDEO] ✅ Using expectedSize:', expectedSize, 'bytes (', (expectedSize / (1024 * 1024)).toFixed(2), 'MB)');
+          } else {
+            console.log('[downloadService] [VIDEO] ❌ video-info에 filesize 없음 또는 유효하지 않음, expectedSize 미사용');
+          }
+        } else {
+          console.log('[downloadService] [VIDEO] ❌ video-info 실패, expectedSize 미사용');
+        }
+      } catch (error) {
+        console.log('[downloadService] [VIDEO] Could not get expected file size, proceeding without it:', error.message || error);
+        expectedSize = null;
       }
-    } catch (error) {
-      console.log('[downloadService] Could not get expected file size, proceeding without it:', error.message || error);
-      expectedSize = null;
+    } else {
+      console.log('[downloadService] [VIDEO] MINIMAL_DOWNLOAD_TEST: video-info 스킵');
     }
     
-    // 이중화: URL 목록 순서대로 시도 (primary 실패 시 Railway 등)
+    // 이중화: URL 목록 순서대로 시도 (MINIMAL_DOWNLOAD_TEST 시 첫 URL만)
     // → 다음 URL로 가는 실패 유형:
     //   1) HTTP 실패: 네트워크 끊김, 404/500, 타임아웃 → downloadAsync() 실패 → catch → 다음 URL
     //   2) Pre-check 실패: HEAD 응답 status !== 200, Content-Length === 0, Content-Type에 'video'/'audio' 없음 또는 JSON 에러 → 다음 URL (비디오·오디오 공통)
     //   3) 파일 크기 실패: 저장 파일 < 8바이트 → throw → 다음 URL
     //   4) 타입(ftyp) 실패: 저장 파일이 MP4/M4A 시그니처(ftyp) 아님 → HTML/JSON 에러 페이지가 저장된 경우 → throw → 다음 URL
-    const baseUrls = await getApiBaseUrls();
+    const allUrls = await getApiBaseUrls();
+    const baseUrls = MINIMAL_DOWNLOAD_TEST ? allUrls.slice(0, 1) : allUrls;
+    if (MINIMAL_DOWNLOAD_TEST) console.log('[downloadService] [VIDEO] MINIMAL_DOWNLOAD_TEST: 첫 URL만 사용', baseUrls[0]);
     let lastDownloadError = null;
     for (let urlIndex = 0; urlIndex < baseUrls.length; urlIndex++) {
       const apiBaseUrl = baseUrls[urlIndex];
       console.log('[downloadService] Using API base URL for video download (#', urlIndex + 1, '/', baseUrls.length, '):', apiBaseUrl);
       try {
-    const downloadUrl = `${apiBaseUrl.replace(/\/$/, '')}/api/download/video?url=${encodeURIComponent(videoUrl)}&quality=highestvideo`;
+    let downloadUrl = `${apiBaseUrl.replace(/\/$/, '')}/api/download/video?url=${encodeURIComponent(videoUrl)}&quality=highestvideo`;
+      if (expectedSize != null && expectedSize > 0) {
+        downloadUrl += `&expectedSize=${expectedSize}`;
+        console.log('[downloadService] [VIDEO] 다운로드 요청에 expectedSize 포함:', expectedSize);
+      } else {
+        console.log('[downloadService] [VIDEO] 다운로드 요청에 expectedSize 미포함');
+      }
     
     console.log('[downloadService] Downloading from:', downloadUrl);
     console.log('[downloadService] Saving to:', fileUri);
     
-    // 백엔드 응답 사전 확인 (HEAD 요청으로 Content-Length 확인)
-    try {
-      const headResponse = await fetch(downloadUrl, { method: 'HEAD' });
-      const contentLength = headResponse.headers.get('content-length');
-      const contentType = headResponse.headers.get('content-type');
-      
-      console.log('[downloadService] Pre-check - Status:', headResponse.status);
-      console.log('[downloadService] Pre-check - Content-Type:', contentType);
-      console.log('[downloadService] Pre-check - Content-Length:', contentLength);
-      
-      if (headResponse.status !== 200) {
-        const errorText = await headResponse.text().catch(() => '');
-        throw new Error(`백엔드 서버가 에러를 반환했습니다 (${headResponse.status}): ${errorText || headResponse.statusText}`);
-      }
-      
-      if (contentLength && parseInt(contentLength) === 0) {
-        throw new Error('백엔드 서버가 0 바이트 파일을 반환합니다. 해당 영상을 다운로드할 수 없을 수 있습니다.');
-      }
-      
-      if (!contentType || !contentType.includes('video')) {
-        // JSON 에러 응답일 수 있음
-        const testResponse = await fetch(downloadUrl);
-        const testContentType = testResponse.headers.get('content-type') || '';
-        if (testContentType.includes('application/json')) {
-          const errorData = await testResponse.json().catch(() => ({}));
-          throw new Error(errorData.error || errorData.message || '백엔드 서버에서 에러를 반환했습니다.');
+    // 백엔드 응답 사전 확인 (MINIMAL_DOWNLOAD_TEST 시 스킵)
+    if (!MINIMAL_DOWNLOAD_TEST) {
+      try {
+        const headResponse = await fetch(downloadUrl, { method: 'HEAD' });
+        const contentLength = headResponse.headers.get('content-length');
+        const contentType = headResponse.headers.get('content-type');
+        
+        console.log('[downloadService] Pre-check - Status:', headResponse.status);
+        console.log('[downloadService] Pre-check - Content-Type:', contentType);
+        console.log('[downloadService] Pre-check - Content-Length:', contentLength);
+        
+        if (headResponse.status !== 200) {
+          const errorText = await headResponse.text().catch(() => '');
+          throw new Error(`백엔드 서버가 에러를 반환했습니다 (${headResponse.status}): ${errorText || headResponse.statusText}`);
+        }
+        
+        if (contentLength && parseInt(contentLength) === 0) {
+          throw new Error('백엔드 서버가 0 바이트 파일을 반환합니다. 해당 영상을 다운로드할 수 없을 수 있습니다.');
+        }
+        
+        if (!contentType || !contentType.includes('video')) {
+          // JSON 에러 응답일 수 있음
+          const testResponse = await fetch(downloadUrl);
+          const testContentType = testResponse.headers.get('content-type') || '';
+          if (testContentType.includes('application/json')) {
+            const errorData = await testResponse.json().catch(() => ({}));
+            throw new Error(errorData.error || errorData.message || '백엔드 서버에서 에러를 반환했습니다.');
+          }
+        }
+      } catch (preCheckError) {
+        // 이중화 시 첫 URL 실패는 예상 가능 → warn으로만 (에러 오버레이 방지)
+        console.warn('[downloadService] Pre-check failed:', preCheckError?.message || preCheckError);
+        if (preCheckError.message && preCheckError.message.includes('백엔드')) {
+          throw preCheckError;
         }
       }
-    } catch (preCheckError) {
-      // 이중화 시 첫 URL 실패는 예상 가능 → warn으로만 (에러 오버레이 방지)
-      console.warn('[downloadService] Pre-check failed:', preCheckError?.message || preCheckError);
-      if (preCheckError.message && preCheckError.message.includes('백엔드')) {
-        throw preCheckError;
-      }
+    } else {
+      console.log('[downloadService] [VIDEO] MINIMAL_DOWNLOAD_TEST: Pre-check 스킵');
     }
     
     lastProgress = 0;
@@ -761,11 +795,34 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
       throw new Error('다운로드가 완료되지 않았습니다.');
     }
       } catch (urlError) {
-        lastDownloadError = urlError;
         if (progressInterval) {
           clearInterval(progressInterval);
           progressInterval = null;
         }
+        // INTERNAL_ERROR/stream reset으로 끊겼지만 대부분 받은 경우 → 저장된 파일이 유효하면 성공 처리
+        const isStreamReset = urlError?.message?.includes('INTERNAL_ERROR') || urlError?.message?.includes('stream was reset');
+        if (isStreamReset && expectedSize != null && expectedSize > 0) {
+          try {
+            const partialInfo = await FileSystem.getInfoAsync(fileUri);
+            if (partialInfo.exists && partialInfo.size >= expectedSize * 0.99) {
+              const valid = await isLikelyMp4OrM4a(fileUri, partialInfo.size);
+              if (valid) {
+                console.log('[downloadService] [VIDEO] Stream reset but received', (partialInfo.size / 1024 / 1024).toFixed(2), 'MB (>=99%), treating as success');
+                currentFileUri = null;
+                if (videoId && internalFileName) {
+                  try {
+                    if (thumbnailUrl) await downloadThumbnail(videoId, thumbnailUrl);
+                    const metadata = { title: videoTitle, videoId, displayFileName, thumbnail: thumbnailUrl, downloadUrl: videoUrl, status: 'completed', downloadedAt: new Date().toISOString(), downloadedAtTimestamp: Date.now() };
+                    await FileSystem.writeAsStringAsync(`${METADATA_DIR}${internalFileName}.json`, JSON.stringify(metadata));
+                  } catch (e) {}
+                }
+                if (onProgress) onProgress(1.0);
+                return { uri: fileUri, fileName: displayFileName };
+              }
+            }
+          } catch (e) {}
+        }
+        lastDownloadError = urlError;
         console.warn('[downloadService] Video download failed for URL #' + (urlIndex + 1), apiBaseUrl, urlError?.message);
         if (urlIndex < baseUrls.length - 1) {
           console.log('[downloadService] Trying next URL...');
@@ -882,63 +939,89 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
       console.warn('[downloadService] Error saving initial metadata (non-critical):', metadataError);
     }
     
-    // 예상 파일 크기 가져오기 (참고용)
-    try {
-      const videoInfo = await getVideoInfo(videoUrl);
-      expectedSize = videoInfo.filesize || null;
-      if (expectedSize) {
-        console.log('[downloadService] Expected file size:', expectedSize, 'bytes (', (expectedSize / (1024 * 1024)).toFixed(2), 'MB)');
+    // 예상 파일 크기: 서버 /api/video-info에서 조회 (MINIMAL_DOWNLOAD_TEST 시 스킵)
+    if (!MINIMAL_DOWNLOAD_TEST) {
+      try {
+        console.log('[downloadService] [AUDIO] Calling /api/video-info for filesize...');
+        const videoInfoRes = await fetchWithFallback('/api/video-info', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: videoUrl }),
+        });
+        console.log('[downloadService] [AUDIO] video-info response ok:', videoInfoRes.ok, 'status:', videoInfoRes.status);
+        if (videoInfoRes.ok) {
+          const videoInfo = await videoInfoRes.json();
+          const size = videoInfo.filesize;
+          console.log('[downloadService] [AUDIO] video-info body filesize:', size, '(raw)', 'filesize_approx:', videoInfo.filesize_approx, 'filesize_estimate:', videoInfo.filesize_estimate);
+          if (typeof size === 'number' && size > 0) {
+            expectedSize = size;
+            console.log('[downloadService] [AUDIO] ✅ Using expectedSize:', expectedSize, 'bytes (', (expectedSize / (1024 * 1024)).toFixed(2), 'MB)');
+          } else {
+            console.log('[downloadService] [AUDIO] ❌ video-info에 filesize 없음 또는 유효하지 않음, expectedSize 미사용');
+          }
+        } else {
+          console.log('[downloadService] [AUDIO] ❌ video-info 실패, expectedSize 미사용');
+        }
+      } catch (error) {
+        console.log('[downloadService] [AUDIO] Could not get expected file size, proceeding without it:', error.message || error);
+        expectedSize = null;
       }
-    } catch (error) {
-      console.log('[downloadService] Could not get expected file size, proceeding without it:', error.message || error);
-      expectedSize = null;
+    } else {
+      console.log('[downloadService] [AUDIO] MINIMAL_DOWNLOAD_TEST: video-info 스킵');
     }
     
-    // 이중화: URL 목록 순서대로 시도 (primary 실패 시 Railway 등)
-    // → 다음 URL로 가는 실패 유형:
-    //   1) HTTP 실패: 네트워크 끊김, 404/500, 타임아웃 → downloadAsync() 실패 → catch → 다음 URL
-    //   2) Pre-check 실패: HEAD 응답 status !== 200, Content-Length === 0, Content-Type에 'video'/'audio' 없음 또는 JSON 에러 → 다음 URL (비디오·오디오 공통)
-    //   3) 파일 크기 실패: 저장 파일 < 8바이트 → throw → 다음 URL
-    //   4) 타입(ftyp) 실패: 저장 파일이 MP4/M4A 시그니처(ftyp) 아님 → HTML/JSON 에러 페이지가 저장된 경우 → throw → 다음 URL
-    const baseUrls = await getApiBaseUrls();
+    // 이중화: URL 목록 순서대로 시도 (MINIMAL_DOWNLOAD_TEST 시 첫 URL만)
+    const allUrlsAudio = await getApiBaseUrls();
+    const baseUrls = MINIMAL_DOWNLOAD_TEST ? allUrlsAudio.slice(0, 1) : allUrlsAudio;
+    if (MINIMAL_DOWNLOAD_TEST) console.log('[downloadService] [AUDIO] MINIMAL_DOWNLOAD_TEST: 첫 URL만 사용', baseUrls[0]);
     let lastDownloadError = null;
     for (let urlIndex = 0; urlIndex < baseUrls.length; urlIndex++) {
       const apiBaseUrl = baseUrls[urlIndex];
       console.log('[downloadService] Using API base URL for audio download (#', urlIndex + 1, '/', baseUrls.length, '):', apiBaseUrl);
       try {
-    const downloadUrl = `${apiBaseUrl.replace(/\/$/, '')}/api/download/audio?url=${encodeURIComponent(videoUrl)}&quality=highestaudio`;
+    let downloadUrl = `${apiBaseUrl.replace(/\/$/, '')}/api/download/audio?url=${encodeURIComponent(videoUrl)}&quality=highestaudio`;
+      if (expectedSize != null && expectedSize > 0) {
+        downloadUrl += `&expectedSize=${expectedSize}`;
+        console.log('[downloadService] [AUDIO] 다운로드 요청에 expectedSize 포함:', expectedSize);
+      } else {
+        console.log('[downloadService] [AUDIO] 다운로드 요청에 expectedSize 미포함');
+      }
     
     console.log('[downloadService] Downloading from:', downloadUrl);
     console.log('[downloadService] Saving to:', fileUri);
     
-    // 백엔드 응답 사전 확인 (HEAD 요청으로 Content-Length/Content-Type 확인) — 비디오와 동일
-    try {
-      const headResponse = await fetch(downloadUrl, { method: 'HEAD' });
-      const contentLength = headResponse.headers.get('content-length');
-      const contentType = headResponse.headers.get('content-type');
-      console.log('[downloadService] Pre-check - Status:', headResponse.status);
-      console.log('[downloadService] Pre-check - Content-Type:', contentType);
-      console.log('[downloadService] Pre-check - Content-Length:', contentLength);
-      if (headResponse.status !== 200) {
-        const errorText = await headResponse.text().catch(() => '');
-        throw new Error(`백엔드 서버가 에러를 반환했습니다 (${headResponse.status}): ${errorText || headResponse.statusText}`);
-      }
-      if (contentLength && parseInt(contentLength) === 0) {
-        throw new Error('백엔드 서버가 0 바이트 파일을 반환합니다. 해당 오디오를 다운로드할 수 없을 수 있습니다.');
-      }
-      if (!contentType || !contentType.includes('audio')) {
-        const testResponse = await fetch(downloadUrl);
-        const testContentType = testResponse.headers.get('content-type') || '';
-        if (testContentType.includes('application/json')) {
-          const errorData = await testResponse.json().catch(() => ({}));
-          throw new Error(errorData.error || errorData.message || '백엔드 서버에서 에러를 반환했습니다.');
+    // 백엔드 응답 사전 확인 (MINIMAL_DOWNLOAD_TEST 시 스킵)
+    if (!MINIMAL_DOWNLOAD_TEST) {
+      try {
+        const headResponse = await fetch(downloadUrl, { method: 'HEAD' });
+        const contentLength = headResponse.headers.get('content-length');
+        const contentType = headResponse.headers.get('content-type');
+        console.log('[downloadService] Pre-check - Status:', headResponse.status);
+        console.log('[downloadService] Pre-check - Content-Type:', contentType);
+        console.log('[downloadService] Pre-check - Content-Length:', contentLength);
+        if (headResponse.status !== 200) {
+          const errorText = await headResponse.text().catch(() => '');
+          throw new Error(`백엔드 서버가 에러를 반환했습니다 (${headResponse.status}): ${errorText || headResponse.statusText}`);
+        }
+        if (contentLength && parseInt(contentLength) === 0) {
+          throw new Error('백엔드 서버가 0 바이트 파일을 반환합니다. 해당 오디오를 다운로드할 수 없을 수 있습니다.');
+        }
+        if (!contentType || !contentType.includes('audio')) {
+          const testResponse = await fetch(downloadUrl);
+          const testContentType = testResponse.headers.get('content-type') || '';
+          if (testContentType.includes('application/json')) {
+            const errorData = await testResponse.json().catch(() => ({}));
+            throw new Error(errorData.error || errorData.message || '백엔드 서버에서 에러를 반환했습니다.');
+          }
+        }
+      } catch (preCheckError) {
+        console.warn('[downloadService] Pre-check failed:', preCheckError?.message || preCheckError);
+        if (preCheckError.message && preCheckError.message.includes('백엔드')) {
+          throw preCheckError;
         }
       }
-    } catch (preCheckError) {
-      console.warn('[downloadService] Pre-check failed:', preCheckError?.message || preCheckError);
-      if (preCheckError.message && preCheckError.message.includes('백엔드')) {
-        throw preCheckError;
-      }
+    } else {
+      console.log('[downloadService] [AUDIO] MINIMAL_DOWNLOAD_TEST: Pre-check 스킵');
     }
     
     lastProgress = 0;
@@ -1120,11 +1203,34 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
       throw new Error('다운로드가 완료되지 않았습니다.');
       }
       } catch (urlError) {
-        lastDownloadError = urlError;
         if (progressInterval) {
           clearInterval(progressInterval);
           progressInterval = null;
         }
+        // INTERNAL_ERROR/stream reset으로 끊겼지만 대부분 받은 경우 → 저장된 파일이 유효하면 성공 처리
+        const isStreamReset = urlError?.message?.includes('INTERNAL_ERROR') || urlError?.message?.includes('stream was reset');
+        if (isStreamReset && expectedSize != null && expectedSize > 0) {
+          try {
+            const partialInfo = await FileSystem.getInfoAsync(fileUri);
+            if (partialInfo.exists && partialInfo.size >= expectedSize * 0.99) {
+              const valid = await isLikelyMp4OrM4a(fileUri, partialInfo.size);
+              if (valid) {
+                console.log('[downloadService] [AUDIO] Stream reset but received', (partialInfo.size / 1024 / 1024).toFixed(2), 'MB (>=99%), treating as success');
+                currentFileUri = null;
+                if (videoId && internalFileName) {
+                  try {
+                    if (thumbnailUrl) await downloadThumbnail(videoId, thumbnailUrl);
+                    const metadata = { title: videoTitle, videoId, displayFileName, thumbnail: thumbnailUrl, downloadUrl: videoUrl, status: 'completed', downloadedAt: new Date().toISOString(), downloadedAtTimestamp: Date.now() };
+                    await FileSystem.writeAsStringAsync(`${METADATA_DIR}${internalFileName}.json`, JSON.stringify(metadata));
+                  } catch (e) {}
+                }
+                if (onProgress) onProgress(1.0);
+                return { uri: fileUri, fileName: displayFileName };
+              }
+            }
+          } catch (e) {}
+        }
+        lastDownloadError = urlError;
         console.warn('[downloadService] Audio download failed for URL #' + (urlIndex + 1), apiBaseUrl, urlError?.message);
         if (urlIndex < baseUrls.length - 1) {
           console.log('[downloadService] Trying next URL...');
