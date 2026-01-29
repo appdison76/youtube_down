@@ -100,9 +100,10 @@ async function getDownloadBaseUrl() {
   return urls[0].replace(/\/$/, '');
 }
 
-// 웹: 다운로드는 Railway만 사용 (ngrok 요청 시 브라우저가 그 페이지로 이동하는 문제 완전 회피)
+// 웹: 다운로드는 Railway만 사용 (하드코딩으로 다른 코드 경로/캐시 영향 제거)
+var DOWNLOAD_BASE = 'https://youtubedown-production.up.railway.app';
 async function getDownloadBaseUrls() {
-  return [DEFAULT_RAILWAY.replace(/\/$/, '')];
+  return [DOWNLOAD_BASE.replace(/\/$/, '')];
 }
 
 function downloadVideo(url) {
@@ -127,13 +128,12 @@ async function isLikelyMediaResponse(res, blob) {
   return true;
 }
 
-// 이중화: 웹은 Railway 먼저 → primary (ngrok 요청 시 페이지 이동 방지)
+// 웹 다운로드: Railway만 사용 (URL 하드코딩)
 async function downloadVideoWithFallback(videoUrl, suggestedFileName = 'video.mp4') {
-  const baseUrls = await getDownloadBaseUrls();
+  const base = DOWNLOAD_BASE.replace(/\/$/, '');
+  const url = base + '/api/download/video?url=' + encodeURIComponent(videoUrl) + '&quality=highestvideo';
   let lastError = null;
-  for (let i = 0; i < baseUrls.length; i++) {
-    const base = baseUrls[i].replace(/\/$/, '');
-    const url = base + '/api/download/video?url=' + encodeURIComponent(videoUrl) + '&quality=highestvideo';
+  for (let i = 0; i < 1; i++) {
     try {
       const res = await fetch(url);
       if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -148,19 +148,17 @@ async function downloadVideoWithFallback(videoUrl, suggestedFileName = 'video.mp
       return;
     } catch (e) {
       lastError = e;
-      console.warn('[web-app API] Video download failed for URL #' + (i + 1), e?.message);
-      if (i < baseUrls.length - 1) console.log('[web-app API] Trying next URL...');
+      console.warn('[web-app API] Video download failed', e?.message);
     }
   }
   throw lastError || new Error('다운로드에 실패했습니다.');
 }
 
 async function downloadAudioWithFallback(videoUrl, suggestedFileName = 'audio.m4a') {
-  const baseUrls = await getDownloadBaseUrls();
+  const base = DOWNLOAD_BASE.replace(/\/$/, '');
+  const url = base + '/api/download/audio?url=' + encodeURIComponent(videoUrl) + '&quality=highestaudio';
   let lastError = null;
-  for (let i = 0; i < baseUrls.length; i++) {
-    const base = baseUrls[i].replace(/\/$/, '');
-    const url = base + '/api/download/audio?url=' + encodeURIComponent(videoUrl) + '&quality=highestaudio';
+  for (let i = 0; i < 1; i++) {
     try {
       const res = await fetch(url);
       if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -175,8 +173,7 @@ async function downloadAudioWithFallback(videoUrl, suggestedFileName = 'audio.m4
       return;
     } catch (e) {
       lastError = e;
-      console.warn('[web-app API] Audio download failed for URL #' + (i + 1), e?.message);
-      if (i < baseUrls.length - 1) console.log('[web-app API] Trying next URL...');
+      console.warn('[web-app API] Audio download failed', e?.message);
     }
   }
   throw lastError || new Error('다운로드에 실패했습니다.');
