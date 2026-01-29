@@ -1087,35 +1087,34 @@ export default function MusicRecognitionScreen({ navigation }) {
           )}
         </View>
 
-        {/* 인식 결과 - 검색 화면과 비슷한 카드 형태 */}
+        {/* 인식 결과 - 인식된 곡 (문구는 카드 밖 위 → 카드: 썸네일 → 제목/아티스트/앨범, 글 복사 가능) */}
         {recognitionResult && (
           <View style={styles.resultArea}>
-            <Text style={styles.resultTitle}>{t.musicRecognitionRecognizedSong}</Text>
+            <Text style={styles.recognitionResultLabel}>{t.musicRecognitionRecognizedSong}</Text>
             <View style={styles.recognitionResultCard}>
-              {/* 썸네일은 YouTube 검색 결과의 첫 번째 항목에서 가져옴 */}
               {youtubeResults.length > 0 && youtubeResults[0].thumbnail ? (
-                <Image 
-                  source={{ uri: youtubeResults[0].thumbnail }} 
+                <Image
+                  source={{ uri: youtubeResults[0].thumbnail }}
                   style={styles.recognitionThumbnail}
                   resizeMode="cover"
                 />
               ) : (
                 <View style={styles.recognitionThumbnailPlaceholder}>
-                  <Ionicons name="musical-notes" size={64} color="#999" />
+                  <Ionicons name="musical-notes" size={64} color="#ccc" />
                 </View>
               )}
               <View style={styles.recognitionResultContent}>
-                <Text style={styles.recognitionResultTitle}>
+                <Text style={styles.recognitionResultTitle} selectable>
                   {recognitionResult.title || t.musicRecognitionNoTitle}
                 </Text>
-                <Text style={styles.recognitionResultArtist}>
+                <Text style={styles.recognitionResultArtist} selectable>
                   {recognitionResult.artist || t.musicRecognitionNoArtist}
                 </Text>
-                {recognitionResult.album && (
-                  <Text style={styles.recognitionResultAlbum}>
+                {recognitionResult.album ? (
+                  <Text style={styles.recognitionResultAlbum} selectable>
                     {recognitionResult.album}
                   </Text>
-                )}
+                ) : null}
               </View>
             </View>
             {/* 인식된 곡 아래 쿠팡 광고 */}
@@ -1361,7 +1360,7 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 12,
   },
-  // 인식 결과 카드 (검색 화면과 비슷한 스타일)
+  // 인식된 곡 카드 (썸네일 + 내용, 원래 디자인)
   recognitionResultCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -1370,10 +1369,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e8e8e8',
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
@@ -1392,6 +1388,12 @@ const styles = StyleSheet.create({
   },
   recognitionResultContent: {
     padding: 16,
+  },
+  recognitionResultLabel: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 12,
   },
   recognitionResultTitle: {
     fontSize: 20,
