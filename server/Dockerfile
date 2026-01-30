@@ -27,8 +27,8 @@ RUN npm ci --only=production
 # 서버 파일 복사
 COPY server/server.js ./
 
-# 설치 페이지 (PRO 배너 링크용)
-COPY install-page ./install-page
+# 설치 페이지 (PRO 배너 링크용, web-app 아래로 이동됨)
+COPY web-app/install-page ./web-app/install-page
 
 # 다운로드 디렉토리 생성
 RUN mkdir -p downloads

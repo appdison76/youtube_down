@@ -1,12 +1,14 @@
 // 앱 메인 로직 - 페이지 전환
 document.addEventListener('DOMContentLoaded', () => {
-    // PRO 설치 배너 링크: 로컬은 8000 포트, 배포는 GitHub Pages
+    // PRO 설치 배너 링크: 로컬/사설IP(폰 와이파이 등)는 8000 포트, 배포는 GitHub Pages
     const banner = document.getElementById('pro-install-banner');
     if (banner) {
-        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const host = window.location.hostname;
+        const isPrivateIP = /^(10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)/.test(host);
+        const isLocal = host === 'localhost' || host === '127.0.0.1' || isPrivateIP;
         banner.href = isLocal
-            ? 'http://localhost:8000/install-page/'
-            : 'https://appdison76.github.io/youtube_down/install-page/';
+            ? `http://${host}:8000/install-page/`
+            : 'https://appdison76.github.io/youtube_down/web-app/install-page/';
     }
 
     const navTabs = document.querySelectorAll('.nav-tab');

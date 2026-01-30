@@ -125,10 +125,10 @@ app.get('/favicon.ico', (req, res) => {
 });
 
 // 설치 페이지 (PRO 버전 등) — 같은 서버에서 제공
-// 로컬: server/ 기준 → ../install-page | Docker: /app 기준 → install-page
-const installPageDir = fs.existsSync(path.join(__dirname, 'install-page'))
-  ? path.join(__dirname, 'install-page')
-  : path.join(__dirname, '..', 'install-page');
+// 로컬: server/ 기준 → ../web-app/install-page | Docker: /app 기준 → web-app/install-page
+const installPageDir = fs.existsSync(path.join(__dirname, 'web-app', 'install-page'))
+  ? path.join(__dirname, 'web-app', 'install-page')
+  : path.join(__dirname, '..', 'web-app', 'install-page');
 const installPageIndex = path.join(installPageDir, 'index.html');
 
 app.get('/install-page', (req, res) => res.redirect(301, '/install-page/'));

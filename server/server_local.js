@@ -52,7 +52,7 @@ const getPublicUrl = async () => {
 
 const getCurrentConfigUrl = () => {
   try {
-    const configPath = path.join(__dirname, '..', 'install-page', 'config.json');
+    const configPath = path.join(__dirname, '..', 'web-app', 'install-page', 'config.json');
     if (fs.existsSync(configPath)) {
       const configContent = fs.readFileSync(configPath, 'utf8');
       const config = JSON.parse(configContent);

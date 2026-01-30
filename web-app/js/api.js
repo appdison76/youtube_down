@@ -1,5 +1,5 @@
 // API 설정 - install-page config 로드, 이중화(primary 실패 시 Railway)
-const CONFIG_URL = 'https://appdison76.github.io/youtube_down/install-page/config.json';
+const CONFIG_URL = 'https://appdison76.github.io/youtube_down/web-app/install-page/config.json';
 const DEFAULT_RAILWAY = 'https://youtubedown-production.up.railway.app';
 
 let cachedConfig = null;
