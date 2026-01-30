@@ -131,6 +131,24 @@
                 <div id="library-items" class="library-items"></div>
             </div>
         </div>
+
+        <!-- 쿠팡 파트너스 다이나믹 배너 (화면 크기에 따라 PC용/모바일용 중 하나만 1회 호출) -->
+        <div class="ads-section">
+            <p class="ads-disclaimer">이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>
+            <div id="coupang-banner">
+                <script src="https://ads-partners.coupang.com/g.js"></script>
+                <script>
+                    (function(){
+                        var w = window.innerWidth;
+                        var id = w >= 769 ? 955663 : 956091;
+                        var ww = w >= 769 ? "680" : "320";
+                        if (typeof PartnersCoupang !== "undefined") {
+                            new PartnersCoupang.G({"id":id,"template":"carousel","trackingCode":"AF3962095","width":ww,"height":"140","tsource":""});
+                        }
+                    })();
+                </script>
+            </div>
+        </div>
     </main>
 
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>

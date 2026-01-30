@@ -682,6 +682,32 @@ body {
     margin-top: 8px;
 }
 
+/* 쿠팡 파트너스 광고 섹션 */
+.ads-section {
+    background: #fff;
+    padding: 24px 16px;
+    margin-top: 24px;
+    text-align: center;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    max-width: 100%;
+    overflow: hidden;
+}
+.ads-disclaimer {
+    font-size: 8px;
+    color: #888;
+    margin-bottom: 12px;
+    max-width: 100%;
+    word-break: keep-all;
+    overflow-wrap: break-word;
+    padding: 0 4px;
+}
+#coupang-banner {
+    margin: 0 auto;
+    min-height: 140px;
+    max-width: 100%;
+}
+
 /* 반응형 */
 @media (max-width: 768px) {
     .header-content {
