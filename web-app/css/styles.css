@@ -147,6 +147,20 @@ body {
     display: block;
 }
 
+/* 섹션 제목 (앱과 동일) */
+.section-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 12px;
+}
+
+/* 선택 가능 텍스트 (인식된 곡 제목/아티스트/앨범 복사) */
+.selectable {
+    user-select: text;
+    -webkit-user-select: text;
+}
+
 /* 음악 찾기 화면 */
 .recognition-area {
     text-align: center;
@@ -208,21 +222,37 @@ body {
     text-align: left;
 }
 
-.recognition-result h3 {
-    margin-bottom: 16px;
-    font-size: 20px;
+.recognition-result .section-title {
+    margin-bottom: 8px;
 }
 
 .result-card {
     background: white;
     border-radius: 12px;
-    padding: 16px;
-    display: flex;
-    gap: 16px;
+    overflow: hidden;
+    margin-bottom: 16px;
+    border: 1px solid #e8e8e8;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 
-.result-card img {
+.recognition-result-card {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+}
+
+.recognition-result-card .result-thumbnail {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+    display: block;
+}
+
+.recognition-result-card .result-info {
+    padding: 16px;
+}
+
+.result-card img:not(.result-thumbnail) {
     width: 120px;
     height: 120px;
     border-radius: 8px;
@@ -241,6 +271,121 @@ body {
 .result-info p {
     color: #666;
     font-size: 14px;
+}
+
+.result-album {
+    font-size: 14px;
+    color: #999;
+    margin-top: 4px;
+}
+
+/* YouTube 결과 카드 (검색 / 음악 찾기 다운로드할 영상 선택) */
+.youtube-results-area {
+    margin-top: 20px;
+}
+
+.youtube-results-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.youtube-result-card {
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid #e8e8e8;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    display: flex;
+    gap: 0;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.youtube-result-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+
+.youtube-card-thumbnail {
+    width: 160px;
+    min-width: 160px;
+    height: 120px;
+    object-fit: cover;
+}
+
+.youtube-card-thumbnail.placeholder {
+    background: #f0f0f0;
+}
+
+.youtube-card-content {
+    flex: 1;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.youtube-card-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #333;
+    margin: 0;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.youtube-card-channel {
+    font-size: 13px;
+    color: #666;
+    margin: 0;
+}
+
+.youtube-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.card-btn {
+    padding: 8px 12px;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.card-btn-play {
+    background: #2196F3;
+    color: white;
+}
+
+.card-btn-play:hover {
+    background: #1976D2;
+}
+
+.card-btn-favorite {
+    background: #FFE5E5;
+    color: #333;
+}
+
+.card-btn-favorite:hover {
+    background: #ffcccc;
+}
+
+.card-btn-download-video,
+.card-btn-download-audio {
+    background: #FF0000;
+    color: white;
+}
+
+.card-btn-download-video:hover,
+.card-btn-download-audio:hover {
+    background: #cc0000;
 }
 
 /* 검색 화면 */
@@ -342,6 +487,7 @@ body {
     background: white;
     border-radius: 12px;
     padding: 20px;
+    border: 1px solid #e8e8e8;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 
@@ -490,5 +636,24 @@ body {
     
     .action-btn {
         width: 100%;
+    }
+    
+    .youtube-result-card {
+        flex-direction: column;
+    }
+    
+    .youtube-card-thumbnail {
+        width: 100%;
+        min-width: 0;
+        height: 180px;
+    }
+    
+    .youtube-card-actions {
+        flex-wrap: wrap;
+    }
+    
+    .card-btn {
+        flex: 1;
+        min-width: 80px;
     }
 }

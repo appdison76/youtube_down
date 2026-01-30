@@ -10,7 +10,10 @@ const recognitionStatus = document.getElementById('recognition-status');
 const recognitionResult = document.getElementById('recognition-result');
 const resultTitle = document.getElementById('result-title');
 const resultArtist = document.getElementById('result-artist');
+const resultAlbum = document.getElementById('result-album');
 const resultThumbnail = document.getElementById('result-thumbnail');
+const recognitionYoutubeArea = document.getElementById('recognition-youtube-area');
+const recognitionYoutubeResults = document.getElementById('recognition-youtube-results');
 
 recognitionBtn.addEventListener('click', async () => {
     console.log('Button clicked, isRecording:', isRecording);
@@ -98,6 +101,8 @@ async function startRecognition() {
     recognitionBtn.classList.add('recording');
     recognitionStatus.textContent = '마이크 권한 요청 중...';
     recognitionResult.style.display = 'none';
+    if (recognitionYoutubeArea) recognitionYoutubeArea.style.display = 'none';
+    if (recognitionYoutubeResults) recognitionYoutubeResults.innerHTML = '';
     
     // 아이콘 변경 (mic -> stop)
     const micIcon = document.getElementById('mic-icon');
@@ -142,18 +147,32 @@ async function startRecognition() {
             try {
                 const result = await recognizeMusic(audioBlob);
                 
-                // 결과 표시
+                // 결과 표시 (텍스트 선택 가능)
                 resultTitle.textContent = result.title || '제목 없음';
                 resultArtist.textContent = result.artist || '아티스트 없음';
+                if (result.album) {
+                    resultAlbum.textContent = result.album;
+                    resultAlbum.style.display = 'block';
+                } else {
+                    resultAlbum.style.display = 'none';
+                }
                 
-                // YouTube 검색으로 썸네일 가져오기
+                // YouTube 검색 (10개) → 썸네일 + 다운로드할 영상 선택 목록
                 try {
-                    const searchResults = await searchYouTube(`${result.title} ${result.artist}`, 1);
+                    const searchResults = await searchYouTube(`${result.title} ${result.artist}`.trim(), 10);
                     if (searchResults.items && searchResults.items.length > 0) {
                         resultThumbnail.src = searchResults.items[0].snippet.thumbnails.medium.url;
+                        resultThumbnail.style.display = 'block';
+                        renderRecognitionYouTubeResults(searchResults.items);
+                        recognitionYoutubeArea.style.display = 'block';
+                    } else {
+                        resultThumbnail.style.display = 'none';
+                        recognitionYoutubeArea.style.display = 'none';
                     }
                 } catch (e) {
-                    console.error('썸네일 가져오기 실패:', e);
+                    console.error('YouTube 검색 실패:', e);
+                    resultThumbnail.style.display = 'none';
+                    recognitionYoutubeArea.style.display = 'none';
                 }
                 
                 recognitionResult.style.display = 'block';
@@ -230,6 +249,81 @@ async function startRecognition() {
             console.log('Stop icon hidden');
         }
     }
+}
+
+// 인식 후 YouTube 검색 결과 렌더링 (앱과 동일: 재생/찜/다운로드)
+function renderRecognitionYouTubeResults(items) {
+    if (!recognitionYoutubeResults || !items || items.length === 0) return;
+    recognitionYoutubeResults.innerHTML = items.map(item => {
+        const videoId = item.id && item.id.videoId ? item.id.videoId : item.id;
+        if (!videoId) return '';
+        const thumb = item.snippet && item.snippet.thumbnails ? (item.snippet.thumbnails.medium || item.snippet.thumbnails.default).url : '';
+        const title = (item.snippet && item.snippet.title) || '';
+        const channel = (item.snippet && item.snippet.channelTitle) || '';
+        const url = `https://www.youtube.com/watch?v=${videoId}`;
+        return `
+            <div class="youtube-result-card" data-video-id="${videoId}">
+                ${thumb ? `<img src="${thumb}" alt="" class="youtube-card-thumbnail" />` : '<div class="youtube-card-thumbnail placeholder"></div>'}
+                <div class="youtube-card-content">
+                    <h4 class="youtube-card-title">${title}</h4>
+                    <p class="youtube-card-channel">${channel}</p>
+                    <div class="youtube-card-actions">
+                        <button type="button" class="card-btn card-btn-favorite" data-video-id="${videoId}" data-title="${(title || '').replace(/"/g, '&quot;')}" data-channel="${(channel || '').replace(/"/g, '&quot;')}" data-thumb="${(thumb || '').replace(/"/g, '&quot;')}" data-url="${url.replace(/"/g, '&quot;')}">⭐ 찜하기</button>
+                        <button type="button" class="card-btn card-btn-play" data-url="${url.replace(/"/g, '&quot;')}">▶ 재생</button>
+                        <button type="button" class="card-btn card-btn-download-video" data-url="${url.replace(/"/g, '&quot;')}" data-title="${(title || '').replace(/"/g, '&quot;')}">📥 영상</button>
+                        <button type="button" class="card-btn card-btn-download-audio" data-url="${url.replace(/"/g, '&quot;')}" data-title="${(title || '').replace(/"/g, '&quot;')}">🎵 음악</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // 이벤트 위임
+    recognitionYoutubeResults.querySelectorAll('.card-btn-play').forEach(btn => {
+        btn.addEventListener('click', (e) => { e.stopPropagation(); window.open(btn.dataset.url, '_blank'); });
+    });
+    recognitionYoutubeResults.querySelectorAll('.card-btn-download-video').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const url = btn.dataset.url;
+            const title = (btn.dataset.title || 'video').substring(0, 50);
+            try {
+                const base = await getDownloadBaseUrl();
+                window.open(base + '/api/download/video?url=' + encodeURIComponent(url) + '&quality=highestvideo', '_blank');
+                if (typeof addItem === 'function') {
+                    await addItem({ id: url.match(/v=([^&]+)/)?.[1] || '', title, url, thumbnail: '', author: '', type: 'downloaded', format: 'video' });
+                }
+            } catch (err) { console.error(err); }
+        });
+    });
+    recognitionYoutubeResults.querySelectorAll('.card-btn-download-audio').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const url = btn.dataset.url;
+            const title = (btn.dataset.title || 'audio').substring(0, 50);
+            try {
+                const base = await getDownloadBaseUrl();
+                window.open(base + '/api/download/audio?url=' + encodeURIComponent(url) + '&quality=highestaudio', '_blank');
+                if (typeof addItem === 'function') {
+                    await addItem({ id: url.match(/v=([^&]+)/)?.[1] || '', title, url, thumbnail: '', author: '', type: 'downloaded', format: 'audio' });
+                }
+            } catch (err) { console.error(err); }
+        });
+    });
+    recognitionYoutubeResults.querySelectorAll('.card-btn-favorite').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const videoId = btn.dataset.videoId;
+            const isFav = typeof hasItem === 'function' && (await hasItem(videoId));
+            if (isFav && typeof removeItem === 'function') {
+                await removeItem(videoId);
+                btn.textContent = '⭐ 찜하기';
+            } else if (typeof addItem === 'function') {
+                await addItem({ id: videoId, title: btn.dataset.title || '', author: btn.dataset.channel || '', thumbnail: btn.dataset.thumb || '', url: btn.dataset.url || '', type: 'favorite' });
+                btn.textContent = '❤️ 찜 취소';
+            }
+        });
+    });
 }
 
 // 전역 스코프에 함수 할당 (onclick에서 호출 가능하도록)

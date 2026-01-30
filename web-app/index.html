@@ -34,12 +34,12 @@
                     <span class="nav-text">검색</span>
                 </button>
                 <button class="nav-tab" data-page="save">
-                    <span class="nav-icon">💾</span>
-                    <span class="nav-text">저장</span>
+                    <span class="nav-icon">📥</span>
+                    <span class="nav-text">다운로드</span>
                 </button>
                 <button class="nav-tab" data-page="library">
-                    <span class="nav-icon">📚</span>
-                    <span class="nav-text">내 저장소</span>
+                    <span class="nav-icon">⭐</span>
+                    <span class="nav-text">찜하기</span>
                 </button>
             </nav>
         </div>
@@ -56,13 +56,18 @@
                 </button>
                 <p class="recognition-text" id="recognition-status">음악 찾기를 시작하세요</p>
                 <div id="recognition-result" class="recognition-result" style="display: none;">
-                    <h3>인식된 곡</h3>
-                    <div class="result-card">
-                        <img id="result-thumbnail" src="" alt="썸네일" />
+                    <h3 class="section-title">인식된 곡</h3>
+                    <div class="result-card recognition-result-card">
+                        <img id="result-thumbnail" src="" alt="썸네일" class="result-thumbnail" />
                         <div class="result-info">
-                            <h4 id="result-title"></h4>
-                            <p id="result-artist"></p>
+                            <h4 id="result-title" class="selectable"></h4>
+                            <p id="result-artist" class="selectable"></p>
+                            <p id="result-album" class="result-album selectable" style="display: none;"></p>
                         </div>
+                    </div>
+                    <div id="recognition-youtube-area" class="youtube-results-area" style="display: none;">
+                        <h3 class="section-title">다운로드할 영상 선택</h3>
+                        <div id="recognition-youtube-results" class="youtube-results-list"></div>
                     </div>
                 </div>
             </div>
@@ -71,15 +76,17 @@
         <!-- 검색 화면 -->
         <div id="search-page" class="page" style="display: none;">
             <div class="search-area">
+                <h3 class="section-title">YouTube 검색</h3>
                 <input type="text" id="search-input" class="search-input" placeholder="YouTube 검색..." />
                 <button id="search-btn" class="search-button">검색</button>
-                <div id="search-results" class="search-results"></div>
+                <div id="search-results" class="search-results youtube-results-list"></div>
             </div>
         </div>
 
-        <!-- 저장 화면 -->
+        <!-- 다운로드 화면 -->
         <div id="save-page" class="page" style="display: none;">
             <div class="save-area">
+                <h3 class="section-title">영상 · 음악 다운로드</h3>
                 <input type="text" id="url-input" class="url-input" placeholder="YouTube URL 입력 또는 붙여넣기" />
                 <button id="url-submit-btn" class="url-submit-button">가져오기</button>
                 <div id="video-info" class="video-info" style="display: none;">
@@ -97,9 +104,10 @@
             </div>
         </div>
 
-        <!-- 내 저장소 화면 -->
+        <!-- 찜하기 화면 -->
         <div id="library-page" class="page" style="display: none;">
             <div class="library-area">
+                <h3 class="section-title">찜하기 · 다운로드 목록</h3>
                 <div class="library-filters">
                     <button class="filter-btn active" data-filter="all">전체</button>
                     <button class="filter-btn" data-filter="favorite">찜하기</button>
