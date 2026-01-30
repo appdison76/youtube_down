@@ -124,6 +124,9 @@ app.get('/favicon.ico', (req, res) => {
   res.status(204).end();
 });
 
+// 설치 페이지 (PRO 버전 등) — 같은 서버에서 제공
+app.use('/install-page', express.static(path.join(__dirname, '..', 'install-page')));
+
 // 루트: API 서버 안내 (Cannot GET / 방지)
 app.get('/', (req, res) => {
   const html = '<!DOCTYPE html>\n<html><head><meta charset="utf-8"><title>YouTube Downloader API</title></head>\n<body style="font-family:sans-serif;padding:2rem;max-width:600px;">\n  <h1>YouTube Downloader API</h1>\n  <p>이 서버는 API 전용입니다. 브라우저에서 직접 사용하는 페이지는 설치 페이지(install-page) 또는 앱에서 열어주세요.</p>\n  <p><a href="/health">/health</a> — 서버 상태 확인</p>\n  <p><a href="/api/tunnel-url">/api/tunnel-url</a> — 터널 URL (로컬 전용)</p>\n</body></html>';
