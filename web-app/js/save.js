@@ -64,8 +64,9 @@ async function handleUrlSubmit() {
 downloadVideoBtn.addEventListener('click', async () => {
     if (!currentVideoUrl) return;
     try {
-        const fileName = (sanitizeFileName(videoTitle.textContent) || 'video') + '.mp4';
-        await downloadVideoWithFallback(currentVideoUrl, fileName);
+        const base = await getDownloadBaseUrl();
+        const url = base + '/api/download/video?url=' + encodeURIComponent(currentVideoUrl) + '&quality=highestvideo';
+        window.open(url);
         addItem({
             id: currentVideoId,
             title: videoTitle.textContent,
@@ -84,8 +85,9 @@ downloadVideoBtn.addEventListener('click', async () => {
 downloadAudioBtn.addEventListener('click', async () => {
     if (!currentVideoUrl) return;
     try {
-        const fileName = (sanitizeFileName(videoTitle.textContent) || 'audio') + '.m4a';
-        await downloadAudioWithFallback(currentVideoUrl, fileName);
+        const base = await getDownloadBaseUrl();
+        const url = base + '/api/download/audio?url=' + encodeURIComponent(currentVideoUrl) + '&quality=highestaudio';
+        window.open(url);
         addItem({
             id: currentVideoId,
             title: videoTitle.textContent,

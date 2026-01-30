@@ -289,8 +289,8 @@ function renderRecognitionYouTubeResults(items) {
             const title = btn.dataset.title || 'video';
             const videoId = url.match(/v=([^&]+)/)?.[1] || '';
             try {
-                const fileName = (sanitizeFileName(title) || 'video') + '.mp4';
-                await downloadVideoWithFallback(url, fileName);
+                const base = await getDownloadBaseUrl();
+                window.open(base + '/api/download/video?url=' + encodeURIComponent(url) + '&quality=highestvideo', '_blank');
                 if (typeof addItem === 'function') {
                     await addItem({ id: videoId, title, url, thumbnail: '', author: '', type: 'downloaded', format: 'video' });
                 }
@@ -304,8 +304,8 @@ function renderRecognitionYouTubeResults(items) {
             const title = btn.dataset.title || 'audio';
             const videoId = url.match(/v=([^&]+)/)?.[1] || '';
             try {
-                const fileName = (sanitizeFileName(title) || 'audio') + '.m4a';
-                await downloadAudioWithFallback(url, fileName);
+                const base = await getDownloadBaseUrl();
+                window.open(base + '/api/download/audio?url=' + encodeURIComponent(url) + '&quality=highestaudio', '_blank');
                 if (typeof addItem === 'function') {
                     await addItem({ id: videoId, title, url, thumbnail: '', author: '', type: 'downloaded', format: 'audio' });
                 }
