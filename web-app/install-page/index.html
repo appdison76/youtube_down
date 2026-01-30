@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Melody Snap - 앱 설치</title>
+    <title>Melody Snap PRO - 앱 설치</title>
     <meta name="description" content="유튜브 영상과 음악을 쉽게 다운로드하고 관리하세요. 무료 앱을 다운로드하세요.">
     
     <style>
@@ -62,6 +62,18 @@
             font-size: 20px;
             font-weight: 700;
             flex: 1;
+        }
+        .title-pro {
+            display: inline-block;
+            font-size: 10px;
+            font-weight: 700;
+            color: #fff;
+            background: #E65100;
+            padding: 2px 5px;
+            border-radius: 4px;
+            margin-left: 6px;
+            vertical-align: middle;
+            letter-spacing: 0.02em;
         }
 
         /* 메인 컨테이너 */
@@ -590,16 +602,57 @@
                 display: none !important;
             }
         }
+
+        /* 상단 띠 배너: PRO 무료설치 + 웹으로 이용하기 */
+        @keyframes pro-banner-gradient {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+        .top-banner-strip {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 8px 12px;
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+            color: #fff;
+        }
+        .pro-install-banner-strip {
+            background: linear-gradient(90deg, #E65100, #FF9800, #E65100, #FF9800);
+            background-size: 200% 100%;
+            background-position: 0% 50%;
+            border-bottom: 1px solid #BF360C;
+            animation: pro-banner-gradient 3s ease-in-out infinite;
+        }
+        .pro-install-banner-strip:hover {
+            background: #BF360C;
+            background-size: auto;
+            animation: none;
+        }
+        .pro-install-banner-strip .banner-arrow {
+            font-size: 22px;
+            width: 22px;
+            height: 22px;
+            flex-shrink: 0;
+        }
     </style>
+    <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+    <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
 </head>
 <body>
+    <!-- 상단 띠: 웹으로 이용하기 (웹앱으로 이동) -->
+    <a href="../index.html" class="top-banner-strip pro-install-banner-strip">
+        웹으로 이용하기<ion-icon name="arrow-forward-circle-outline" class="banner-arrow" aria-hidden="true"></ion-icon>
+    </a>
     <!-- 앱 헤더 (스크린샷 스타일) -->
     <div class="app-header">
         <div class="header-content">
             <div class="app-icon-small">
                 <img src="../logo.png" alt="Melody Snap 아이콘" />
             </div>
-            <div class="app-title">Melody Snap</div>
+            <div class="app-title">Melody Snap <span class="title-pro">PRO</span></div>
         </div>
     </div>
 
@@ -610,10 +663,10 @@
                 <div class="app-icon-large">
                     <img src="../logo.png" alt="Melody Snap 로고" />
                 </div>
-                <h1 class="app-name">Melody Snap</h1>
+                <h1 class="app-name">Melody Snap <span class="title-pro">PRO</span></h1>
                 <p class="app-tagline">음악과 영상을 쉽게 찾고, 다운로드하고 관리하세요</p>
                 
-                <div class="download-section">
+                <div class="download-section" id="download">
                     <a href="https://github.com/appdison76/youtube_down/releases/download/1.1.9/app-release-1.1.9.apk" 
                        class="download-btn"
                        id="downloadBtn"

@@ -18,10 +18,19 @@ body {
     z-index: 100;
 }
 
-/* PRO 설치 배너 (타이틀 위) - 대비 개선 */
+/* PRO 설치 배너 - 좌우로 움직이는 그라데이션 */
+@keyframes pro-banner-gradient {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+}
 .pro-install-banner {
-    display: block;
-    background: #E65100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: linear-gradient(90deg, #E65100, #FF9800, #E65100, #FF9800);
+    background-size: 200% 100%;
+    background-position: 0% 50%;
     color: #fff;
     text-align: center;
     padding: 8px 12px;
@@ -29,10 +38,18 @@ body {
     font-weight: 600;
     text-decoration: none;
     border-bottom: 1px solid #BF360C;
+    animation: pro-banner-gradient 3s ease-in-out infinite;
+}
+.pro-install-banner .pro-install-icon {
+    font-size: 22px;
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
 }
 .pro-install-banner:hover {
     background: #BF360C;
-    color: #fff;
+    background-size: auto;
+    animation: none;
 }
 
 /* 헤더 */
