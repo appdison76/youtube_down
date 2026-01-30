@@ -49,16 +49,18 @@ export default function App() {
   useEffect(() => {
     const checkVersion = async () => {
       try {
-        const VERSION_URL = 'https://appdison76.github.io/youtube_down/web-app/install-page/version.json';
+        const VERSION_URL = 'https://appdison76.github.io/youtube_down/install-page/version.json';
         const currentVersion = Constants.expoConfig?.version || '1.0.4';
         
         console.log('[App] Checking version update...');
         console.log('[App] Current app version:', currentVersion);
         
-        const response = await fetch(VERSION_URL, {
+        const urlWithCacheBust = `${VERSION_URL}?t=${Date.now()}`;
+        const response = await fetch(urlWithCacheBust, {
           method: 'GET',
           headers: {
             'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
           },
         });
 
