@@ -91,13 +91,21 @@ const safeDownloadFilenameAscii = (title, ext) => {
 };
 // Content-Disposition 값: 한글 있으면 RFC 5987 (filename*=UTF-8'') 로 한글 유지
 const contentDispositionAttachment = (title, ext, defaultName) => {
-  const extDot = ext.startsWith('.') ? ext : '.' + ext;
   if (title == null || !String(title).trim()) {
     return 'attachment; filename="' + defaultName + '"';
   }
-  const asciiName = safeDownloadFilenameAscii(title, ext);
-  const utf8Name = sanitizeFilename(title, ext);
-  return 'attachment; filename="' + asciiName + '"; filename*=UTF-8\'\'' + encodeURIComponent(utf8Name) + '"';
+  // 이미 퍼센트 인코딩된 문자열이 들어온 경우 한 번만 디코딩 (이중 인코딩 방지)
+  let decoded = title;
+  if (typeof title === 'string' && /%[0-9A-Fa-f]{2}/.test(title)) {
+    try {
+      decoded = decodeURIComponent(title);
+    } catch (e) {
+      decoded = title;
+    }
+  }
+  const asciiName = safeDownloadFilenameAscii(decoded, ext);
+  const utf8Name = sanitizeFilename(decoded, ext);
+  return 'attachment; filename="' + asciiName + '"; filename*=UTF-8\'\'' + encodeURIComponent(utf8Name);
 };
 
 // 미들웨어
@@ -109,6 +117,11 @@ app.use((req, res, next) => {
   const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || '-';
   console.log('[Server] ' + req.method + ' ' + req.path + ' ' + ip);
   next();
+});
+
+// 브라우저가 자동 요청하는 favicon → 204로 응답 (404 로그 방지)
+app.get('/favicon.ico', (req, res) => {
+  res.status(204).end();
 });
 
 // 루트: API 서버 안내 (Cannot GET / 방지)
