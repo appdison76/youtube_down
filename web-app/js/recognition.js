@@ -270,7 +270,7 @@ async function renderRecognitionYouTubeResults(items) {
                     <div class="youtube-card-actions">
                         <button type="button" class="card-btn card-btn-favorite" data-video-id="${videoId}" data-title="${(title || '').replace(/"/g, '&quot;')}" data-channel="${(channel || '').replace(/"/g, '&quot;')}" data-thumb="${(thumb || '').replace(/"/g, '&quot;')}" data-url="${url.replace(/"/g, '&quot;')}">☆ 찜하기</button>
                         <button type="button" class="card-btn card-btn-download-video" data-url="${url.replace(/"/g, '&quot;')}" data-title="${(title || '').replace(/"/g, '&quot;')}"><ion-icon name="download-outline"></ion-icon> 영상</button>
-                        <button type="button" class="card-btn card-btn-download-audio" data-url="${url.replace(/"/g, '&quot;')}" data-title="${(title || '').replace(/"/g, '&quot;')}">🎵 음악</button>
+                        <button type="button" class="card-btn card-btn-download-audio" data-url="${url.replace(/"/g, '&quot;')}" data-title="${(title || '').replace(/"/g, '&quot;')}"><ion-icon name="download-outline"></ion-icon> 음악</button>
                     </div>
                 </div>
             </div>
@@ -313,9 +313,6 @@ async function renderRecognitionYouTubeResults(items) {
             try {
                 const base = await getDownloadBaseUrl();
                 window.open(base + '/api/download/video?url=' + encodeURIComponent(url) + '&quality=highestvideo&title=' + encodeURIComponent(title), '_blank');
-                if (typeof addItem === 'function') {
-                    await addItem({ id: videoId, title, url, thumbnail: '', author: '', type: 'downloaded', format: 'video' });
-                }
             } catch (err) { console.error(err); alert('다운로드에 실패했습니다.'); }
         });
     });
@@ -328,9 +325,6 @@ async function renderRecognitionYouTubeResults(items) {
             try {
                 const base = await getDownloadBaseUrl();
                 window.open(base + '/api/download/audio?url=' + encodeURIComponent(url) + '&quality=highestaudio&title=' + encodeURIComponent(title), '_blank');
-                if (typeof addItem === 'function') {
-                    await addItem({ id: videoId, title, url, thumbnail: '', author: '', type: 'downloaded', format: 'audio' });
-                }
             } catch (err) { console.error(err); alert('다운로드에 실패했습니다.'); }
         });
     });

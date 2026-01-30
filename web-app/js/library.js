@@ -1,69 +1,99 @@
-// 내 저장소 기능
+// 찜하기만 관리
 const libraryItems = document.getElementById('library-items');
 const librarySearch = document.getElementById('library-search');
-const filterBtns = document.querySelectorAll('.filter-btn');
+const libraryClearBtn = document.getElementById('library-clear-btn');
 
-let currentFilter = 'all';
+function updateLibraryClearVisibility() {
+    libraryClearBtn.style.display = librarySearch.value.trim() ? 'flex' : 'none';
+}
+librarySearch.addEventListener('input', updateLibraryClearVisibility);
+librarySearch.addEventListener('paste', () => setTimeout(updateLibraryClearVisibility, 0));
 
-// 필터 버튼 이벤트
-filterBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-        filterBtns.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        currentFilter = btn.dataset.filter;
-        loadLibraryItems();
-    });
+libraryClearBtn.addEventListener('click', () => {
+    librarySearch.value = '';
+    librarySearch.focus();
+    libraryClearBtn.style.display = 'none';
+    loadLibraryItems();
 });
 
 // 검색 이벤트
 librarySearch.addEventListener('input', async () => {
     const query = librarySearch.value.trim();
-    
     if (query) {
-        const results = await searchItems(query);
+        const allFavorites = await getAllItems('favorite');
+        const lowerQuery = query.toLowerCase();
+        const results = allFavorites.filter(item =>
+            item.title?.toLowerCase().includes(lowerQuery) ||
+            item.author?.toLowerCase().includes(lowerQuery) ||
+            item.artist?.toLowerCase().includes(lowerQuery)
+        );
         displayItems(results);
     } else {
         loadLibraryItems();
     }
 });
 
-// 저장소 항목 로드
+// 찜하기 목록 로드
 async function loadLibraryItems() {
     libraryItems.innerHTML = '<p>로딩 중...</p>';
-    
     try {
-        const items = await getAllItems(currentFilter);
+        const items = await getAllItems('favorite');
         displayItems(items);
     } catch (error) {
-        console.error('항목 로드 실패:', error);
-        libraryItems.innerHTML = '<p>항목을 불러오는데 실패했습니다.</p>';
+        console.error('찜하기 로드 실패:', error);
+        libraryItems.innerHTML = '<p>찜한 항목을 불러오는데 실패했습니다.</p>';
     }
 }
 
-// 항목 표시
+// 찜하기에서 "다운로드" 버튼 → 다운로드 탭으로 이동 후 해당 영상 셋팅
+function goToDownloadFromFavorite(url) {
+    var saveTab = document.querySelector('[data-page="save"]');
+    if (saveTab) saveTab.click();
+    setTimeout(function () {
+        if (window.setDownloadUrlAndFetch && url) window.setDownloadUrlAndFetch(url);
+    }, 350);
+}
+
+// 항목 표시: 검색 카드와 동일한 모양, 카드 클릭 = 유튜브 재생, 다운로드(영상 버튼 아이콘) / 찜삭제
 function displayItems(items) {
     if (items.length === 0) {
-        libraryItems.innerHTML = '<p>저장된 항목이 없습니다.</p>';
+        libraryItems.innerHTML = '<p>찜한 항목이 없습니다.</p>';
         return;
     }
-    
-    libraryItems.innerHTML = items.map(item => `
-        <div class="library-item">
-            <img src="${item.thumbnail}" alt="${item.title}" />
-            <div class="library-item-info">
-                <h4>${item.title}</h4>
-                <p>${item.author || item.artist || ''}</p>
-                <div class="library-item-badge">${item.type === 'favorite' ? '찜하기' : '다운로드'}</div>
-                <div style="margin-top: 8px;">
-                    <button class="action-btn" onclick="window.open('${item.url}', '_blank')">열기</button>
-                    ${item.type === 'favorite' ? 
-                        `<button class="action-btn" onclick="removeFavorite('${item.id}')">삭제</button>` :
-                        `<button class="action-btn" onclick="removeDownload('${item.id}')">삭제</button>`
-                    }
-                </div>
-            </div>
-        </div>
-    `).join('');
+    libraryItems.innerHTML = items.map(function (item) {
+        var url = (item.url || '').replace(/"/g, '&quot;');
+        var title = (item.title || '').replace(/"/g, '&quot;');
+        var thumb = item.thumbnail || '';
+        var author = item.author || item.artist || '';
+        var urlEsc = (item.url || '').replace(/'/g, "\\'");
+        var idEsc = (item.id || '').replace(/'/g, "\\'");
+        return '<div class="youtube-result-card card-clickable library-favorite-card" data-url="' + url + '" role="button" tabindex="0">' +
+            (thumb ? '<img src="' + thumb + '" alt="" class="youtube-card-thumbnail" />' : '<div class="youtube-card-thumbnail placeholder"></div>') +
+            '<div class="youtube-card-content">' +
+            '<h4 class="youtube-card-title">' + (item.title || '') + '</h4>' +
+            '<p class="youtube-card-channel">' + author + '</p>' +
+            '<div class="youtube-card-actions">' +
+            '<button type="button" class="card-btn card-btn-download-video" onclick="event.stopPropagation(); goToDownloadFromFavorite(\'' + urlEsc + '\');"><ion-icon name="download-outline"></ion-icon> 다운로드</button>' +
+            '<button type="button" class="card-btn card-btn-remove-favorite" onclick="event.stopPropagation(); removeFavorite(\'' + idEsc + '\');"><ion-icon name="trash-outline"></ion-icon> 찜삭제</button>' +
+            '</div></div></div>';
+    }).join('');
+
+    // 카드 클릭 시 유튜브 재생 (새 탭)
+    libraryItems.querySelectorAll('.youtube-result-card.card-clickable').forEach(function (el) {
+        var url = el.getAttribute('data-url');
+        if (!url) return;
+        el.addEventListener('click', function (e) {
+            if (e.target.closest('button')) return;
+            window.open(url, '_blank');
+        });
+        el.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                if (e.target.closest('button')) return;
+                window.open(url, '_blank');
+            }
+        });
+    });
 }
 
 // 찜하기 삭제
@@ -74,24 +104,11 @@ async function removeFavorite(id) {
     }
 }
 
-// 다운로드 삭제
-async function removeDownload(id) {
-    if (confirm('다운로드 목록에서 삭제하시겠습니까?')) {
-        await removeItem(id);
-        loadLibraryItems();
-    }
-}
-
-// 전역 함수로 등록
 window.removeFavorite = removeFavorite;
-window.removeDownload = removeDownload;
 
-// 페이지 로드 시 항목 불러오기
+// 찜하기 탭 클릭 시 로드
 document.addEventListener('DOMContentLoaded', () => {
-    // 내 저장소 탭 클릭 시 로드
     document.querySelector('[data-page="library"]').addEventListener('click', () => {
-        setTimeout(() => {
-            loadLibraryItems();
-        }, 100);
+        setTimeout(loadLibraryItems, 100);
     });
 });
