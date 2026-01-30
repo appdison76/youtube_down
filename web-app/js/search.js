@@ -3,24 +3,188 @@ const searchInput = document.getElementById('search-input');
 const searchBtn = document.getElementById('search-btn');
 const searchClearBtn = document.getElementById('search-clear-btn');
 const searchResults = document.getElementById('search-results');
+const searchSuggestions = document.getElementById('search-suggestions');
 
 function updateSearchClearVisibility() {
     searchClearBtn.style.display = searchInput.value.trim() ? 'flex' : 'none';
 }
 
-searchInput.addEventListener('input', updateSearchClearVisibility);
-searchInput.addEventListener('paste', () => setTimeout(updateSearchClearVisibility, 0));
+// 자동완성: 최근 검색어 + 서버 추천
+let suggestDebounceTimer = null;
+const SUGGEST_DEBOUNCE_MS = 280;
+const RECENT_SEARCHES_KEY = 'webapp_recent_searches';
+const MAX_RECENT_SEARCHES = 15;
 
-searchClearBtn.addEventListener('click', () => {
+function getRecentSearches() {
+    try {
+        var raw = localStorage.getItem(RECENT_SEARCHES_KEY);
+        if (!raw) return [];
+        var arr = JSON.parse(raw);
+        return Array.isArray(arr) ? arr : [];
+    } catch (e) { return []; }
+}
+
+function saveRecentSearch(query) {
+    if (!query || !query.trim()) return;
+    var q = query.trim();
+    var arr = getRecentSearches();
+    arr = arr.filter(function (item) { return item !== q; });
+    arr.unshift(q);
+    arr = arr.slice(0, MAX_RECENT_SEARCHES);
+    try { localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(arr)); } catch (e) {}
+}
+
+function removeRecentSearch(text) {
+    if (!text || !String(text).trim()) return;
+    var q = String(text).trim();
+    var arr = getRecentSearches().filter(function (item) { return item !== q; });
+    try { localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(arr)); } catch (e) {}
+}
+
+function hideSuggestions() {
+    searchSuggestions.style.display = 'none';
+    searchSuggestions.innerHTML = '';
+}
+
+function escapeForSuggest(s) {
+    return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function unescapeSuggest(val) {
+    return (val || '').replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+}
+
+var lastSuggestionsServer = [];
+
+function showSuggestions(opts) {
+    var recent = opts && Array.isArray(opts.recent) ? opts.recent : [];
+    var server = opts && Array.isArray(opts.server) ? opts.server : [];
+    lastSuggestionsServer = server;
+    if (recent.length === 0 && server.length === 0) {
+        hideSuggestions();
+        return;
+    }
+    var html = '';
+    if (recent.length > 0) {
+        html += '<div class="search-suggestions-label"><ion-icon name="time-outline"></ion-icon> 최근 검색</div>';
+        recent.forEach(function (text) {
+            var escaped = escapeForSuggest(text);
+            html += '<div class="search-suggestions-item search-suggestions-recent" role="option" data-value="' + escaped + '">' +
+                '<ion-icon name="time-outline"></ion-icon><span class="search-suggestions-text">' + escaped + '</span>' +
+                '<button type="button" class="search-suggestions-delete" title="삭제" aria-label="삭제" data-value="' + escaped + '"><ion-icon name="close-circle"></ion-icon></button></div>';
+        });
+    }
+    if (server.length > 0) {
+        html += '<div class="search-suggestions-label"><ion-icon name="flash-outline"></ion-icon> 추천</div>';
+        server.forEach(function (text) {
+            var escaped = escapeForSuggest(text);
+            html += '<div class="search-suggestions-item search-suggestions-server" role="option" data-value="' + escaped + '"><ion-icon name="flash-outline"></ion-icon><span class="search-suggestions-text">' + escaped + '</span></div>';
+        });
+    }
+    searchSuggestions.innerHTML = html;
+    searchSuggestions.style.display = 'block';
+
+    searchSuggestions.querySelectorAll('.search-suggestions-item').forEach(function (el) {
+        el.addEventListener('click', function (e) {
+            if (e.target.closest('.search-suggestions-delete')) return;
+            e.preventDefault();
+            var val = el.getAttribute('data-value');
+            if (val != null) {
+                searchInput.value = unescapeSuggest(val);
+                hideSuggestions();
+                searchInput.focus();
+            }
+        });
+    });
+
+    searchSuggestions.querySelectorAll('.search-suggestions-delete').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var val = btn.getAttribute('data-value');
+            if (val == null) return;
+            var text = unescapeSuggest(val);
+            removeRecentSearch(text);
+            var q = searchInput.value.trim();
+            var newRecent = getRecentSearches();
+            if (q.length > 0) newRecent = newRecent.filter(function (item) { return (item || '').toLowerCase().indexOf(q.toLowerCase()) !== -1; });
+            showSuggestions({ recent: newRecent, server: lastSuggestionsServer });
+        });
+    });
+}
+
+function showSuggestionsFlat(list) {
+    if (!list || list.length === 0) {
+        hideSuggestions();
+        return;
+    }
+    showSuggestions({ recent: list, server: [] });
+}
+
+function onSearchInputForSuggest() {
+    var q = searchInput.value.trim();
+    if (q.length === 0) {
+        var recent = getRecentSearches();
+        showSuggestions({ recent: recent, server: [] });
+        return;
+    }
+    if (suggestDebounceTimer) clearTimeout(suggestDebounceTimer);
+    suggestDebounceTimer = setTimeout(async function () {
+        suggestDebounceTimer = null;
+        if (searchInput.value.trim() !== q) return;
+        try {
+            var recent = getRecentSearches().filter(function (item) {
+                return (item || '').toLowerCase().indexOf(q.toLowerCase()) !== -1;
+            });
+            var serverList = typeof getSearchSuggestions === 'function' ? await getSearchSuggestions(q) : [];
+            if (searchInput.value.trim() !== q) return;
+            var seen = {};
+            var recentFiltered = [];
+            recent.forEach(function (s) {
+                if (!seen[s]) { seen[s] = true; recentFiltered.push(s); }
+            });
+            var serverFiltered = (Array.isArray(serverList) ? serverList : []).filter(function (s) {
+                if (seen[s]) return false;
+                seen[s] = true;
+                return true;
+            });
+            showSuggestions({ recent: recentFiltered, server: serverFiltered });
+        } catch (err) {
+            console.warn('자동완성 오류:', err);
+            hideSuggestions();
+        }
+    }, SUGGEST_DEBOUNCE_MS);
+}
+
+searchInput.addEventListener('input', function () {
+    updateSearchClearVisibility();
+    onSearchInputForSuggest();
+});
+searchInput.addEventListener('paste', function () { setTimeout(function () { updateSearchClearVisibility(); onSearchInputForSuggest(); }, 0); });
+
+// 포커스 시에는 레이어 안 띄움 → 검색 후 결과를 가리지 않음. 입력/붙여넣기할 때만 표시
+searchInput.addEventListener('blur', function () {
+    setTimeout(hideSuggestions, 180);
+});
+searchInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') hideSuggestions();
+    if (e.key === 'Enter') hideSuggestions();
+});
+
+searchClearBtn.addEventListener('click', function () {
     searchInput.value = '';
     searchInput.focus();
     searchClearBtn.style.display = 'none';
     searchResults.innerHTML = '';
+    hideSuggestions();
 });
 
-searchBtn.addEventListener('click', performSearch);
-searchInput.addEventListener('keypress', (e) => {
+searchBtn.addEventListener('click', function () {
+    hideSuggestions();
+    performSearch();
+});
+searchInput.addEventListener('keypress', function (e) {
     if (e.key === 'Enter') {
+        hideSuggestions();
         performSearch();
     }
 });
@@ -28,7 +192,9 @@ searchInput.addEventListener('keypress', (e) => {
 async function performSearch() {
     const query = searchInput.value.trim();
     if (!query) return;
-    
+
+    saveRecentSearch(query);
+
     searchResults.innerHTML = '<p>검색 중...</p>';
     
     try {

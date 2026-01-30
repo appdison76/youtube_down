@@ -83,6 +83,24 @@ async function searchYouTube(query, maxResults = 20) {
   return await response.json();
 }
 
+// 검색 자동완성 (서버 /api/autocomplete 사용)
+async function getSearchSuggestions(query) {
+  if (!query || !query.trim()) return [];
+  try {
+    const response = await fetchWithFallback('/api/autocomplete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ q: query.trim() }),
+    });
+    if (!response.ok) return [];
+    const list = await response.json();
+    return Array.isArray(list) ? list : [];
+  } catch (e) {
+    console.warn('[autocomplete]', e?.message || e);
+    return [];
+  }
+}
+
 // YouTube 영상 정보 (이중화)
 async function getVideoInfo(url) {
   const response = await fetchWithFallback('/api/video-info', {

@@ -91,13 +91,16 @@
         <div id="search-page" class="page" style="display: none;">
             <div class="search-area">
                 <h3 class="section-title">YouTube 검색</h3>
-                <div class="search-input-wrap">
-                    <input type="text" id="search-input" class="search-input" placeholder="YouTube 검색..." autocomplete="off" />
-                    <button type="button" id="search-clear-btn" class="search-clear-btn" title="검색어 지우기" aria-label="검색어 지우기" style="display: none;">
-                        <ion-icon name="close-circle"></ion-icon>
-                    </button>
+                <div class="search-row">
+                    <div class="search-input-wrap">
+                        <input type="text" id="search-input" class="search-input" placeholder="YouTube 검색..." autocomplete="off" />
+                        <button type="button" id="search-clear-btn" class="search-clear-btn" title="검색어 지우기" aria-label="검색어 지우기" style="display: none;">
+                            <ion-icon name="close-circle"></ion-icon>
+                        </button>
+                        <div id="search-suggestions" class="search-suggestions" style="display: none;" role="listbox" aria-label="검색 추천"></div>
+                    </div>
+                    <button id="search-btn" class="search-button">검색</button>
                 </div>
-                <button id="search-btn" class="search-button">검색</button>
                 <div id="search-results" class="search-results youtube-results-list"></div>
             </div>
         </div>

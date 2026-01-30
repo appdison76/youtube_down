@@ -472,9 +472,16 @@ body {
     padding: 20px;
 }
 
+.search-row {
+    display: flex;
+    gap: 10px;
+    align-items: stretch;
+    margin-bottom: 16px;
+}
 .search-input-wrap {
     position: relative;
-    margin-bottom: 16px;
+    flex: 1;
+    min-width: 0;
 }
 .search-input {
     width: 100%;
@@ -510,9 +517,108 @@ body {
     font-size: 24px;
 }
 
+/* 검색 자동완성 드롭다운 */
+.search-suggestions {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    margin-top: 4px;
+    max-height: 240px;
+    overflow-y: auto;
+    background: #fff;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    z-index: 100;
+    box-sizing: border-box;
+}
+.search-suggestions-item {
+    padding: 10px 14px;
+    font-size: 15px;
+    color: #333;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.search-suggestions-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.search-suggestions-item .ion-icon,
+.search-suggestions-item ion-icon {
+    font-size: 18px;
+    color: #888;
+    flex-shrink: 0;
+}
+.search-suggestions-item .search-suggestions-text {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.search-suggestions-item span {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.search-suggestions-delete {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: #999;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    -webkit-tap-highlight-color: transparent;
+}
+.search-suggestions-delete:hover {
+    color: #e53935;
+    background: #ffebee;
+}
+.search-suggestions-delete ion-icon {
+    font-size: 20px;
+}
+.search-suggestions-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #888;
+    background: #f9f9f9;
+    border-bottom: 1px solid #eee;
+}
+.search-suggestions-label ion-icon {
+    font-size: 14px;
+}
+.search-suggestions-label:first-child {
+    padding-top: 8px;
+}
+.search-suggestions-item:last-child {
+    border-bottom: none;
+}
+.search-suggestions-item:hover,
+.search-suggestions-item:focus {
+    background: #f5f5f5;
+    outline: none;
+}
+
 .search-button {
-    width: 100%;
-    padding: 12px;
+    flex-shrink: 0;
+    padding: 12px 20px;
     background: #FF0000;
     color: white;
     border: none;
