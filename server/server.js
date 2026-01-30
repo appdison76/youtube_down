@@ -15,7 +15,7 @@ const PORT = process.env.PORT || 3000;
 const PROXY_URL = process.env.PROXY_URL || process.env.YTDLP_PROXY || null;
 
 if (PROXY_URL) {
-  console.log(`[Server] 프록시 사용: ${PROXY_URL}`);
+  console.log('[Server] 프록시 사용: ' + PROXY_URL);
 } else {
   console.log('[Server] 프록시 미사용 (직접 연결)');
 }
@@ -66,10 +66,10 @@ const getUserAgent = (client) => {
   }
 };
 
-console.log(`[Server] Will try player_clients in order: ${PLAYER_CLIENTS.join(' -> ')}');
+console.log('[Server] Will try player_clients in order: ' + PLAYER_CLIENTS.join(' -> '));
 
-// 제목으로 다운로드 파일명 생성 (파일시스템/헤더 안전 문자만 허용)
-const safeDownloadFilename = (title, ext) => {
+// 제목 → 파일명 (경로 불가 문자만 제거, 한글 유지)
+const sanitizeFilename = (title, ext) => {
   const s = (title || '')
     .replace(/[\\/:*?"<>|\x00-\x1f]/g, '_')
     .replace(/\s+/g, ' ')
@@ -77,6 +77,27 @@ const safeDownloadFilename = (title, ext) => {
     .slice(0, 200);
   const base = s || 'download';
   return base + (ext.startsWith('.') ? ext : '.' + ext);
+};
+// ASCII 전용 (filename="..." 폴백용, 구형 클라이언트)
+const safeDownloadFilenameAscii = (title, ext) => {
+  const s = (title || '')
+    .replace(/[\\/:*?"<>|\x00-\x1f]/g, '_')
+    .replace(/[^\x20-\x7E]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 200);
+  const base = s || 'download';
+  return base + (ext.startsWith('.') ? ext : '.' + ext);
+};
+// Content-Disposition 값: 한글 있으면 RFC 5987 (filename*=UTF-8'') 로 한글 유지
+const contentDispositionAttachment = (title, ext, defaultName) => {
+  const extDot = ext.startsWith('.') ? ext : '.' + ext;
+  if (title == null || !String(title).trim()) {
+    return 'attachment; filename="' + defaultName + '"';
+  }
+  const asciiName = safeDownloadFilenameAscii(title, ext);
+  const utf8Name = sanitizeFilename(title, ext);
+  return 'attachment; filename="' + asciiName + '"; filename*=UTF-8\'\'' + encodeURIComponent(utf8Name) + '"';
 };
 
 // 미들웨어
@@ -86,22 +107,14 @@ app.use(express.json());
 // 접속 시마다 로그 (터널/외부 접속 확인용)
 app.use((req, res, next) => {
   const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || '-';
-  console.log(`[Server] ${req.method} ${req.path} ${ip}`);
+  console.log('[Server] ' + req.method + ' ' + req.path + ' ' + ip);
   next();
 });
 
 // 루트: API 서버 안내 (Cannot GET / 방지)
 app.get('/', (req, res) => {
-  res.type('text/html').send(`
-    <!DOCTYPE html>
-    <html><head><meta charset="utf-8"><title>YouTube Downloader API</title></head>
-    <body style="font-family:sans-serif;padding:2rem;max-width:600px;">
-      <h1>YouTube Downloader API</h1>
-      <p>이 서버는 API 전용입니다. 브라우저에서 직접 사용하는 페이지는 설치 페이지(install-page) 또는 앱에서 열어주세요.</p>
-      <p><a href="/health">/health</a> — 서버 상태 확인</p>
-      <p><a href="/api/tunnel-url">/api/tunnel-url</a> — 터널 URL (로컬 전용)</p>
-    </body></html>
-  `);
+  const html = '<!DOCTYPE html>\n<html><head><meta charset="utf-8"><title>YouTube Downloader API</title></head>\n<body style="font-family:sans-serif;padding:2rem;max-width:600px;">\n  <h1>YouTube Downloader API</h1>\n  <p>이 서버는 API 전용입니다. 브라우저에서 직접 사용하는 페이지는 설치 페이지(install-page) 또는 앱에서 열어주세요.</p>\n  <p><a href="/health">/health</a> — 서버 상태 확인</p>\n  <p><a href="/api/tunnel-url">/api/tunnel-url</a> — 터널 URL (로컬 전용)</p>\n</body></html>';
+  res.type('text/html').send(html);
 });
 
 // IP 차단 테스트 엔드포인트
@@ -116,7 +129,7 @@ app.get('/api/test-ip', async (req, res) => {
     
     for (const playerClient of PLAYER_CLIENTS) {
       try {
-        console.log(`[Server] Testing ${playerClient}...`);
+        console.log('[Server] Testing ' + playerClient + '...');
         const userAgent = getUserAgent(playerClient);
         
         // yt-dlp로 간단한 정보만 가져오기 (다운로드 없이)
@@ -389,8 +402,7 @@ app.head('/api/download/video', (req, res) => {
   if (!url) return res.status(400).end();
   const n = expectedSize ? parseInt(expectedSize, 10) : null;
   const useCL = Number.isInteger(n) && n > 0;
-  const filename = (title != null && String(title).trim()) ? safeDownloadFilename(title, 'mp4') : 'video.mp4';
-  const h = { 'Content-Disposition': `attachment; filename="${filename}"`, 'Content-Type': 'video/mp4', 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache' };
+  const h = { 'Content-Disposition': contentDispositionAttachment(title, 'mp4', 'video.mp4'), 'Content-Type': 'video/mp4', 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache' };
   if (useCL) h['Content-Length'] = n; else h['Transfer-Encoding'] = 'chunked';
   res.writeHead(200, h);
   res.end();
@@ -400,8 +412,7 @@ app.head('/api/download/audio', (req, res) => {
   if (!url) return res.status(400).end();
   const n = expectedSize ? parseInt(expectedSize, 10) : null;
   const useCL = Number.isInteger(n) && n > 0;
-  const filename = (title != null && String(title).trim()) ? safeDownloadFilename(title, 'm4a') : 'audio.m4a';
-  const h = { 'Content-Disposition': `attachment; filename="${filename}"`, 'Content-Type': 'audio/mp4', 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache' };
+  const h = { 'Content-Disposition': contentDispositionAttachment(title, 'm4a', 'audio.m4a'), 'Content-Type': 'audio/mp4', 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache' };
   if (useCL) h['Content-Length'] = n; else h['Transfer-Encoding'] = 'chunked';
   res.writeHead(200, h);
   res.end();
@@ -420,10 +431,9 @@ app.get('/api/download/video', async (req, res) => {
     const useContentLength = Number.isInteger(expectedSizeNum) && expectedSizeNum > 0;
     console.log('[Server] [VIDEO] expectedSize from query:', req.query.expectedSize, '→ parsed:', expectedSizeNum, 'useContentLength:', useContentLength);
 
-    const videoFilename = (title != null && String(title).trim()) ? safeDownloadFilename(title, 'mp4') : 'video.mp4';
     // 헤더 객체 (HEAD/GET 공통)
     const videoHeaders = {
-      'Content-Disposition': `attachment; filename="${videoFilename}"`,
+      'Content-Disposition': contentDispositionAttachment(title, 'mp4', 'video.mp4'),
       'Content-Type': 'video/mp4',
       'Accept-Ranges': 'bytes',
       'Cache-Control': 'no-cache',
@@ -777,10 +787,9 @@ app.get('/api/download/audio', async (req, res) => {
     const useContentLength = Number.isInteger(expectedSizeNum) && expectedSizeNum > 0;
     console.log('[Server] [AUDIO] expectedSize from query:', req.query.expectedSize, '→ parsed:', expectedSizeNum, 'useContentLength:', useContentLength);
 
-    const audioFilename = (title != null && String(title).trim()) ? safeDownloadFilename(title, 'm4a') : 'audio.m4a';
     // 헤더 객체 (HEAD/GET 공통)
     const audioHeaders = {
-      'Content-Disposition': `attachment; filename="${audioFilename}"`,
+      'Content-Disposition': contentDispositionAttachment(title, 'm4a', 'audio.m4a'),
       'Content-Type': 'audio/mp4',
       'Accept-Ranges': 'bytes',
       'Cache-Control': 'no-cache',
