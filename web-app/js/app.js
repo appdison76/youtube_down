@@ -1,5 +1,14 @@
 // 앱 메인 로직 - 페이지 전환
 document.addEventListener('DOMContentLoaded', () => {
+    // PRO 설치 배너 링크: 로컬은 8000 포트, 배포는 GitHub Pages
+    const banner = document.getElementById('pro-install-banner');
+    if (banner) {
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        banner.href = isLocal
+            ? 'http://localhost:8000/install-page/'
+            : 'https://appdison76.github.io/youtube_down/install-page/';
+    }
+
     const navTabs = document.querySelectorAll('.nav-tab');
     const pages = document.querySelectorAll('.page');
     

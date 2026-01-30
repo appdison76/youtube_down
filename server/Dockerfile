@@ -17,14 +17,18 @@ RUN pip3 install --no-cache-dir --upgrade pip && \
 # 작업 디렉토리 설정
 WORKDIR /app
 
+# (빌드 컨텍스트: 프로젝트 루트에서 docker build -f server/Dockerfile .)
 # package.json과 package-lock.json 복사
-COPY package*.json ./
+COPY server/package*.json ./
 
 # npm 의존성 설치
 RUN npm ci --only=production
 
 # 서버 파일 복사
-COPY server.js ./
+COPY server/server.js ./
+
+# 설치 페이지 (PRO 배너 링크용)
+COPY install-page ./install-page
 
 # 다운로드 디렉토리 생성
 RUN mkdir -p downloads
