@@ -706,6 +706,17 @@ body {
     margin: 0 auto;
     min-height: 140px;
     max-width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+}
+/* PC에서 쿠팡 주입 iframe/div 가운데 정렬 (install-page처럼) */
+#coupang-banner iframe,
+#coupang-banner > div {
+    margin-left: auto !important;
+    margin-right: auto !important;
+    display: block !important;
 }
 
 /* 반응형 */
