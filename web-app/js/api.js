@@ -114,6 +114,13 @@ function downloadAudio(url) {
   return getDownloadBaseUrl().then(base => base + '/api/download/audio?url=' + encodeURIComponent(url));
 }
 
+// 파일명으로 쓸 수 있게 제목 정리 (불가 문자 제거, 길이 제한)
+function sanitizeFileName(title) {
+  if (!title || typeof title !== 'string') return '';
+  const s = title.replace(/[/\\:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim();
+  return s.length > 180 ? s.slice(0, 180) : s;
+}
+
 // ngrok 등이 HTML 에러 페이지를 200으로 줄 수 있음 → 실제 미디어인지 검사
 async function isLikelyMediaResponse(res, blob) {
   const ct = (res.headers.get('content-type') || '').toLowerCase();

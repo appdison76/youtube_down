@@ -286,28 +286,30 @@ function renderRecognitionYouTubeResults(items) {
         btn.addEventListener('click', async (e) => {
             e.stopPropagation();
             const url = btn.dataset.url;
-            const title = (btn.dataset.title || 'video').substring(0, 50);
+            const title = btn.dataset.title || 'video';
+            const videoId = url.match(/v=([^&]+)/)?.[1] || '';
             try {
-                const base = await getDownloadBaseUrl();
-                window.open(base + '/api/download/video?url=' + encodeURIComponent(url) + '&quality=highestvideo', '_blank');
+                const fileName = (sanitizeFileName(title) || 'video') + '.mp4';
+                await downloadVideoWithFallback(url, fileName);
                 if (typeof addItem === 'function') {
-                    await addItem({ id: url.match(/v=([^&]+)/)?.[1] || '', title, url, thumbnail: '', author: '', type: 'downloaded', format: 'video' });
+                    await addItem({ id: videoId, title, url, thumbnail: '', author: '', type: 'downloaded', format: 'video' });
                 }
-            } catch (err) { console.error(err); }
+            } catch (err) { console.error(err); alert('다운로드에 실패했습니다.'); }
         });
     });
     recognitionYoutubeResults.querySelectorAll('.card-btn-download-audio').forEach(btn => {
         btn.addEventListener('click', async (e) => {
             e.stopPropagation();
             const url = btn.dataset.url;
-            const title = (btn.dataset.title || 'audio').substring(0, 50);
+            const title = btn.dataset.title || 'audio';
+            const videoId = url.match(/v=([^&]+)/)?.[1] || '';
             try {
-                const base = await getDownloadBaseUrl();
-                window.open(base + '/api/download/audio?url=' + encodeURIComponent(url) + '&quality=highestaudio', '_blank');
+                const fileName = (sanitizeFileName(title) || 'audio') + '.m4a';
+                await downloadAudioWithFallback(url, fileName);
                 if (typeof addItem === 'function') {
-                    await addItem({ id: url.match(/v=([^&]+)/)?.[1] || '', title, url, thumbnail: '', author: '', type: 'downloaded', format: 'audio' });
+                    await addItem({ id: videoId, title, url, thumbnail: '', author: '', type: 'downloaded', format: 'audio' });
                 }
-            } catch (err) { console.error(err); }
+            } catch (err) { console.error(err); alert('다운로드에 실패했습니다.'); }
         });
     });
     recognitionYoutubeResults.querySelectorAll('.card-btn-favorite').forEach(btn => {
