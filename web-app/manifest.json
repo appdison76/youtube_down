@@ -9,12 +9,12 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "../install-page/logo.png",
+      "src": "logo.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "../install-page/logo.png",
+      "src": "logo.png",
       "sizes": "512x512",
       "type": "image/png"
     }

@@ -66,7 +66,18 @@ const getUserAgent = (client) => {
   }
 };
 
-console.log(`[Server] Will try player_clients in order: ${PLAYER_CLIENTS.join(' -> ')}`);
+console.log(`[Server] Will try player_clients in order: ${PLAYER_CLIENTS.join(' -> ')}');
+
+// 제목으로 다운로드 파일명 생성 (파일시스템/헤더 안전 문자만 허용)
+const safeDownloadFilename = (title, ext) => {
+  const s = (title || '')
+    .replace(/[\\/:*?"<>|\x00-\x1f]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 200);
+  const base = s || 'download';
+  return base + (ext.startsWith('.') ? ext : '.' + ext);
+};
 
 // 미들웨어
 app.use(cors());
@@ -366,23 +377,31 @@ app.post('/api/video-info', async (req, res) => {
   }
 });
 
+// ========== 다운로드 API (웹·앱 공통) ==========
+// 분기: 별도 경로/User-Agent 없음. 쿼리 title 유무로만 구분.
+// - 앱: title 안 보냄 → filename video.mp4/audio.m4a (앱은 videoId로 내부 저장, 이 헤더는 참고용)
+// - 웹: title 보냄 → filename 제목.mp4/제목.m4a (브라우저 저장 시 사용)
+// 공통 로직 수정 시: title 없을 때 기본값 유지해야 앱 동작에 영향 없음.
+
 // HEAD: Pre-check용, 헤더만 반환 (yt-dlp 실행 안 함 → 두 번 받는 것 방지)
 app.head('/api/download/video', (req, res) => {
-  const { url, expectedSize } = req.query;
+  const { url, expectedSize, title } = req.query;
   if (!url) return res.status(400).end();
   const n = expectedSize ? parseInt(expectedSize, 10) : null;
   const useCL = Number.isInteger(n) && n > 0;
-  const h = { 'Content-Disposition': 'attachment; filename="video.mp4"', 'Content-Type': 'video/mp4', 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache' };
+  const filename = (title != null && String(title).trim()) ? safeDownloadFilename(title, 'mp4') : 'video.mp4';
+  const h = { 'Content-Disposition': `attachment; filename="${filename}"`, 'Content-Type': 'video/mp4', 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache' };
   if (useCL) h['Content-Length'] = n; else h['Transfer-Encoding'] = 'chunked';
   res.writeHead(200, h);
   res.end();
 });
 app.head('/api/download/audio', (req, res) => {
-  const { url, expectedSize } = req.query;
+  const { url, expectedSize, title } = req.query;
   if (!url) return res.status(400).end();
   const n = expectedSize ? parseInt(expectedSize, 10) : null;
   const useCL = Number.isInteger(n) && n > 0;
-  const h = { 'Content-Disposition': 'attachment; filename="audio.m4a"', 'Content-Type': 'audio/mp4', 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache' };
+  const filename = (title != null && String(title).trim()) ? safeDownloadFilename(title, 'm4a') : 'audio.m4a';
+  const h = { 'Content-Disposition': `attachment; filename="${filename}"`, 'Content-Type': 'audio/mp4', 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache' };
   if (useCL) h['Content-Length'] = n; else h['Transfer-Encoding'] = 'chunked';
   res.writeHead(200, h);
   res.end();
@@ -391,7 +410,7 @@ app.head('/api/download/audio', (req, res) => {
 // 영상 다운로드 (스트리밍)
 app.get('/api/download/video', async (req, res) => {
   try {
-    const { url, quality, expectedSize } = req.query;
+    const { url, quality, expectedSize, title } = req.query;
     
     if (!url) {
       return res.status(400).json({ error: 'URL이 필요합니다.' });
@@ -401,9 +420,10 @@ app.get('/api/download/video', async (req, res) => {
     const useContentLength = Number.isInteger(expectedSizeNum) && expectedSizeNum > 0;
     console.log('[Server] [VIDEO] expectedSize from query:', req.query.expectedSize, '→ parsed:', expectedSizeNum, 'useContentLength:', useContentLength);
 
+    const videoFilename = (title != null && String(title).trim()) ? safeDownloadFilename(title, 'mp4') : 'video.mp4';
     // 헤더 객체 (HEAD/GET 공통)
     const videoHeaders = {
-      'Content-Disposition': 'attachment; filename="video.mp4"',
+      'Content-Disposition': `attachment; filename="${videoFilename}"`,
       'Content-Type': 'video/mp4',
       'Accept-Ranges': 'bytes',
       'Cache-Control': 'no-cache',
@@ -746,7 +766,7 @@ app.get('/api/download/audio', async (req, res) => {
     console.log('[Server] Query params:', req.query);
     console.log('[Server] Full URL:', req.url);
     
-    const { url, quality, expectedSize } = req.query;
+    const { url, quality, expectedSize, title } = req.query;
     
     if (!url) {
       console.error('[Server] ❌ URL missing in query params');
@@ -757,9 +777,10 @@ app.get('/api/download/audio', async (req, res) => {
     const useContentLength = Number.isInteger(expectedSizeNum) && expectedSizeNum > 0;
     console.log('[Server] [AUDIO] expectedSize from query:', req.query.expectedSize, '→ parsed:', expectedSizeNum, 'useContentLength:', useContentLength);
 
+    const audioFilename = (title != null && String(title).trim()) ? safeDownloadFilename(title, 'm4a') : 'audio.m4a';
     // 헤더 객체 (HEAD/GET 공통)
     const audioHeaders = {
-      'Content-Disposition': 'attachment; filename="audio.m4a"',
+      'Content-Disposition': `attachment; filename="${audioFilename}"`,
       'Content-Type': 'audio/mp4',
       'Accept-Ranges': 'bytes',
       'Cache-Control': 'no-cache',

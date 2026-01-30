@@ -305,6 +305,16 @@ body {
     box-shadow: 0 4px 12px rgba(0,0,0,0.12);
 }
 
+.youtube-result-card.card-clickable {
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.youtube-result-card.card-clickable:focus,
+.youtube-result-card:focus {
+    outline: none;
+}
+
 .youtube-card-thumbnail {
     width: 160px;
     min-width: 160px;
@@ -344,48 +354,85 @@ body {
 
 .youtube-card-actions {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 8px;
     margin-top: 4px;
+    align-items: center;
+}
+
+.card-btn ion-icon {
+    font-size: 18px;
+    margin-right: 4px;
+    vertical-align: middle;
 }
 
 .card-btn {
-    padding: 8px 12px;
-    border: none;
+    flex: 1;
+    min-width: 0;
+    height: 36px;
+    min-height: 36px;
+    max-height: 36px;
+    padding: 0 10px;
+    border: 1px solid transparent;
     border-radius: 8px;
     font-size: 13px;
     font-weight: 600;
+    line-height: 1;
     cursor: pointer;
     transition: all 0.2s;
-}
-
-.card-btn-play {
-    background: #2196F3;
-    color: white;
-}
-
-.card-btn-play:hover {
-    background: #1976D2;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 .card-btn-favorite {
-    background: #FFE5E5;
-    color: #333;
+    background: transparent;
+    color: #666;
+    border: 1px solid #ddd;
+    height: 36px !important;
+    min-height: 36px !important;
+    max-height: 36px !important;
+    padding: 0 10px !important;
+    box-sizing: border-box;
+    line-height: 1;
 }
 
 .card-btn-favorite:hover {
-    background: #ffcccc;
+    background: #f5f5f5;
 }
 
-.card-btn-download-video,
-.card-btn-download-audio {
+.card-btn-favorite.is-favorited {
+    background: #F9A825 !important;
+    color: #fff !important;
+    border-color: #F9A825 !important;
+}
+
+.card-btn-favorite.is-favorited:hover {
+    background: #F57C00 !important;
+    border-color: #F57C00 !important;
+}
+
+.card-btn-download-video {
     background: #FF0000;
     color: white;
+    border-color: #FF0000;
 }
 
-.card-btn-download-video:hover,
-.card-btn-download-audio:hover {
+.card-btn-download-video:hover {
     background: #cc0000;
+}
+
+.card-btn-download-audio {
+    background: #4CAF50;
+    color: white;
+    border-color: #4CAF50;
+}
+
+.card-btn-download-audio:hover {
+    background: #388E3C;
 }
 
 /* 검색 화면 */

@@ -65,7 +65,8 @@ downloadVideoBtn.addEventListener('click', async () => {
     if (!currentVideoUrl) return;
     try {
         const base = await getDownloadBaseUrl();
-        const url = base + '/api/download/video?url=' + encodeURIComponent(currentVideoUrl) + '&quality=highestvideo';
+        const title = videoTitle.textContent || 'video';
+        const url = base + '/api/download/video?url=' + encodeURIComponent(currentVideoUrl) + '&quality=highestvideo&title=' + encodeURIComponent(title);
         window.open(url);
         addItem({
             id: currentVideoId,
@@ -86,7 +87,8 @@ downloadAudioBtn.addEventListener('click', async () => {
     if (!currentVideoUrl) return;
     try {
         const base = await getDownloadBaseUrl();
-        const url = base + '/api/download/audio?url=' + encodeURIComponent(currentVideoUrl) + '&quality=highestaudio';
+        const title = videoTitle.textContent || 'audio';
+        const url = base + '/api/download/audio?url=' + encodeURIComponent(currentVideoUrl) + '&quality=highestaudio&title=' + encodeURIComponent(title);
         window.open(url);
         addItem({
             id: currentVideoId,
