@@ -309,7 +309,7 @@ body {
 
 /* 인식 완료 시 스크롤 시 상단 고정 메뉴에 가리지 않도록 여백 */
 .recognition-result > .section-title {
-    scroll-margin-top: 160px;
+    scroll-margin-top: 180px;
 }
 
 .result-card {
