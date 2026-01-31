@@ -183,8 +183,9 @@ async function startRecognition() {
                 
                 recognitionResult.style.display = 'block';
                 recognitionStatus.textContent = '인식 완료!';
-                // 인식된 곡 영역이 보이도록 스크롤
-                recognitionResult.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                // 인식된 곡 제목까지만 보이도록 스크롤 (다운로드할 영상 선택까지 내려가지 않게)
+                const scrollTarget = recognitionResult.querySelector('.section-title') || recognitionResult.querySelector('.recognition-result-card') || recognitionResult;
+                scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 
             } catch (error) {
                 console.error('인식 실패:', error);
