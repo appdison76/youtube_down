@@ -97,6 +97,14 @@ body {
     display: flex;
     align-items: center;
     gap: 0;
+    cursor: pointer;
+    /* 버튼으로 쓸 때 기본 스타일 제거 */
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    font: inherit;
+    color: inherit;
 }
 
 .logo-container {

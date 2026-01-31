@@ -1,5 +1,5 @@
-// 앱 메인 로직 - 페이지 전환
-document.addEventListener('DOMContentLoaded', () => {
+// 앱 메인 로직 - 페이지 전환 (스크립트가 body 맨 아래 로드되므로 DOM은 이미 준비된 경우가 많음)
+function initApp() {
     // PRO 설치 배너 링크: 로컬/사설IP(폰 와이파이 등)는 8000 포트, 배포는 GitHub Pages
     const banner = document.getElementById('pro-install-banner');
     if (banner) {
@@ -15,17 +15,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const pages = document.querySelectorAll('.page');
 
     // 타이틀바 로고/아이콘 클릭 시 첫 페이지로 리로드 (새로고침)
-    const headerLeft = document.querySelector('.header-left');
-    if (headerLeft) {
-        headerLeft.style.cursor = 'pointer';
-        const reloadToFirstPage = () => location.reload();
-        headerLeft.addEventListener('click', reloadToFirstPage);
-        headerLeft.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                reloadToFirstPage();
-            }
-        });
+    const headerHomeBtn = document.getElementById('header-home-btn');
+    if (headerHomeBtn) {
+        headerHomeBtn.addEventListener('click', () => location.reload());
     }
 
     navTabs.forEach(tab => {
@@ -49,4 +41,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
-});
+}
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initApp);
+} else {
+    initApp();
+}
