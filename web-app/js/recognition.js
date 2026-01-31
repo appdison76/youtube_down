@@ -140,10 +140,13 @@ async function startRecognition() {
         mediaRecorder.onstop = async () => {
             stream.getTracks().forEach(track => track.stop());
             
-            // 인식 중 상태: 아이콘은 stop 유지, 버튼 클릭 무시
+            // 인식 중 상태: stop 아이콘 강제 유지, 버튼 클릭 무시
             isRecognizing = true;
             recognitionStatus.textContent = '인식 중...';
-            // stop 아이콘 유지 (stopRecognition에서 mic으로 바꾸지 않도록 이미 처리됨 → 여기서 유지)
+            const micIconEl = document.getElementById('mic-icon');
+            const stopIconEl = document.getElementById('stop-icon');
+            if (micIconEl) micIconEl.style.display = 'none';
+            if (stopIconEl) stopIconEl.style.display = 'block';
             
             const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
             
