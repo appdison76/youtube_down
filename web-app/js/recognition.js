@@ -2,6 +2,7 @@
 let mediaRecorder = null;
 let audioChunks = [];
 let isRecording = false;
+let isRecognizing = false; // API 호출 중(인식 중...) — 이때는 버튼 비활성
 let permissionDenied = false; // 권한 거부 상태 추적
 let permissionCheckInterval = null; // 권한 상태 주기적 확인
 
@@ -16,6 +17,7 @@ const recognitionYoutubeArea = document.getElementById('recognition-youtube-area
 const recognitionYoutubeResults = document.getElementById('recognition-youtube-results');
 
 recognitionBtn.addEventListener('click', async () => {
+    if (isRecognizing) return; // 인식 중에는 무시 (아이콘 눌러도 반응 없음)
     console.log('Button clicked, isRecording:', isRecording);
     if (isRecording) {
         console.log('Stopping recognition...');
@@ -138,11 +140,12 @@ async function startRecognition() {
         mediaRecorder.onstop = async () => {
             stream.getTracks().forEach(track => track.stop());
             
-            // Blob 생성
-            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-            
-            // API 호출
+            // 인식 중 상태: 아이콘은 stop 유지, 버튼 클릭 무시
+            isRecognizing = true;
             recognitionStatus.textContent = '인식 중...';
+            // stop 아이콘 유지 (stopRecognition에서 mic으로 바꾸지 않도록 이미 처리됨 → 여기서 유지)
+            
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
             
             try {
                 const result = await recognizeMusic(audioBlob);
@@ -181,6 +184,14 @@ async function startRecognition() {
             } catch (error) {
                 console.error('인식 실패:', error);
                 recognitionStatus.textContent = '인식에 실패했습니다. 다시 시도해주세요.';
+            } finally {
+                isRecognizing = false;
+                // 인식 끝나면 마이크 아이콘으로 복원
+                const micIcon = document.getElementById('mic-icon');
+                const stopIcon = document.getElementById('stop-icon');
+                if (micIcon) micIcon.style.display = 'block';
+                if (stopIcon) stopIcon.style.display = 'none';
+                recognitionBtn.classList.remove('recording');
             }
         };
         
@@ -356,31 +367,13 @@ function stopRecognition() {
         mediaRecorder.stop();
         isRecording = false;
         recognitionBtn.classList.remove('recording');
-        
-        // 아이콘 변경 (stop -> mic)
-        const micIcon = document.getElementById('mic-icon');
-        const stopIcon = document.getElementById('stop-icon');
-        console.log('Restoring icon - micIcon:', micIcon, 'stopIcon:', stopIcon);
-        if (micIcon) {
-            micIcon.style.display = 'block';
-            console.log('Mic icon shown');
-        }
-        if (stopIcon) {
-            stopIcon.style.display = 'none';
-            console.log('Stop icon hidden');
-        }
+        // 아이콘은 onstop 쪽에서 인식 끝난 뒤 mic으로 바꿈. 여기서 바꾸면 "인식 중..."일 때 마이크로 바뀌어서 사용자가 또 누르게 됨 → 바꾸지 않음
     } else if (isRecording) {
-        // 녹음이 시작되지 않았지만 isRecording이 true인 경우
         isRecording = false;
         recognitionBtn.classList.remove('recording');
-        
         const micIcon = document.getElementById('mic-icon');
         const stopIcon = document.getElementById('stop-icon');
-        if (micIcon) {
-            micIcon.style.display = 'block';
-        }
-        if (stopIcon) {
-            stopIcon.style.display = 'none';
-        }
+        if (micIcon) micIcon.style.display = 'block';
+        if (stopIcon) stopIcon.style.display = 'none';
     }
 }
