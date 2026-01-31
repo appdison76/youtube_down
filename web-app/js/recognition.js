@@ -183,6 +183,8 @@ async function startRecognition() {
                 
                 recognitionResult.style.display = 'block';
                 recognitionStatus.textContent = '인식 완료!';
+                // 인식된 곡 영역이 보이도록 스크롤
+                recognitionResult.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 
             } catch (error) {
                 console.error('인식 실패:', error);
