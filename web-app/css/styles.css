@@ -178,11 +178,12 @@ body {
     color: #FF0000;
 }
 
-/* 컨테이너 */
+/* 컨테이너 (하단 고정 광고 높이만큼 여백) */
 .container {
     max-width: 1200px;
     margin: 0 auto;
     padding: 20px;
+    padding-bottom: 150px;
 }
 
 .page {
@@ -856,18 +857,20 @@ body {
 
 /* 찜하기 카드는 .youtube-result-card 사용 (검색 쪽과 동일) */
 
-/* 쿠팡 파트너스 광고 섹션: 스크롤 시 하단에 붙어서 항상 보이게 (결과 많아도 맨 끝까지 안 내려감) */
+/* 쿠팡 파트너스 광고: 화면 맨 아래 고정 (검색 전·후 동일하게 항상 보임) */
 .ads-section {
-    position: sticky;
+    position: fixed;
     bottom: 0;
+    left: 0;
+    right: 0;
     z-index: 5;
     background: #fff;
     padding: 10px 12px 12px;
-    margin-top: 16px;
     text-align: center;
     border-radius: 12px 12px 0 0;
     box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
-    max-width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
     overflow: hidden;
 }
 .ads-disclaimer {
