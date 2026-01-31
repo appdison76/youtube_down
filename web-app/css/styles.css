@@ -910,6 +910,12 @@ body {
     margin: 0 auto;
     overflow: hidden;
 }
+/* 삼성인터넷: HTTPS에서 fixed가 깨질 수 있어 sticky로 대체 (로컬 HTTP는 fixed 유지) */
+html.ua-samsung-internet .ads-section {
+    position: sticky;
+    bottom: 0;
+    margin-top: 16px;
+}
 .ads-disclaimer {
     font-size: 8px;
     color: #888;
