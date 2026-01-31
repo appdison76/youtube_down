@@ -167,6 +167,15 @@
         </div>
     </div>
 
+    <!-- 삼성인터넷 등 HTTPS에서 래퍼가 생기면 fixed가 깨질 수 있어, 광고를 body 직계 자식으로 옮김 -->
+    <script>
+        (function(){
+            var el = document.querySelector('.ads-section');
+            if (el && el.parentNode && el.parentNode !== document.body) {
+                document.body.appendChild(el);
+            }
+        })();
+    </script>
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
     <script>
