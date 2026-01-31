@@ -34,21 +34,42 @@
 
 ---
 
-## 3. API 이중화 (웹앱)
+## 3. API 이중화 (웹앱·앱 공통)
 
-웹앱은 **모든 API**를 `config.json`의 `apiBaseUrls` 순서대로 시도(이중화).
+**웹앱과 앱 둘 다** 같은 이중화 순서를 쓴다.
 
-- **설정**: `web-app/install-page/config.json`  
-  - `apiBaseUrls`: `["https://melodysnap.mediacommercelab.com", "https://youtubedown-production.up.railway.app"]`  
-- **동작**: `web-app/js/api.js` 의 `fetchWithFallback(path, init)`  
-  - 첫 번째 URL 실패 시 다음 URL로 재시도.
+| 순서 | 서버 | 용도 |
+|------|------|------|
+| **1차** | 노트북 (`https://melodysnap.mediacommercelab.com`) | 로컬/터널 서버 |
+| **2차** | Railway (`https://youtubedown-production.up.railway.app`) | 폴백 |
 
-적용 대상:
+### 3.1 적용 대상 (둘 다 동일)
 
-- YouTube 검색 (`/api/search`)
-- 다운로드 (`/api/download/video`, `/api/download/audio`, `/api/video-info`)
-- 자동완성 (`/api/autocomplete`)
-- **음악 인식** (`/api/recognize`) — 서버 내부에서 ACRCloud 등 1차 사용, 향후 3중 폴백 예정.
+- 영상 정보 가져오기 (`POST /api/video-info`)
+- YouTube 검색 (`POST /api/search`)
+- 다운로드 (`GET /api/download/video`, `/api/download/audio`)
+- 자동완성 (`POST /api/autocomplete`)
+- 음악 인식 (`POST /api/recognize`)
+
+### 3.2 설정
+
+| 클라이언트 | config 위치 | 동작 |
+|------------|-------------|------|
+| **웹앱** | `web-app/install-page/config.json` → `apiBaseUrls` | `web-app/js/api.js` 의 `fetchWithFallback()` |
+| **앱** | 동일 config URL 로드 → `app/src/config/api.js` 의 `getApiBaseUrls()`, `fetchWithFallback()` | 동일 |
+
+- **config 로드 성공**: `apiBaseUrls` 순서대로 시도 (노트북 → Railway).
+- **config 로드 실패**: 기본값도 **노트북 먼저, Railway 폴백** (앱·웹앱 동일).  
+  - 웹앱: `api.js` 의 `DEFAULT_LOCAL_FIRST`, `DEFAULT_RAILWAY`  
+  - 앱: `api.js` 의 `DEFAULT_CONFIG.LOCAL_FIRST`, `DEFAULT_CONFIG.PRODUCTION`
+
+### 3.3 왜 서버에서 처리하나 (영상 정보·다운로드)
+
+- 유튜브는 다운로드용 공식 API를 제공하지 않음. 영상 정보/스트림 추출은 **비공식 방식**(ytdl-core 등 Node 라이브러리)이 필요하고, 이건 **서버(Node) 환경**에서만 사용하는 게 일반적.
+- 브라우저/앱에서 유튜브 스트림을 직접 요청하기는 CORS·쿠키 등으로 어렵기 때문에, **서버가 대신 요청해서** 정보/파일만 내려주는 구조.
+- 따라서 **앱도** “앱 안에서만” 처리하는 게 아니라, **같은 서버 API**를 호출한다.  
+  - 링크 넣고 “가져오기” → `POST /api/video-info` 호출 → 서버가 유튜브에서 정보 파싱 후 JSON 반환.  
+  - 다운로드 버튼 → `GET /api/download/video` 또는 `/api/download/audio` 호출 → 서버가 유튜브에서 스트림 받아서 전달.
 
 ---
 
@@ -105,7 +126,9 @@
 
 | 파일 | 용도 |
 |------|------|
-| `web-app/install-page/config.json` | 웹앱 API 베이스 URL (apiBaseUrl, apiBaseUrls) — 검색/다운로드/음악인식 이중화 |
+| `web-app/install-page/config.json` | **웹앱·앱 공통** API 베이스 URL (apiBaseUrl, apiBaseUrls) — 이중화 순서(노트북 → Railway) |
+| `app/src/config/api.js` | 앱 API 호출, config 로드, config 실패 시 기본값(LOCAL_FIRST → Railway) |
+| `web-app/js/api.js` | 웹앱 API 호출, config 로드, config 실패 시 기본값(DEFAULT_LOCAL_FIRST → Railway) |
 | `server/.env` (선택) | ACRCLOUD_ACCESS_KEY, ACRCLOUD_ACCESS_SECRET, ACRCLOUD_HOST 등 |
 | `install-page/version.json` | 앱 버전/최소버전 (PRO 설치 페이지 등에서 참조) |
 
@@ -147,6 +170,7 @@
 
 - **Git = 정적**: 웹앱·install-page는 Git(GitHub Pages)에 올려서 서빙.
 - **Railway = API**: Node 서버는 Railway에 올리고, 다운로드·검색·음악 인식 API만 제공.
-- **앱 = 앱 내부, 웹앱 = API 서버**: 음악 인식은 앱은 앱 안에서(ACRCloud SDK), 웹앱은 API 서버(`/api/recognize`) 사용.
-- **이중화**: 웹앱 모든 API가 `apiBaseUrls` 순서대로 재시도.
+- **이중화 (웹앱·앱 공통)**: 1차 노트북(melodysnap.mediacommercelab.com), 2차 Railway. config 실패 시에도 기본값이 동일 순서.
+- **영상 정보·다운로드**: 유튜브 비공식 방식(ytdl 등)이라 서버에서 처리. 앱·웹앱 둘 다 같은 서버 API 호출.
+- **앱 = 앱 내부, 웹앱 = API 서버**: 음악 인식만 앱은 앱 안에서(ACRCloud SDK), 웹앱은 API 서버(`/api/recognize`) 사용.
 - **음악 인식**: 현재 ACRCloud 단일 → 향후 서버 내부 3중 폴백(Shazam Kit → ACRCloud → AudD).
