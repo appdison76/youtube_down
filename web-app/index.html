@@ -12,7 +12,7 @@
     <link rel="manifest" href="manifest.json" id="link-manifest">
     <link rel="stylesheet" href="css/styles.css" id="link-css">
     <script>
-        (function(){ var v = window.CACHE_V; document.getElementById('link-manifest').href = 'manifest.json?v=' + v; document.getElementById('link-css').href = 'css/styles.css?v=' + v; })();
+        (function(){ var v = window.CACHE_V; var t = Date.now(); document.getElementById('link-manifest').href = 'manifest.json?v=' + v + '&_=' + t; document.getElementById('link-css').href = 'css/styles.css?v=' + v + '&_=' + t; })();
     </script>
     <script>
         // config 로드 실패 시 fallback (api.js의 Railway URL과 동일하게 유지)
@@ -166,8 +166,8 @@
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
     <script>
-        (function(){ var v = window.CACHE_V;
-            document.write('<script src="js/indexeddb.js?v='+v+'"><\/script><script src="js/api.js?v='+v+'"><\/script><script src="js/recognition.js?v='+v+'"><\/script><script src="js/search.js?v='+v+'"><\/script><script src="js/save.js?v='+v+'"><\/script><script src="js/library.js?v='+v+'"><\/script><script src="js/app.js?v='+v+'"><\/script>');
+        (function(){ var v = window.CACHE_V; var t = Date.now();
+            document.write('<script src="js/indexeddb.js?v='+v+'&_='+t+'"><\/script><script src="js/api.js?v='+v+'&_='+t+'"><\/script><script src="js/recognition.js?v='+v+'&_='+t+'"><\/script><script src="js/search.js?v='+v+'&_='+t+'"><\/script><script src="js/save.js?v='+v+'&_='+t+'"><\/script><script src="js/library.js?v='+v+'&_='+t+'"><\/script><script src="js/app.js?v='+v+'&_='+t+'"><\/script>');
         })();
     </script>
     <script>
