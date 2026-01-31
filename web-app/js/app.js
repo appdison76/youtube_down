@@ -14,10 +14,15 @@ function initApp() {
     const navTabs = document.querySelectorAll('.nav-tab');
     const pages = document.querySelectorAll('.page');
 
-    // 타이틀바 로고/아이콘 클릭 시 첫 페이지로 리로드 (새로고침)
+    // 타이틀바 로고/아이콘 클릭 시 음악 찾기(첫 탭)로 이동
     const headerHomeBtn = document.getElementById('header-home-btn');
     if (headerHomeBtn) {
-        headerHomeBtn.addEventListener('click', () => location.reload());
+        headerHomeBtn.addEventListener('click', () => {
+            const firstTab = document.querySelector('.nav-tab[data-page="recognition"]');
+            if (firstTab && !firstTab.classList.contains('active')) {
+                firstTab.click();
+            }
+        });
     }
 
     navTabs.forEach(tab => {
