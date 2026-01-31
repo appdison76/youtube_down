@@ -9,11 +9,23 @@ function updateSearchClearVisibility() {
     searchClearBtn.style.display = searchInput.value.trim() ? 'flex' : 'none';
 }
 
-// 자동완성: 최근 검색어 + 서버 추천
+// 자동완성: 최근 검색어 + 서버 추천 (끄기 가능, 앱과 동일)
 let suggestDebounceTimer = null;
 const SUGGEST_DEBOUNCE_MS = 280;
 const RECENT_SEARCHES_KEY = 'webapp_recent_searches';
 const MAX_RECENT_SEARCHES = 15;
+const AUTCOMPLETE_ENABLED_KEY = 'webapp_autocomplete_enabled';
+
+function isAutocompleteEnabled() {
+    try {
+        var v = localStorage.getItem(AUTCOMPLETE_ENABLED_KEY);
+        if (v === null) return true;
+        return v === 'true';
+    } catch (e) { return true; }
+}
+function setAutocompleteEnabled(enabled) {
+    try { localStorage.setItem(AUTCOMPLETE_ENABLED_KEY, enabled ? 'true' : 'false'); } catch (e) {}
+}
 
 function getRecentSearches() {
     try {
@@ -121,6 +133,10 @@ function showSuggestionsFlat(list) {
 }
 
 function onSearchInputForSuggest() {
+    if (!isAutocompleteEnabled()) {
+        hideSuggestions();
+        return;
+    }
     var q = searchInput.value.trim();
     if (q.length === 0) {
         var recent = getRecentSearches();
@@ -177,6 +193,16 @@ searchClearBtn.addEventListener('click', function () {
     searchResults.innerHTML = '';
     hideSuggestions();
 });
+
+// 자동완성 켜기/끄기 토글 (앱과 동일)
+var autocompleteToggle = document.getElementById('search-autocomplete-toggle');
+if (autocompleteToggle) {
+    autocompleteToggle.checked = isAutocompleteEnabled();
+    autocompleteToggle.addEventListener('change', function () {
+        setAutocompleteEnabled(autocompleteToggle.checked);
+        if (!autocompleteToggle.checked) hideSuggestions();
+    });
+}
 
 searchBtn.addEventListener('click', function () {
     hideSuggestions();
