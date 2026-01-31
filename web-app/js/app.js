@@ -13,7 +13,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const navTabs = document.querySelectorAll('.nav-tab');
     const pages = document.querySelectorAll('.page');
-    
+
+    // 타이틀바 로고/아이콘 클릭 시 첫 페이지로 리로드 (새로고침)
+    const headerLeft = document.querySelector('.header-left');
+    if (headerLeft) {
+        headerLeft.style.cursor = 'pointer';
+        const reloadToFirstPage = () => location.reload();
+        headerLeft.addEventListener('click', reloadToFirstPage);
+        headerLeft.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                reloadToFirstPage();
+            }
+        });
+    }
+
     navTabs.forEach(tab => {
         tab.addEventListener('click', () => {
             const targetPage = tab.dataset.page;
