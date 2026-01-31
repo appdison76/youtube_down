@@ -856,14 +856,17 @@ body {
 
 /* 찜하기 카드는 .youtube-result-card 사용 (검색 쪽과 동일) */
 
-/* 쿠팡 파트너스 광고 섹션 */
+/* 쿠팡 파트너스 광고 섹션: 스크롤 시 하단에 붙어서 항상 보이게 (결과 많아도 맨 끝까지 안 내려감) */
 .ads-section {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
     background: #fff;
     padding: 24px 16px;
     margin-top: 24px;
     text-align: center;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
     max-width: 100%;
     overflow: hidden;
 }
