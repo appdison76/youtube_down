@@ -1559,6 +1559,14 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Railway 등에서 컨테이너 중지 시 SIGTERM 전달 → 정상 종료로 처리 (npm 에러 로그 완화)
+function shutdown(signal) {
+  console.log(`[Server] ${signal} received, shutting down...`);
+  process.exit(0);
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
 // Railway 전용: 직접 실행 시에만 listen (server_local에서 require 시 listen 안 함)
 if (require.main === module) {
   app.listen(PORT, '0.0.0.0', () => {

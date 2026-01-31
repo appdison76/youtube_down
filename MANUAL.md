@@ -68,6 +68,16 @@
 
 ## 5. 음악 인식
 
+**앱 = 앱 내부 / 웹앱 = API 서버** 로 구분한다.
+
+| 구분 | 음악 인식 방식 |
+|------|----------------|
+| **앱** (네이티브) | **앱 내부**에서 처리 — ACRCloud SDK 등 (API 서버 사용 안 함) |
+| **웹앱** | **API 서버** 이용 — `POST /api/recognize` 호출 (Railway/로컬 Node) |
+
+- 앱: 마이크 녹음 → 앱 내 ACRCloud 모듈로 인식.
+- 웹앱: 마이크 녹음 → 오디오를 API 서버로 전송 → 서버가 ACRCloud(또는 향후 3중 폴백) 호출 후 결과 반환.
+
 ### 5.1 현재 (단일 엔진)
 
 - **엔진**: ACRCloud
@@ -137,5 +147,6 @@
 
 - **Git = 정적**: 웹앱·install-page는 Git(GitHub Pages)에 올려서 서빙.
 - **Railway = API**: Node 서버는 Railway에 올리고, 다운로드·검색·음악 인식 API만 제공.
+- **앱 = 앱 내부, 웹앱 = API 서버**: 음악 인식은 앱은 앱 안에서(ACRCloud SDK), 웹앱은 API 서버(`/api/recognize`) 사용.
 - **이중화**: 웹앱 모든 API가 `apiBaseUrls` 순서대로 재시도.
 - **음악 인식**: 현재 ACRCloud 단일 → 향후 서버 내부 3중 폴백(Shazam Kit → ACRCloud → AudD).
