@@ -855,6 +855,25 @@ body {
     gap: 12px;
 }
 
+/* 찜한 항목 없을 때 안내 문구 */
+.library-empty-message {
+    text-align: center;
+    padding: 40px 24px;
+    margin: 20px 0;
+    color: #666;
+    font-size: 15px;
+    background: #f9f9f9;
+    border-radius: 12px;
+    border: 1px dashed #e0e0e0;
+}
+.library-empty-message::before {
+    content: "★";
+    display: block;
+    font-size: 32px;
+    color: #ddd;
+    margin-bottom: 12px;
+}
+
 /* 찜하기 카드는 .youtube-result-card 사용 (검색 쪽과 동일) */
 
 /* 쿠팡 파트너스 광고: 화면 맨 아래 고정 (검색 전·후 동일하게 항상 보임) */

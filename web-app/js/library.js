@@ -48,7 +48,7 @@ async function loadLibraryItems() {
 // 항목 표시: 검색 카드와 동일한 모양, 카드 클릭 = 유튜브 재생, 영상/음악 받기(다운로드 탭 이동 없음) / 찜삭제
 function displayItems(items) {
     if (items.length === 0) {
-        libraryItems.innerHTML = '<p>찜한 항목이 없습니다.</p>';
+        libraryItems.innerHTML = '<p class="library-empty-message">찜한 항목이 없습니다.</p>';
         return;
     }
     libraryItems.innerHTML = items.map(function (item) {
