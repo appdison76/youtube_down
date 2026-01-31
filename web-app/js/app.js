@@ -14,7 +14,7 @@ function initApp() {
     const navTabs = document.querySelectorAll('.nav-tab');
     const pages = document.querySelectorAll('.page');
 
-    // 타이틀바 로고/아이콘 클릭 시 음악 찾기(첫 탭)로 이동
+    // 타이틀바 로고/아이콘 클릭 시 음악소리로(첫 탭)로 이동
     const headerHomeBtn = document.getElementById('header-home-btn');
     if (headerHomeBtn) {
         headerHomeBtn.addEventListener('click', () => {

@@ -45,16 +45,7 @@ async function loadLibraryItems() {
     }
 }
 
-// 찜하기에서 "다운로드" 버튼 → 다운로드 탭으로 이동 후 해당 영상 셋팅
-function goToDownloadFromFavorite(url) {
-    var saveTab = document.querySelector('[data-page="save"]');
-    if (saveTab) saveTab.click();
-    setTimeout(function () {
-        if (window.setDownloadUrlAndFetch && url) window.setDownloadUrlAndFetch(url);
-    }, 350);
-}
-
-// 항목 표시: 검색 카드와 동일한 모양, 카드 클릭 = 유튜브 재생, 다운로드(영상 버튼 아이콘) / 찜삭제
+// 항목 표시: 검색 카드와 동일한 모양, 카드 클릭 = 유튜브 재생, 영상/음악 받기(다운로드 탭 이동 없음) / 찜삭제
 function displayItems(items) {
     if (items.length === 0) {
         libraryItems.innerHTML = '<p>찜한 항목이 없습니다.</p>';
@@ -73,10 +64,44 @@ function displayItems(items) {
             '<h4 class="youtube-card-title">' + (item.title || '') + '</h4>' +
             '<p class="youtube-card-channel">' + author + '</p>' +
             '<div class="youtube-card-actions">' +
-            '<button type="button" class="card-btn card-btn-download-video" onclick="event.stopPropagation(); goToDownloadFromFavorite(\'' + urlEsc + '\');"><ion-icon name="download-outline"></ion-icon> 다운로드</button>' +
-            '<button type="button" class="card-btn card-btn-remove-favorite" onclick="event.stopPropagation(); removeFavorite(\'' + idEsc + '\');"><ion-icon name="trash-outline"></ion-icon> 찜삭제</button>' +
+            '<button type="button" class="card-btn card-btn-download-video" data-url="' + urlEsc + '" data-title="' + (title || '').replace(/'/g, "\\'") + '"><ion-icon name="download-outline"></ion-icon> 영상</button>' +
+            '<button type="button" class="card-btn card-btn-download-audio" data-url="' + urlEsc + '" data-title="' + (title || '').replace(/'/g, "\\'") + '"><ion-icon name="download-outline"></ion-icon> 음악</button>' +
+            '<button type="button" class="card-btn card-btn-remove-favorite" data-id="' + idEsc + '"><ion-icon name="trash-outline"></ion-icon> 찜삭제</button>' +
             '</div></div></div>';
     }).join('');
+
+    // 영상/음악 받기: 다운로드 탭으로 이동 없이 바로 다운로드 URL 열기 (검색·음악찾기와 동일)
+    libraryItems.querySelectorAll('.card-btn-download-video').forEach(function (btn) {
+        btn.addEventListener('click', async function (e) {
+            e.stopPropagation();
+            var url = btn.getAttribute('data-url');
+            var title = btn.getAttribute('data-title') || 'video';
+            if (!url) return;
+            try {
+                var base = await getDownloadBaseUrl();
+                window.open(base + '/api/download/video?url=' + encodeURIComponent(url) + '&quality=highestvideo&title=' + encodeURIComponent(title), '_blank');
+            } catch (err) { console.error(err); alert('다운로드에 실패했습니다.'); }
+        });
+    });
+    libraryItems.querySelectorAll('.card-btn-download-audio').forEach(function (btn) {
+        btn.addEventListener('click', async function (e) {
+            e.stopPropagation();
+            var url = btn.getAttribute('data-url');
+            var title = btn.getAttribute('data-title') || 'audio';
+            if (!url) return;
+            try {
+                var base = await getDownloadBaseUrl();
+                window.open(base + '/api/download/audio?url=' + encodeURIComponent(url) + '&quality=highestaudio&title=' + encodeURIComponent(title), '_blank');
+            } catch (err) { console.error(err); alert('다운로드에 실패했습니다.'); }
+        });
+    });
+    libraryItems.querySelectorAll('.card-btn-remove-favorite').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var id = btn.getAttribute('data-id');
+            if (id) removeFavorite(id);
+        });
+    });
 
     // 카드 클릭 시 유튜브 재생 (새 탭)
     libraryItems.querySelectorAll('.youtube-result-card.card-clickable').forEach(function (el) {

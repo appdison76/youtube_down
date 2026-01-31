@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>멜로디 스냅 - 음악 찾기</title>
+    <title>멜로디 스냅 - 음악소리로</title>
     <meta name="description" content="음악을 찾고, YouTube에서 검색하고, 다운로드하세요.">
     <script>
         // 캐시 무효화: CSS/JS 수정 후 이 숫자만 올리면 새로 불러옴 (한 곳만 수정하면 됨)
-        window.CACHE_V = 6;
+        window.CACHE_V = 7;
     </script>
     <link rel="manifest" href="manifest.json" id="link-manifest">
     <link rel="stylesheet" href="css/styles.css" id="link-css">
@@ -29,7 +29,7 @@
         <!-- 헤더 -->
         <header class="app-header">
         <div class="header-content">
-            <button type="button" id="header-home-btn" class="header-left" title="음악 찾기로 이동" aria-label="음악 찾기로 이동">
+            <button type="button" id="header-home-btn" class="header-left" title="소리로 이동" aria-label="소리로 이동">
                 <div class="logo-container">
                     <img id="app-logo" src="logo.png" alt="Melody Snap" onerror="this.style.display='none'" />
                 </div>
@@ -40,15 +40,15 @@
             <nav class="nav-tabs">
                 <button class="nav-tab active" data-page="recognition">
                     <span class="nav-icon">🎵</span>
-                    <span class="nav-text">음악 찾기</span>
+                    <span class="nav-text">음악소리로</span>
                 </button>
                 <button class="nav-tab" data-page="search">
                     <span class="nav-icon">🔍</span>
-                    <span class="nav-text">검색</span>
+                    <span class="nav-text">검색으로</span>
                 </button>
                 <button class="nav-tab" data-page="save">
                     <span class="nav-icon">📥</span>
-                    <span class="nav-text">다운로드</span>
+                    <span class="nav-text">링크로</span>
                 </button>
                 <button class="nav-tab" data-page="library">
                     <span class="nav-icon">⭐</span>
@@ -62,14 +62,14 @@
 
     <!-- 메인 컨텐츠 -->
     <main class="container">
-        <!-- 음악 찾기 화면 -->
+        <!-- 소리로 찾기 화면 -->
         <div id="recognition-page" class="page active">
             <div class="recognition-area">
                 <button id="recognition-btn" class="recognition-button">
                     <ion-icon name="mic" id="mic-icon" class="recognition-icon"></ion-icon>
                     <ion-icon name="stop" id="stop-icon" class="recognition-icon" style="display: none;"></ion-icon>
                 </button>
-                <p class="recognition-text" id="recognition-status">음악 찾기를 시작하세요</p>
+                <p class="recognition-text" id="recognition-status">음악소리로 찾기를 시작하세요</p>
                 <div class="recognition-usage">
                     <h4 class="recognition-usage-title">💡 사용법</h4>
                     <ul class="recognition-usage-list">
@@ -100,7 +100,7 @@
         <!-- 검색 화면 -->
         <div id="search-page" class="page" style="display: none;">
             <div class="search-area">
-                <h3 class="section-title">YouTube 검색</h3>
+                <h3 class="section-title">YouTube 검색으로 다운로드</h3>
                 <div class="search-row">
                     <div class="search-input-wrap">
                         <input type="text" id="search-input" class="search-input" placeholder="YouTube 검색..." autocomplete="off" />
@@ -118,7 +118,7 @@
         <!-- 다운로드 화면 -->
         <div id="save-page" class="page" style="display: none;">
             <div class="save-area">
-                <h3 class="section-title">영상 · 음악 다운로드</h3>
+                <h3 class="section-title">링크로 다운로드</h3>
                 <div class="url-input-wrap">
                     <input type="text" id="url-input" class="url-input" placeholder="유튜브 영상주소 붙여넣기" autocomplete="off" />
                     <button type="button" id="url-clear-btn" class="search-clear-btn" title="입력 지우기" aria-label="입력 지우기" style="display: none;">
