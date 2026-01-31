@@ -58,7 +58,7 @@ async function fetchWithFallback(path, init = {}) {
   throw lastError || new Error('All API URLs failed');
 }
 
-// 음악 인식 API (이중화)
+// 음악 인식 API (검색/다운로드와 동일 이중화: config.apiBaseUrls 순서대로 노트북·Railway 등 시도)
 async function recognizeMusic(audioBlob) {
   const response = await fetchWithFallback('/api/recognize', {
     method: 'POST',

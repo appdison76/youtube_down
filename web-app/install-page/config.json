@@ -6,6 +6,6 @@
   ],
   "version": "1.0.4",
   "updatedAt": "2026-01-29T00:00:00Z",
-  "description": "서버 주소 설정 파일. 로컬(melodysnap) 우선, 실패 시 Railway 폴백"
+  "description": "서버 주소. 검색/다운로드/음악인식(ACRCloud) 모두 이 목록 순서로 이중화(첫 번째 실패 시 다음 URL 시도)"
 }
 

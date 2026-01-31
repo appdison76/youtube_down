@@ -178,10 +178,6 @@ async function startRecognition() {
                 recognitionResult.style.display = 'block';
                 recognitionStatus.textContent = '인식 완료!';
                 
-                // 메모리 정리
-                URL.revokeObjectURL(audioBlob);
-                audioBlob = null;
-                
             } catch (error) {
                 console.error('인식 실패:', error);
                 recognitionStatus.textContent = '인식에 실패했습니다. 다시 시도해주세요.';

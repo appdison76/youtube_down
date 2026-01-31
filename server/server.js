@@ -1,11 +1,29 @@
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
+const multer = require('multer');
+const acrcloud = require('acrcloud');
 const { spawn, exec } = require('child_process');
 const { promisify } = require('util');
 const fs = require('fs');
 
 const execAsync = promisify(exec);
+
+// ACRCloud 음악 인식 (웹앱용, 앱과 동일한 프로젝트/키 사용)
+const ACRCLOUD_HOST = process.env.ACRCLOUD_HOST || 'identify-ap-southeast-1.acrcloud.com';
+const ACRCLOUD_ACCESS_KEY = process.env.ACRCLOUD_ACCESS_KEY || 'b01665eac8c9b3032f229e8cb9a3e702';
+const ACRCLOUD_ACCESS_SECRET = process.env.ACRCLOUD_ACCESS_SECRET || 'T4GxjwxQZ9nngfwLmyu3hy20Fp2jJGVqLI4nCvD7';
+const acr = new acrcloud({
+  host: ACRCLOUD_HOST,
+  access_key: ACRCLOUD_ACCESS_KEY,
+  access_secret: ACRCLOUD_ACCESS_SECRET,
+});
+
+// multipart/form-data 업로드 (음악 인식용 오디오 파일, 최대 10MB)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -108,8 +126,13 @@ const contentDispositionAttachment = (title, ext, defaultName) => {
   return 'attachment; filename="' + asciiName + '"; filename*=UTF-8\'\'' + encodeURIComponent(utf8Name);
 };
 
-// 미들웨어
-app.use(cors());
+// 미들웨어 — 브라우저(다른 도메인/로컬)에서 API 호출 허용
+app.use(cors({
+  origin: true,           // 요청한 Origin 그대로 허용 (GitHub Pages, localhost 등)
+  methods: ['GET', 'POST', 'HEAD', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: false,
+}));
 app.use(express.json());
 
 // 접속 시마다 로그 (터널/외부 접속 확인용)
@@ -1308,6 +1331,97 @@ app.post('/api/search', async (req, res) => {
   } catch (error) {
     console.error('[Server] Search error:', error);
     res.status(500).json({ error: '검색 중 오류가 발생했습니다.' });
+  }
+});
+
+// webm/ogg → wav 변환 (ffmpeg 있으면 사용, ACRCloud가 webm 미지원일 수 있음)
+function convertToWavWithFfmpeg(inputBuffer) {
+  return new Promise((resolve, reject) => {
+    const ffmpeg = spawn('ffmpeg', [
+      '-i', 'pipe:0',
+      '-vn', '-acodec', 'pcm_s16le', '-ar', '44100', '-ac', '1',
+      '-f', 'wav', 'pipe:1',
+    ], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const chunks = [];
+    ffmpeg.stdout.on('data', (chunk) => chunks.push(chunk));
+    ffmpeg.stdout.on('end', () => resolve(Buffer.concat(chunks)));
+    ffmpeg.on('error', reject);
+    ffmpeg.stderr.on('data', () => {});
+    ffmpeg.stdin.write(inputBuffer);
+    ffmpeg.stdin.end();
+  });
+}
+
+// 음악 인식 API (ACRCloud, 웹앱용 — 앱과 동일한 방식)
+app.post('/api/recognize', upload.single('audio'), async (req, res) => {
+  try {
+    if (!req.file || !req.file.buffer || req.file.buffer.length === 0) {
+      return res.status(400).json({ error: '오디오 파일이 필요합니다.' });
+    }
+    let buffer = req.file.buffer;
+    const mimetype = (req.file.mimetype || '').toLowerCase();
+    console.log('[Server] Recognize: received audio, size:', buffer.length, 'mimetype:', mimetype);
+
+    // 브라우저는 보통 audio/webm 전송. ACRCloud는 WAV/MP3 등 권장 → webm이면 ffmpeg로 wav 변환 시도
+    if (mimetype.includes('webm') || mimetype.includes('ogg')) {
+      try {
+        buffer = await convertToWavWithFfmpeg(buffer);
+        console.log('[Server] Recognize: converted to wav, size:', buffer.length);
+      } catch (e) {
+        console.warn('[Server] Recognize: ffmpeg conversion failed, trying raw buffer:', e?.message);
+      }
+    }
+
+    let result;
+    try {
+      result = await acr.identify(buffer);
+    } catch (acrError) {
+      console.error('[Server] ACRCloud identify error:', acrError?.message || acrError);
+      const msg = (acrError?.message || String(acrError)) || '';
+      // No result (DB에 해당 음악 없음) — 앱과 동일하게 처리
+      if (msg.includes('1001') || msg.includes('No result') || msg.includes('no result')) {
+        return res.status(404).json({ error: '음악을 찾을 수 없습니다.', code: 1001 });
+      }
+      return res.status(502).json({ error: '음악 인식에 실패했습니다.' });
+    }
+
+    if (!result || typeof result !== 'object') {
+      return res.status(502).json({ error: '음악 인식 결과가 올바르지 않습니다.' });
+    }
+
+    const status = result.status;
+    const code = status && status.code;
+    if (code !== 0) {
+      const message = (status && status.msg) || 'No result';
+      if (code === 1001 || String(message).toLowerCase().includes('no result')) {
+        return res.status(404).json({ error: '음악을 찾을 수 없습니다.', code: 1001 });
+      }
+      return res.status(502).json({ error: '음악 인식에 실패했습니다.', code });
+    }
+
+    const metadata = result.metadata;
+    if (!metadata || !metadata.music || !Array.isArray(metadata.music) || metadata.music.length === 0) {
+      return res.status(404).json({ error: '음악을 찾을 수 없습니다.', code: 1001 });
+    }
+
+    const first = metadata.music[0];
+    const artists = first.artists;
+    const artistName = Array.isArray(artists) && artists.length > 0 && artists[0].name
+      ? artists[0].name
+      : '';
+    const albumObj = first.album;
+    const albumName = (albumObj && albumObj.name) || '';
+
+    const body = {
+      title: first.title || '',
+      artist: artistName,
+      album: albumName,
+    };
+    console.log('[Server] Recognize result:', body.title, '-', body.artist);
+    res.json(body);
+  } catch (error) {
+    console.error('[Server] Recognize error:', error);
+    res.status(500).json({ error: '음악 인식 중 오류가 발생했습니다.' });
   }
 });
 
