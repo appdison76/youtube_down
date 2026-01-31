@@ -2,7 +2,7 @@
   "name": "멜로디 스냅",
   "short_name": "멜로디 스냅",
   "description": "음악을 찾고, YouTube에서 검색하고, 다운로드하세요.",
-  "start_url": "/",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#FF0000",
