@@ -57,6 +57,10 @@ async function handleUrlSubmit() {
         const channel = (info.author || '').replace(/"/g, '&quot;');
         const isFavorite = await hasItem(currentVideoId);
         const favoriteLabel = isFavorite ? '★ 찜함' : '☆ 찜하기';
+        const filesize = info.filesize || info.filesize_approx || info.filesize_estimate;
+        const sizeText = typeof filesize === 'number' && filesize > 0
+            ? '예상 크기: ' + (filesize >= 1024 * 1024 ? (filesize / (1024 * 1024)).toFixed(1) + ' MB' : (filesize / 1024).toFixed(0) + ' KB')
+            : '';
 
         videoInfo.innerHTML =
             `<div class="youtube-result-card search-result-card card-clickable save-result-card" data-video-id="${currentVideoId}" data-url="${currentVideoUrl.replace(/"/g, '&quot;')}">
@@ -64,6 +68,7 @@ async function handleUrlSubmit() {
                 <div class="youtube-card-content">
                     <h4 class="youtube-card-title">${info.title || ''}</h4>
                     <p class="youtube-card-channel">${info.author || ''}</p>
+                    ${sizeText ? '<p class="youtube-card-filesize">' + sizeText + '</p>' : ''}
                     <div class="youtube-card-actions">
                         <button type="button" class="card-btn card-btn-favorite ${isFavorite ? 'is-favorited' : ''}" data-video-id="${currentVideoId}" data-title="${title}" data-channel="${channel}" data-thumb="${(thumb || '').replace(/"/g, '&quot;')}" data-url="${currentVideoUrl.replace(/"/g, '&quot;')}">${favoriteLabel}</button>
                         <button type="button" class="card-btn card-btn-download-video" data-url="${currentVideoUrl.replace(/"/g, '&quot;')}" data-title="${title}"><ion-icon name="download-outline"></ion-icon> 영상</button>
