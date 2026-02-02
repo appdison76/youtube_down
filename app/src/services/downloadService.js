@@ -746,6 +746,12 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
         try { await FileSystem.deleteAsync(result.uri, { idempotent: true }); } catch (e) {}
         throw new Error('다운로드된 파일이 미디어가 아닙니다. 다시 시도합니다.');
       }
+      // expectedSize 있을 때 99% 미만이면 덜 받은 파일 → 실패 처리 (다음 URL / retryCount)
+      if (expectedSize != null && expectedSize > 0 && fileInfo.size < expectedSize * 0.99) {
+        console.error('[downloadService] Downloaded file incomplete:', fileInfo.size, 'bytes, expected >=', Math.round(expectedSize * 0.99));
+        try { await FileSystem.deleteAsync(result.uri, { idempotent: true }); } catch (e) {}
+        throw new Error('다운로드된 파일이 완전하지 않습니다. 다시 시도합니다.');
+      }
       
       await new Promise(resolve => setTimeout(resolve, 100));
       fileInfo = await FileSystem.getInfoAsync(result.uri);
@@ -859,7 +865,8 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
       error.message?.includes('network') ||
       error.message?.includes('timeout') ||
       error.message?.includes('ECONNRESET') ||
-      error.message?.includes('Software caused connection abort');
+      error.message?.includes('Software caused connection abort') ||
+      error.message?.includes('완전하지 않습니다');
     
     if (isRetryableError && retryCount < MAX_RETRIES) {
       console.log(`[downloadService] Retryable error detected, retrying... (${retryCount + 1}/${MAX_RETRIES})`);
@@ -1159,6 +1166,12 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
         try { await FileSystem.deleteAsync(result.uri, { idempotent: true }); } catch (e) {}
         throw new Error('다운로드된 파일이 미디어가 아닙니다. 다시 시도합니다.');
       }
+      // expectedSize 있을 때 99% 미만이면 덜 받은 파일 → 실패 처리 (다음 URL / retryCount)
+      if (expectedSize != null && expectedSize > 0 && fileInfo.size < expectedSize * 0.99) {
+        console.error('[downloadService] Downloaded file incomplete:', fileInfo.size, 'bytes, expected >=', Math.round(expectedSize * 0.99));
+        try { await FileSystem.deleteAsync(result.uri, { idempotent: true }); } catch (e) {}
+        throw new Error('다운로드된 파일이 완전하지 않습니다. 다시 시도합니다.');
+      }
       
       await new Promise(resolve => setTimeout(resolve, 100));
       fileInfo = await FileSystem.getInfoAsync(result.uri);
@@ -1272,7 +1285,8 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
       error.message?.includes('network') ||
       error.message?.includes('timeout') ||
       error.message?.includes('ECONNRESET') ||
-      error.message?.includes('Software caused connection abort');
+      error.message?.includes('Software caused connection abort') ||
+      error.message?.includes('완전하지 않습니다');
     
     if (isRetryableError && retryCount < MAX_RETRIES) {
       console.log(`[downloadService] Retryable error detected, retrying... (${retryCount + 1}/${MAX_RETRIES})`);
