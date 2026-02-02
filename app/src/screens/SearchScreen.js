@@ -1572,7 +1572,7 @@ export default function SearchScreen({ navigation, route }) {
             <View style={styles.downloadingContainer}>
               {expectedSizeText && (
                 <Text style={styles.downloadingExpectedSize}>
-                  예상 크기: {expectedSizeText}
+                  {t.expectedSize}: {expectedSizeText}
                 </Text>
               )}
               {isDownloadingVideo && (
