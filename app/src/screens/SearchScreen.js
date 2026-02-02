@@ -641,16 +641,19 @@ export default function SearchScreen({ navigation, route }) {
       const downloadResult = await downloadVideo(
           item.url,
           item.title,
-          (progress) => {
+          (progress, expectedSize) => {
             // 다운로드 중인지 확인 (취소되었을 수 있음)
             setDownloading(prev => {
               if (!prev[item.id]) {
-                // 이미 취소되었으면 업데이트하지 않음
                 return prev;
               }
               return {
                 ...prev,
-                [item.id]: { type: 'video', progress }
+                [item.id]: {
+                  type: 'video',
+                  progress,
+                  expectedSize: expectedSize != null ? expectedSize : prev[item.id]?.expectedSize
+                }
               };
             });
           },
@@ -811,16 +814,19 @@ export default function SearchScreen({ navigation, route }) {
       const downloadResult = await downloadAudio(
           item.url,
           item.title,
-          (progress) => {
+          (progress, expectedSize) => {
             // 다운로드 중인지 확인 (취소되었을 수 있음)
             setDownloading(prev => {
               if (!prev[item.id]) {
-                // 이미 취소되었으면 업데이트하지 않음
                 return prev;
               }
               return {
                 ...prev,
-                [item.id]: { type: 'audio', progress }
+                [item.id]: {
+                  type: 'audio',
+                  progress,
+                  expectedSize: expectedSize != null ? expectedSize : prev[item.id]?.expectedSize
+                }
               };
             });
           },
@@ -1319,6 +1325,10 @@ export default function SearchScreen({ navigation, route }) {
     const isDownloadingVideo = downloading[item.id]?.type === 'video';
     const isDownloadingAudio = downloading[item.id]?.type === 'audio';
     const downloadProgress = downloading[item.id]?.progress || 0;
+    const expectedSizeBytes = downloading[item.id]?.expectedSize;
+    const expectedSizeText = expectedSizeBytes != null && expectedSizeBytes > 0
+      ? (expectedSizeBytes >= 1024 * 1024 ? (expectedSizeBytes / (1024 * 1024)).toFixed(1) + ' MB' : (expectedSizeBytes / 1024).toFixed(0) + ' KB')
+      : null;
     const isDownloading = isDownloadingVideo || isDownloadingAudio;
     
     // ✅ 해당 영상의 다운로드된 파일 찾기 (videoId 우선, 없으면 제목 기반 매칭)
@@ -1557,9 +1567,14 @@ export default function SearchScreen({ navigation, route }) {
             </View>
           )}
           
-          {/* ✅ 다운로드 중일 때: 진행률 표시 + 프로그레스 바 */}
+          {/* ✅ 다운로드 중일 때: 예상 크기 + 진행률 표시 + 프로그레스 바 */}
           {isDownloading && (
             <View style={styles.downloadingContainer}>
+              {expectedSizeText && (
+                <Text style={styles.downloadingExpectedSize}>
+                  예상 크기: {expectedSizeText}
+                </Text>
+              )}
               {isDownloadingVideo && (
                 <View style={styles.downloadingItem}>
                   <ActivityIndicator size="small" color="#FF0000" />
@@ -2249,6 +2264,11 @@ const styles = StyleSheet.create({
     padding: 8,
     backgroundColor: '#f9f9f9',
     borderRadius: 6,
+  },
+  downloadingExpectedSize: {
+    fontSize: 12,
+    color: '#888',
+    marginBottom: 6,
   },
   downloadingItem: {
     flexDirection: 'row',

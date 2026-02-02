@@ -619,16 +619,16 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
     lastProgress = 0;
     maxDownloadedSize = 0;
     
-    // 다운로드 시작 시 최소 진행률 표시
+    // 다운로드 시작 시 최소 진행률 표시 (예상 크기 있으면 UI에 전달)
     if (onProgress) {
-      onProgress(0.01);
+      onProgress(0.01, expectedSize);
       lastProgress = 0.01;
       
       // 폴백으로 진행률 업데이트 (다운로드가 진행률 정보를 제공하지 않는 경우)
       progressInterval = setInterval(() => {
         if (lastProgress < 0.9) {
           lastProgress = Math.min(0.9, lastProgress + 0.05);
-          onProgress(lastProgress);
+          onProgress(lastProgress, expectedSize);
         }
       }, 2000);
     }
@@ -656,7 +656,7 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
         if (totalExpected > 0) {
           const progress = Math.min(1, downloadProgress.totalBytesWritten / totalExpected);
           if (onProgress) {
-            onProgress(progress);
+            onProgress(progress, expectedSize);
           }
           lastProgress = progress;
           
@@ -688,11 +688,11 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
             }
             
             if (estimatedProgress > lastProgress) {
-              onProgress(estimatedProgress);
+              onProgress(estimatedProgress, expectedSize);
               lastProgress = estimatedProgress;
             } else if (downloadedMB > 0 && lastProgress < 0.99) {
               const minProgress = Math.min(0.99, lastProgress + 0.001);
-              onProgress(minProgress);
+              onProgress(minProgress, expectedSize);
               lastProgress = minProgress;
             }
           }
@@ -797,7 +797,7 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
       currentFileUri = null;
       
       if (onProgress) {
-        onProgress(1.0);
+        onProgress(1.0, expectedSize);
       }
       
       // ✅ {uri, fileName} 형태로 반환 (fileName은 외부 저장소용 원래 파일명)
@@ -827,7 +827,7 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
                     await FileSystem.writeAsStringAsync(`${METADATA_DIR}${internalFileName}.json`, JSON.stringify(metadata));
                   } catch (e) {}
                 }
-                if (onProgress) onProgress(1.0);
+                if (onProgress) onProgress(1.0, expectedSize);
                 return { uri: fileUri, fileName: displayFileName };
               }
             }
@@ -1039,16 +1039,16 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
     lastProgress = 0;
     maxDownloadedSize = 0;
     
-    // 다운로드 시작 시 최소 진행률 표시
+    // 다운로드 시작 시 최소 진행률 표시 (예상 크기 있으면 UI에 전달)
     if (onProgress) {
-      onProgress(0.01);
+      onProgress(0.01, expectedSize);
       lastProgress = 0.01;
       
       // 폴백으로 진행률 업데이트
       progressInterval = setInterval(() => {
         if (lastProgress < 0.9) {
           lastProgress = Math.min(0.9, lastProgress + 0.05);
-          onProgress(lastProgress);
+          onProgress(lastProgress, expectedSize);
         }
       }, 2000);
     }
@@ -1076,7 +1076,7 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
         if (totalExpected > 0) {
           const progress = Math.min(1, downloadProgress.totalBytesWritten / totalExpected);
           if (onProgress) {
-            onProgress(progress);
+            onProgress(progress, expectedSize);
           }
           lastProgress = progress;
           
@@ -1108,11 +1108,11 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
             }
             
             if (estimatedProgress > lastProgress) {
-              onProgress(estimatedProgress);
+              onProgress(estimatedProgress, expectedSize);
               lastProgress = estimatedProgress;
             } else if (downloadedMB > 0 && lastProgress < 0.99) {
               const minProgress = Math.min(0.99, lastProgress + 0.001);
-              onProgress(minProgress);
+              onProgress(minProgress, expectedSize);
               lastProgress = minProgress;
             }
           }
@@ -1217,7 +1217,7 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
       currentFileUri = null;
       
       if (onProgress) {
-        onProgress(1.0);
+        onProgress(1.0, expectedSize);
       }
       
       // ✅ {uri, fileName} 형태로 반환 (fileName은 외부 저장소용 원래 파일명)
@@ -1247,7 +1247,7 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
                     await FileSystem.writeAsStringAsync(`${METADATA_DIR}${internalFileName}.json`, JSON.stringify(metadata));
                   } catch (e) {}
                 }
-                if (onProgress) onProgress(1.0);
+                if (onProgress) onProgress(1.0, expectedSize);
                 return { uri: fileUri, fileName: displayFileName };
               }
             }
