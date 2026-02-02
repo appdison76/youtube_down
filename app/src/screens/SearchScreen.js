@@ -1557,23 +1557,33 @@ export default function SearchScreen({ navigation, route }) {
             </View>
           )}
           
-          {/* ✅ 다운로드 중일 때: 진행률 표시 */}
+          {/* ✅ 다운로드 중일 때: 진행률 표시 + 프로그레스 바 */}
           {isDownloading && (
             <View style={styles.downloadingContainer}>
               {isDownloadingVideo && (
                 <View style={styles.downloadingItem}>
                   <ActivityIndicator size="small" color="#FF0000" />
-                  <Text style={styles.downloadingText}>
-                    {t.videoDownloading} {Math.round(downloadProgress * 100)}%
-                  </Text>
+                  <View style={styles.downloadingProgressWrap}>
+                    <Text style={styles.downloadingText}>
+                      {t.videoDownloading} {Math.round(downloadProgress * 100)}%
+                    </Text>
+                    <View style={styles.downloadingProgressBar}>
+                      <View style={[styles.downloadingProgressBarFill, { width: `${Math.min(100, Math.round(downloadProgress * 100))}%` }]} />
+                    </View>
+                  </View>
                 </View>
               )}
               {isDownloadingAudio && (
                 <View style={styles.downloadingItem}>
                   <ActivityIndicator size="small" color="#4CAF50" />
-                  <Text style={styles.downloadingText}>
-                    {t.musicDownloading} {Math.round(downloadProgress * 100)}%
-                  </Text>
+                  <View style={styles.downloadingProgressWrap}>
+                    <Text style={styles.downloadingText}>
+                      {t.musicDownloading} {Math.round(downloadProgress * 100)}%
+                    </Text>
+                    <View style={styles.downloadingProgressBar}>
+                      <View style={[styles.downloadingProgressBarFill, { width: `${Math.min(100, Math.round(downloadProgress * 100))}%`, backgroundColor: '#4CAF50' }]} />
+                    </View>
+                  </View>
                 </View>
               )}
             </View>
@@ -2245,10 +2255,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 4,
   },
+  downloadingProgressWrap: {
+    flex: 1,
+    marginLeft: 8,
+  },
   downloadingText: {
     fontSize: 12,
     color: '#666',
-    marginLeft: 8,
+    marginBottom: 4,
+  },
+  downloadingProgressBar: {
+    height: 6,
+    backgroundColor: '#e0e0e0',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  downloadingProgressBarFill: {
+    height: '100%',
+    backgroundColor: '#FF0000',
+    borderRadius: 3,
   },
   modalOverlay: {
     flex: 1,

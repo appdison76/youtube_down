@@ -648,8 +648,13 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
           console.log('[downloadService] Max downloaded size updated:', maxDownloadedSize, 'bytes (', (maxDownloadedSize / (1024 * 1024)).toFixed(2), 'MB)');
         }
         
-        if (downloadProgress.totalBytesExpectedToWrite > 0) {
-          const progress = downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite;
+        // 예상 총 크기: Content-Length 우선, 없으면 video-info filesize(expectedSize) 사용
+        const totalExpected = downloadProgress.totalBytesExpectedToWrite > 0
+          ? downloadProgress.totalBytesExpectedToWrite
+          : (expectedSize != null && expectedSize > 0 ? expectedSize : 0);
+        
+        if (totalExpected > 0) {
+          const progress = Math.min(1, downloadProgress.totalBytesWritten / totalExpected);
           if (onProgress) {
             onProgress(progress);
           }
@@ -659,8 +664,8 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
             clearInterval(progressInterval);
             progressInterval = null;
           }
-      } else {
-          // Content-Length가 없으면 다운로드된 바이트로 추정 진행률 계산
+        } else {
+          // filesize도 없으면 다운로드된 바이트로 추정 진행률(휴리스틱)
           const downloadedMB = downloadProgress.totalBytesWritten / (1024 * 1024);
           let estimatedProgress;
           
@@ -1056,8 +1061,13 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
           console.log('[downloadService] Max downloaded size updated:', maxDownloadedSize, 'bytes (', (maxDownloadedSize / (1024 * 1024)).toFixed(2), 'MB)');
         }
         
-        if (downloadProgress.totalBytesExpectedToWrite > 0) {
-          const progress = downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite;
+        // 예상 총 크기: Content-Length 우선, 없으면 video-info filesize(expectedSize) 사용
+        const totalExpected = downloadProgress.totalBytesExpectedToWrite > 0
+          ? downloadProgress.totalBytesExpectedToWrite
+          : (expectedSize != null && expectedSize > 0 ? expectedSize : 0);
+        
+        if (totalExpected > 0) {
+          const progress = Math.min(1, downloadProgress.totalBytesWritten / totalExpected);
           if (onProgress) {
             onProgress(progress);
           }
@@ -1066,9 +1076,9 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
           if (progressInterval) {
             clearInterval(progressInterval);
             progressInterval = null;
-        }
-      } else {
-          // Content-Length가 없으면 다운로드된 바이트로 추정 진행률 계산
+          }
+        } else {
+          // filesize도 없으면 다운로드된 바이트로 추정 진행률(휴리스틱)
           const downloadedMB = downloadProgress.totalBytesWritten / (1024 * 1024);
           let estimatedProgress;
           
