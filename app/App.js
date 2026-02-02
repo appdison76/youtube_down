@@ -61,15 +61,25 @@ export default function App() {
           headers: {
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache',
+            'Accept': 'application/json',
+            'User-Agent': 'MelodySnap-App/1.0',
           },
         });
 
         if (!response.ok) {
-          console.warn('[App] Failed to fetch version info, skipping update check');
+          const text = await response.text().catch(() => '');
+          console.warn('[App] Version fetch failed:', response.status, response.statusText, text?.slice(0, 200));
           return;
         }
 
-        const versionInfo = await response.json();
+        const rawText = await response.text();
+        let versionInfo;
+        try {
+          versionInfo = JSON.parse(rawText);
+        } catch (parseErr) {
+          console.warn('[App] Version JSON parse error:', parseErr?.message, rawText?.slice(0, 200));
+          return;
+        }
         console.log('[App] Server version info:', versionInfo);
 
         if (versionInfo.minVersion && versionInfo.updateUrl) {
@@ -121,7 +131,7 @@ export default function App() {
           }
         }
       } catch (error) {
-        console.error('[App] Error checking version:', error);
+        console.error('[App] Error checking version:', error?.message || error, error?.cause);
         // 버전 체크 실패는 앱 실행을 막지 않음
       }
     };
