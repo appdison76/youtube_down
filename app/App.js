@@ -49,7 +49,7 @@ export default function App() {
   useEffect(() => {
     const checkVersion = async () => {
       try {
-        const VERSION_URL = 'https://appdison76.github.io/youtube_down/install-page/version.json';
+        const VERSION_URL = 'https://melodysnap-app.mediacommercelab.com/install-page/version.json';
         const currentVersion = Constants.expoConfig?.version || '1.0.4';
         
         console.log('[App] Checking version update...');
