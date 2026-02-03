@@ -1,5 +1,16 @@
 # 버전 관리 가이드
 
+---
+
+## ⚠️ 중요 - 절대 변경 금지 (관리 메모)
+
+- **version.json 위치**: **repo 루트의 `install-page/version.json` 한 곳만** 사용한다.
+- **App.js의 VERSION_URL**: `https://appdison76.github.io/youtube_down/install-page/version.json` 으로 고정. **`web-app/install-page/` 로 바꾸지 말 것.**
+- **version.json 파일을 두 개 두지 말 것.** `web-app/install-page/version.json` 은 사용하지 않음. 수정할 파일은 `install-page/version.json` 하나만.
+- 구버전 앱(1.2.0 이전)과 현재 앱 모두 **같은 경로**(install-page/version.json)를 본다. 여기만 수정하면 됨.
+
+---
+
 ## 개요
 
 앱 실행 시 자동으로 버전을 체크하고, 낮은 버전이면 설치 페이지로 리다이렉트하는 기능입니다.

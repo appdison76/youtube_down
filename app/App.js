@@ -49,8 +49,7 @@ export default function App() {
   useEffect(() => {
     const checkVersion = async () => {
       try {
-        // 1.2.0 앱이 보는 URL - 여기 없으면 404라 업데이트 안 뜸. web-app/install-page/에 둠
-        const VERSION_URL = 'https://appdison76.github.io/youtube_down/web-app/install-page/version.json';
+        const VERSION_URL = 'https://appdison76.github.io/youtube_down/install-page/version.json';
         const currentVersion = Constants.expoConfig?.version || '1.0.4';
         
         console.log('[App] Checking version update...');

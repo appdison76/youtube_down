@@ -1,6 +1,6 @@
 @echo off
 echo ========================================
-echo Release APK 빌드 스크립트 (버전 1.2.2)
+echo Release APK 빌드 스크립트 (버전 1.2.3)
 echo ========================================
 echo.
 
@@ -32,6 +32,6 @@ echo [성공] 빌드 완료!
 echo ========================================
 echo.
 echo APK 위치:
-echo   app\android\app\build\outputs\apk\release\melody-snap-1.2.2.apk
+echo   app\android\app\build\outputs\apk\release\melody-snap-1.2.3.apk
 echo.
 pause
