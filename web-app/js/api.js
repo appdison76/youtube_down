@@ -1,5 +1,13 @@
 // API 설정 - install-page config 로드, 이중화(primary 실패 시 Railway)
-const CONFIG_URL = 'https://appdison76.github.io/youtube_down/web-app/install-page/config.json';
+// 상대 경로 사용 → 같은 오리진(github.io / 커스텀 도메인)에서 CORS 없이 로드
+const CONFIG_URL = (function () {
+  try {
+    return new URL('install-page/config.json', window.location.href).href;
+  } catch (_) {
+    return 'https://appdison76.github.io/youtube_down/web-app/install-page/config.json';
+  }
+})();
+const DEFAULT_PRIMARY = 'https://melodysnap.mediacommercelab.com';
 const DEFAULT_RAILWAY = 'https://youtubedown-production.up.railway.app';
 
 let cachedConfig = null;
@@ -19,8 +27,8 @@ async function loadConfig() {
       }
       throw new Error('invalid config');
     } catch (e) {
-      console.warn('[web-app API] Config load failed, using Railway:', e?.message);
-      cachedConfig = { apiBaseUrl: DEFAULT_RAILWAY, source: 'default' };
+      console.warn('[web-app API] Config load failed, using default order (primary → Railway):', e?.message);
+      cachedConfig = { apiBaseUrls: [DEFAULT_PRIMARY, DEFAULT_RAILWAY], source: 'default' };
       return cachedConfig;
     }
   })();
@@ -32,8 +40,8 @@ async function getApiBaseUrls() {
   if (config.apiBaseUrls && Array.isArray(config.apiBaseUrls) && config.apiBaseUrls.length > 0) {
     return config.apiBaseUrls.filter(Boolean);
   }
-  const primary = config.apiBaseUrl || (window.API_BASE_URL || DEFAULT_RAILWAY);
-  return primary === DEFAULT_RAILWAY ? [primary, DEFAULT_RAILWAY] : [primary, DEFAULT_RAILWAY];
+  const primary = config.apiBaseUrl || (window.API_BASE_URL || DEFAULT_PRIMARY);
+  return primary === DEFAULT_RAILWAY ? [DEFAULT_PRIMARY, DEFAULT_RAILWAY] : [primary, DEFAULT_RAILWAY];
 }
 
 async function fetchWithFallback(path, init = {}) {

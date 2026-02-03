@@ -24,8 +24,8 @@
         (function(){ var v = window.CACHE_V; var t = Date.now(); document.getElementById('link-manifest').href = 'manifest.json?v=' + v + '&_=' + t; document.getElementById('link-css').href = 'css/styles.css?v=' + v + '&_=' + t; })();
     </script>
     <script>
-        // config 로드 실패 시 fallback (api.js의 Railway URL과 동일하게 유지)
-        window.API_BASE_URL = 'https://youtubedown-production.up.railway.app';
+        // config 로드 실패 시 fallback (api.js 기본값과 동일: primary 먼저)
+        window.API_BASE_URL = 'https://melodysnap.mediacommercelab.com';
     </script>
 </head>
 <body>
