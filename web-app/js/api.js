@@ -120,9 +120,9 @@ async function getVideoInfo(url) {
   return await response.json();
 }
 
-// 다운로드 버튼 누를 때 primary → Railway 순으로 살아있는 서버 확인 (결과 60초 캐시)
+// 다운로드 버튼 누를 때 primary → Railway 순으로 살아있는 서버 확인 (결과 30초 캐시)
 const PROBE_TIMEOUT_MS = 5000;
-const PROBE_CACHE_MS = 60000;
+const PROBE_CACHE_MS = 30000;
 let probeCache = { base: null, at: 0 };
 
 async function probeWorkingBaseUrl() {
