@@ -120,8 +120,36 @@ async function getVideoInfo(url) {
   return await response.json();
 }
 
-// 다운로드 URL 반환 (기존 호환 - 첫 번째 base만 사용)
+// 다운로드 버튼 누를 때 primary → Railway 순으로 살아있는 서버 확인 (결과 60초 캐시)
+const PROBE_TIMEOUT_MS = 5000;
+const PROBE_CACHE_MS = 60000;
+let probeCache = { base: null, at: 0 };
+
+async function probeWorkingBaseUrl() {
+  const baseUrls = await getApiBaseUrls();
+  for (let i = 0; i < baseUrls.length; i++) {
+    const base = baseUrls[i].replace(/\/$/, '');
+    const controller = new AbortController();
+    const t = setTimeout(function () { controller.abort(); }, PROBE_TIMEOUT_MS);
+    try {
+      const res = await fetch(base + '/api/search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', signal: controller.signal });
+      clearTimeout(t);
+      return base;
+    } catch (_) {
+      clearTimeout(t);
+    }
+  }
+  return null;
+}
+
+// 다운로드 URL 반환: probe로 확인(60초 캐시), 실패 시 config 첫 번째
 async function getDownloadBaseUrl() {
+  if (probeCache.base && (Date.now() - probeCache.at < PROBE_CACHE_MS)) return probeCache.base.replace(/\/$/, '');
+  const probed = await probeWorkingBaseUrl();
+  if (probed) {
+    probeCache = { base: probed, at: Date.now() };
+    return probed.replace(/\/$/, '');
+  }
   const urls = await getApiBaseUrls();
   return urls[0].replace(/\/$/, '');
 }
