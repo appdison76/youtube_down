@@ -142,7 +142,7 @@ async function probeWorkingBaseUrl() {
   return null;
 }
 
-// 다운로드 URL 반환: probe로 확인(60초 캐시), 실패 시 config 첫 번째
+// 다운로드 URL 반환: probe로 확인(30초 캐시), 실패 시 config 첫 번째
 async function getDownloadBaseUrl() {
   if (probeCache.base && (Date.now() - probeCache.at < PROBE_CACHE_MS)) return probeCache.base.replace(/\/$/, '');
   const probed = await probeWorkingBaseUrl();
