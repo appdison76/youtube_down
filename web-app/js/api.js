@@ -1,7 +1,6 @@
-// API 설정 - install-page config 로드, 이중화(primary 실패 시 Railway). 앱과 동일: config 실패 시에도 노트북(로컬) 먼저.
+// API 설정 - install-page config 로드, 이중화(primary 실패 시 Railway)
 const CONFIG_URL = 'https://appdison76.github.io/youtube_down/web-app/install-page/config.json';
 const DEFAULT_RAILWAY = 'https://youtubedown-production.up.railway.app';
-const DEFAULT_LOCAL_FIRST = 'https://melodysnap.mediacommercelab.com'; // config 로드 실패 시 노트북 먼저 (앱과 동일)
 
 let cachedConfig = null;
 let configLoadPromise = null;
@@ -16,17 +15,12 @@ async function loadConfig() {
       const config = await res.json();
       if (config && (config.apiBaseUrl || (config.apiBaseUrls && config.apiBaseUrls.length > 0))) {
         cachedConfig = config;
-        console.log('[web-app API] Config loaded, apiBaseUrls:', config.apiBaseUrls || [config.apiBaseUrl]);
         return config;
       }
       throw new Error('invalid config');
     } catch (e) {
-      console.warn('[web-app API] Config load failed, using default (local first, then Railway):', e?.message);
-      cachedConfig = {
-        apiBaseUrl: DEFAULT_LOCAL_FIRST,
-        apiBaseUrls: [DEFAULT_LOCAL_FIRST, DEFAULT_RAILWAY],
-        source: 'default',
-      };
+      console.warn('[web-app API] Config load failed, using Railway:', e?.message);
+      cachedConfig = { apiBaseUrl: DEFAULT_RAILWAY, source: 'default' };
       return cachedConfig;
     }
   })();
