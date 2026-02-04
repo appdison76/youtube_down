@@ -20,6 +20,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { searchVideos, getAutocomplete } from '../services/downloadService';
 import { addFavorite, removeFavorite, isFavorite, initDatabase } from '../services/database';
 import AdBanner from '../components/AdBanner';
+import HeaderTitle from '../components/HeaderTitle';
 import LanguageSelector from '../components/LanguageSelector';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../locales/translations';
@@ -532,7 +533,7 @@ export default function VideoSearchScreen({ navigation, route }) {
             />
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle}>{t.appTitle}</Text>
+            <HeaderTitle title={t.appTitle} />
           </View>
           <LanguageSelector />
         </View>

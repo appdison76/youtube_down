@@ -27,6 +27,7 @@ import {
 } from '../services/database';
 import { deleteThumbnailCacheIfUnused } from '../services/downloadService';
 import AdBanner from '../components/AdBanner';
+import HeaderTitle from '../components/HeaderTitle';
 import PinManagerModal from '../components/PinManagerModal';
 import PinSelectorModal from '../components/PinSelectorModal';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -465,7 +466,7 @@ export default function FavoritesScreen({ navigation }) {
             />
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle}>{t.appTitle}</Text>
+            <HeaderTitle title={t.appTitle} />
           </View>
           <TouchableOpacity
             style={styles.headerPinButton}

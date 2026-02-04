@@ -21,6 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import AdBanner from '../components/AdBanner';
+import HeaderTitle from '../components/HeaderTitle';
 import LanguageSelector from '../components/LanguageSelector';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../locales/translations';
@@ -996,7 +997,7 @@ export default function MusicRecognitionScreen({ navigation }) {
           />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>{t.appTitle}</Text>
+          <HeaderTitle title={t.appTitle} />
         </View>
         <LanguageSelector />
         </View>

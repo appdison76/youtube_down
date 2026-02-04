@@ -23,6 +23,7 @@ import * as IntentLauncher from 'expo-intent-launcher';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 import AdBanner from '../components/AdBanner';
+import HeaderTitle from '../components/HeaderTitle';
 import MiniPlayer from '../components/MiniPlayer';
 import LanguageSelector from '../components/LanguageSelector';
 import PinManagerModal from '../components/PinManagerModal';
@@ -1491,7 +1492,7 @@ export default function DownloadsScreen({ navigation }) {
             />
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle}>{t.appTitle}</Text>
+            <HeaderTitle title={t.appTitle} />
           </View>
           <TouchableOpacity
             style={styles.playlistButton}

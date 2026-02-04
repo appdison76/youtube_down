@@ -20,6 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import AdBanner from '../components/AdBanner';
+import HeaderTitle from '../components/HeaderTitle';
 import LanguageSelector from '../components/LanguageSelector';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../locales/translations';
@@ -1675,7 +1676,7 @@ export default function SearchScreen({ navigation, route }) {
             />
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle}>{t.appTitle}</Text>
+            <HeaderTitle title={t.appTitle} />
           </View>
           <LanguageSelector />
         </View>
