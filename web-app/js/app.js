@@ -56,7 +56,13 @@ function initApp() {
     }
     var urlParam = params.get('url');
     if (urlParam && document.getElementById('url-input')) {
-        document.getElementById('url-input').value = urlParam;
+        var urlInput = document.getElementById('url-input');
+        urlInput.value = urlParam;
+        urlInput.dispatchEvent(new Event('input', { bubbles: true }));
+        var submitBtn = document.getElementById('url-submit-btn');
+        if (submitBtn) {
+            setTimeout(function () { submitBtn.click(); }, 300);
+        }
     }
 }
 if (document.readyState === 'loading') {
