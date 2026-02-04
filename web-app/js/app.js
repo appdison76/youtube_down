@@ -3,6 +3,16 @@ window.__FROM_APP__ = (new URLSearchParams(location.search).get('from_app') === 
 
 // 앱 메인 로직 - 페이지 전환 (스크립트가 body 맨 아래 로드되므로 DOM은 이미 준비된 경우가 많음)
 function initApp() {
+    // from_app=1 이면 섹션 제목을 "다운로드" → "재생하기"로 표시
+    if (window.__FROM_APP__) {
+        const searchTitle = document.querySelector('#search-page .section-title');
+        if (searchTitle) searchTitle.textContent = 'YouTube 검색으로 재생하기';
+        const saveTitle = document.querySelector('#save-page .section-title');
+        if (saveTitle) saveTitle.textContent = '링크로 재생하기';
+        const recognitionTitle = document.querySelector('#recognition-youtube-area .section-title');
+        if (recognitionTitle) recognitionTitle.textContent = '재생할 영상 선택';
+    }
+
     // PRO 설치 배너 링크: 로컬/사설IP(폰 와이파이 등)는 8000 포트, 배포는 GitHub Pages
     const banner = document.getElementById('pro-install-banner');
     if (banner) {

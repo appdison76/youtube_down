@@ -528,6 +528,17 @@ body {
     background: #388E3C;
 }
 
+/* from_app=1 시 재생 버튼 (파란색) */
+.card-btn-play-only {
+    background: #2196F3;
+    color: white;
+    border-color: #2196F3;
+}
+.card-btn-play-only:hover {
+    background: #1976D2;
+    border-color: #1976D2;
+}
+
 /* 찜하기 카드: 찜삭제 버튼 (검색 카드와 동일 레이아웃, 회색) */
 .card-btn-remove-favorite {
     background: #757575;
