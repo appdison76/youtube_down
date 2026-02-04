@@ -64,10 +64,10 @@ function displayItems(items) {
             '<h4 class="youtube-card-title">' + (item.title || '') + '</h4>' +
             '<p class="youtube-card-channel">' + author + '</p>' +
             '<div class="youtube-card-actions">' +
+            '<button type="button" class="card-btn card-btn-remove-favorite" data-id="' + idEsc + '"><ion-icon name="trash-outline"></ion-icon> 찜삭제</button>' +
             (window.__FROM_APP__
                 ? '<button type="button" class="card-btn card-btn-play-only" data-url="' + urlEsc + '"><ion-icon name="play-circle-outline"></ion-icon> 재생</button>'
                 : '<button type="button" class="card-btn card-btn-download-video" data-url="' + urlEsc + '" data-title="' + (title || '').replace(/'/g, "\\'") + '"><ion-icon name="download-outline"></ion-icon> 영상</button><button type="button" class="card-btn card-btn-download-audio" data-url="' + urlEsc + '" data-title="' + (title || '').replace(/'/g, "\\'") + '"><ion-icon name="download-outline"></ion-icon> 음악</button>') +
-            '<button type="button" class="card-btn card-btn-remove-favorite" data-id="' + idEsc + '"><ion-icon name="trash-outline"></ion-icon> 찜삭제</button>' +
             '</div></div></div>';
     }).join('');
 
