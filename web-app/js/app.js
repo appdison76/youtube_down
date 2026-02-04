@@ -25,27 +25,39 @@ function initApp() {
         });
     }
 
+    function showPage(targetPage) {
+        navTabs.forEach(t => t.classList.remove('active'));
+        const tab = document.querySelector('.nav-tab[data-page="' + targetPage + '"]');
+        if (tab) tab.classList.add('active');
+        pages.forEach(p => {
+            p.classList.remove('active');
+            p.style.display = 'none';
+        });
+        const targetPageElement = document.getElementById(targetPage + '-page');
+        if (targetPageElement) {
+            targetPageElement.classList.add('active');
+            targetPageElement.style.display = 'block';
+        }
+    }
+
     navTabs.forEach(tab => {
         tab.addEventListener('click', () => {
-            const targetPage = tab.dataset.page;
-            
-            // 탭 활성화
-            navTabs.forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
-            
-            // 페이지 전환
-            pages.forEach(p => {
-                p.classList.remove('active');
-                p.style.display = 'none';
-            });
-            
-            const targetPageElement = document.getElementById(`${targetPage}-page`);
-            if (targetPageElement) {
-                targetPageElement.classList.add('active');
-                targetPageElement.style.display = 'block';
-            }
+            showPage(tab.dataset.page);
         });
     });
+
+    // 앱에서 링크로 올 때: ?page=save 또는 #save 이면 링크복사 탭으로, url= 쿼리 있으면 입력란에 채움
+    var params = new URLSearchParams(location.search);
+    var pageParam = params.get('page');
+    var hash = (location.hash || '').replace(/^#/, '');
+    var targetPage = pageParam || hash;
+    if (targetPage && document.getElementById(targetPage + '-page')) {
+        showPage(targetPage);
+    }
+    var urlParam = params.get('url');
+    if (urlParam && document.getElementById('url-input')) {
+        document.getElementById('url-input').value = urlParam;
+    }
 }
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initApp);
