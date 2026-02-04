@@ -64,37 +64,48 @@ function displayItems(items) {
             '<h4 class="youtube-card-title">' + (item.title || '') + '</h4>' +
             '<p class="youtube-card-channel">' + author + '</p>' +
             '<div class="youtube-card-actions">' +
-            '<button type="button" class="card-btn card-btn-download-video" data-url="' + urlEsc + '" data-title="' + (title || '').replace(/'/g, "\\'") + '"><ion-icon name="download-outline"></ion-icon> 영상</button>' +
-            '<button type="button" class="card-btn card-btn-download-audio" data-url="' + urlEsc + '" data-title="' + (title || '').replace(/'/g, "\\'") + '"><ion-icon name="download-outline"></ion-icon> 음악</button>' +
+            (window.__FROM_APP__
+                ? '<button type="button" class="card-btn card-btn-play-only" data-url="' + urlEsc + '"><ion-icon name="play-circle-outline"></ion-icon> 재생</button>'
+                : '<button type="button" class="card-btn card-btn-download-video" data-url="' + urlEsc + '" data-title="' + (title || '').replace(/'/g, "\\'") + '"><ion-icon name="download-outline"></ion-icon> 영상</button><button type="button" class="card-btn card-btn-download-audio" data-url="' + urlEsc + '" data-title="' + (title || '').replace(/'/g, "\\'") + '"><ion-icon name="download-outline"></ion-icon> 음악</button>') +
             '<button type="button" class="card-btn card-btn-remove-favorite" data-id="' + idEsc + '"><ion-icon name="trash-outline"></ion-icon> 찜삭제</button>' +
             '</div></div></div>';
     }).join('');
 
-    // 영상/음악 받기: 다운로드 탭으로 이동 없이 바로 다운로드 URL 열기 (검색·음악찾기와 동일)
-    libraryItems.querySelectorAll('.card-btn-download-video').forEach(function (btn) {
-        btn.addEventListener('click', async function (e) {
-            e.stopPropagation();
-            var url = btn.getAttribute('data-url');
-            var title = btn.getAttribute('data-title') || 'video';
-            if (!url) return;
-            try {
-                var base = await getDownloadBaseUrl();
-                window.open(base + '/api/download/video?url=' + encodeURIComponent(url) + '&quality=highestvideo&title=' + encodeURIComponent(title), '_blank');
-            } catch (err) { console.error(err); alert('다운로드에 실패했습니다.'); }
+    // 영상/음악 받기 (또는 from_app 시 재생만): 다운로드 탭으로 이동 없이 바로 다운로드 URL 열기 (검색·음악찾기와 동일)
+    if (window.__FROM_APP__) {
+        libraryItems.querySelectorAll('.card-btn-play-only').forEach(function (btn) {
+            btn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                var url = btn.getAttribute('data-url');
+                if (url) window.open(url, '_blank');
+            });
         });
-    });
-    libraryItems.querySelectorAll('.card-btn-download-audio').forEach(function (btn) {
-        btn.addEventListener('click', async function (e) {
-            e.stopPropagation();
-            var url = btn.getAttribute('data-url');
-            var title = btn.getAttribute('data-title') || 'audio';
-            if (!url) return;
-            try {
-                var base = await getDownloadBaseUrl();
-                window.open(base + '/api/download/audio?url=' + encodeURIComponent(url) + '&quality=highestaudio&title=' + encodeURIComponent(title), '_blank');
-            } catch (err) { console.error(err); alert('다운로드에 실패했습니다.'); }
+    } else {
+        libraryItems.querySelectorAll('.card-btn-download-video').forEach(function (btn) {
+            btn.addEventListener('click', async function (e) {
+                e.stopPropagation();
+                var url = btn.getAttribute('data-url');
+                var title = btn.getAttribute('data-title') || 'video';
+                if (!url) return;
+                try {
+                    var base = await getDownloadBaseUrl();
+                    window.open(base + '/api/download/video?url=' + encodeURIComponent(url) + '&quality=highestvideo&title=' + encodeURIComponent(title), '_blank');
+                } catch (err) { console.error(err); alert('다운로드에 실패했습니다.'); }
+            });
         });
-    });
+        libraryItems.querySelectorAll('.card-btn-download-audio').forEach(function (btn) {
+            btn.addEventListener('click', async function (e) {
+                e.stopPropagation();
+                var url = btn.getAttribute('data-url');
+                var title = btn.getAttribute('data-title') || 'audio';
+                if (!url) return;
+                try {
+                    var base = await getDownloadBaseUrl();
+                    window.open(base + '/api/download/audio?url=' + encodeURIComponent(url) + '&quality=highestaudio&title=' + encodeURIComponent(title), '_blank');
+                } catch (err) { console.error(err); alert('다운로드에 실패했습니다.'); }
+            });
+        });
+    }
     libraryItems.querySelectorAll('.card-btn-remove-favorite').forEach(function (btn) {
         btn.addEventListener('click', function (e) {
             e.stopPropagation();

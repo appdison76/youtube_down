@@ -282,8 +282,7 @@ async function renderRecognitionYouTubeResults(items) {
                     <p class="youtube-card-channel">${channel}</p>
                     <div class="youtube-card-actions">
                         <button type="button" class="card-btn card-btn-favorite" data-video-id="${videoId}" data-title="${(title || '').replace(/"/g, '&quot;')}" data-channel="${(channel || '').replace(/"/g, '&quot;')}" data-thumb="${(thumb || '').replace(/"/g, '&quot;')}" data-url="${url.replace(/"/g, '&quot;')}">☆ 찜하기</button>
-                        <button type="button" class="card-btn card-btn-download-video" data-url="${url.replace(/"/g, '&quot;')}" data-title="${(title || '').replace(/"/g, '&quot;')}"><ion-icon name="download-outline"></ion-icon> 영상</button>
-                        <button type="button" class="card-btn card-btn-download-audio" data-url="${url.replace(/"/g, '&quot;')}" data-title="${(title || '').replace(/"/g, '&quot;')}"><ion-icon name="download-outline"></ion-icon> 음악</button>
+                        ${window.__FROM_APP__ ? `<button type="button" class="card-btn card-btn-play-only" data-url="${url.replace(/"/g, '&quot;')}"><ion-icon name="play-circle-outline"></ion-icon> 재생</button>` : `<button type="button" class="card-btn card-btn-download-video" data-url="${url.replace(/"/g, '&quot;')}" data-title="${(title || '').replace(/"/g, '&quot;')}"><ion-icon name="download-outline"></ion-icon> 영상</button><button type="button" class="card-btn card-btn-download-audio" data-url="${url.replace(/"/g, '&quot;')}" data-title="${(title || '').replace(/"/g, '&quot;')}"><ion-icon name="download-outline"></ion-icon> 음악</button>`}
                     </div>
                 </div>
             </div>
@@ -317,30 +316,38 @@ async function renderRecognitionYouTubeResults(items) {
             }
         }
     }
-    recognitionYoutubeResults.querySelectorAll('.card-btn-download-video').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const url = btn.dataset.url;
-            const title = btn.dataset.title || 'video';
-            const videoId = url.match(/v=([^&]+)/)?.[1] || '';
-            try {
-                const base = await getDownloadBaseUrl();
-                window.open(base + '/api/download/video?url=' + encodeURIComponent(url) + '&quality=highestvideo&title=' + encodeURIComponent(title), '_blank');
-            } catch (err) { console.error(err); alert('다운로드에 실패했습니다.'); }
+    if (window.__FROM_APP__) {
+        recognitionYoutubeResults.querySelectorAll('.card-btn-play-only').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const url = btn.dataset.url;
+                if (url) window.open(url, '_blank');
+            });
         });
-    });
-    recognitionYoutubeResults.querySelectorAll('.card-btn-download-audio').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const url = btn.dataset.url;
-            const title = btn.dataset.title || 'audio';
-            const videoId = url.match(/v=([^&]+)/)?.[1] || '';
-            try {
-                const base = await getDownloadBaseUrl();
-                window.open(base + '/api/download/audio?url=' + encodeURIComponent(url) + '&quality=highestaudio&title=' + encodeURIComponent(title), '_blank');
-            } catch (err) { console.error(err); alert('다운로드에 실패했습니다.'); }
+    } else {
+        recognitionYoutubeResults.querySelectorAll('.card-btn-download-video').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const url = btn.dataset.url;
+                const title = btn.dataset.title || 'video';
+                try {
+                    const base = await getDownloadBaseUrl();
+                    window.open(base + '/api/download/video?url=' + encodeURIComponent(url) + '&quality=highestvideo&title=' + encodeURIComponent(title), '_blank');
+                } catch (err) { console.error(err); alert('다운로드에 실패했습니다.'); }
+                });
+            });
+        recognitionYoutubeResults.querySelectorAll('.card-btn-download-audio').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const url = btn.dataset.url;
+                const title = btn.dataset.title || 'audio';
+                try {
+                    const base = await getDownloadBaseUrl();
+                    window.open(base + '/api/download/audio?url=' + encodeURIComponent(url) + '&quality=highestaudio&title=' + encodeURIComponent(title), '_blank');
+                } catch (err) { console.error(err); alert('다운로드에 실패했습니다.'); }
+            });
         });
-    });
+    }
     recognitionYoutubeResults.querySelectorAll('.card-btn-favorite').forEach(btn => {
         btn.addEventListener('click', async (e) => {
             e.stopPropagation();
