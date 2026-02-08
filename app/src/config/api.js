@@ -5,7 +5,7 @@
 import { AppState } from 'react-native';
 
 // 외부 설정 파일 URL (version.json과 동일한 위치)
-const CONFIG_URL = 'https://appdison76.github.io/youtube_down/web-app/install-page/config.json';
+const CONFIG_URL = 'https://melodysnap-app.mediacommercelab.com/web-app/install-page/config.json';
 
 // 기본값 (fallback - 외부 설정을 불러올 수 없을 때 사용)
 const DEFAULT_CONFIG = {

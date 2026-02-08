@@ -49,7 +49,7 @@ export default function App() {
   useEffect(() => {
     const checkVersion = async () => {
       try {
-        const VERSION_URL = 'https://appdison76.github.io/youtube_down/install-page/version.json';
+        const VERSION_URL = 'https://melodysnap-app.mediacommercelab.com/install-page/version.json';
         const currentVersion = Constants.expoConfig?.version || '1.0.4';
         
         console.log('[App] Checking version update...');
@@ -107,7 +107,7 @@ export default function App() {
                 {
                   text: '업데이트',
                   onPress: () => {
-                    const updateUrl = versionInfo.updateUrl || 'https://appdison76.github.io/youtube_down/web-app/install-page/';
+                    const updateUrl = versionInfo.updateUrl || 'https://melodysnap-app.mediacommercelab.com/web-app/install-page/';
                     Linking.openURL(updateUrl).catch(err => {
                       console.error('[App] Failed to open update URL:', err);
                     });
@@ -119,7 +119,7 @@ export default function App() {
             
             // 자동으로 설치 페이지로 리다이렉트
             setTimeout(() => {
-              const updateUrl = versionInfo.updateUrl || 'https://appdison76.github.io/youtube_down/web-app/install-page/';
+              const updateUrl = versionInfo.updateUrl || 'https://melodysnap-app.mediacommercelab.com/web-app/install-page/';
               Linking.openURL(updateUrl).catch(err => {
                 console.error('[App] Failed to open update URL:', err);
               });

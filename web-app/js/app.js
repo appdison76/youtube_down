@@ -21,7 +21,7 @@ function initApp() {
         const isLocal = host === 'localhost' || host === '127.0.0.1' || isPrivateIP;
         banner.href = isLocal
             ? `http://${host}:8000/install-page/`
-            : 'https://appdison76.github.io/youtube_down/web-app/install-page/';
+            : 'https://melodysnap-app.mediacommercelab.com/web-app/install-page/';
     }
 
     const navTabs = document.querySelectorAll('.nav-tab');

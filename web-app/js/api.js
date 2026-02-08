@@ -4,7 +4,7 @@ const CONFIG_URL = (function () {
   try {
     return new URL('install-page/config.json', window.location.href).href;
   } catch (_) {
-    return 'https://appdison76.github.io/youtube_down/web-app/install-page/config.json';
+    return 'https://melodysnap-app.mediacommercelab.com/web-app/install-page/config.json';
   }
 })();
 const DEFAULT_PRIMARY = 'https://melodysnap.mediacommercelab.com';
