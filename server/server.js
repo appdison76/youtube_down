@@ -1,4 +1,5 @@
 const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
@@ -1552,6 +1553,51 @@ app.post('/api/autocomplete', async (req, res) => {
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
+});
+
+// ShazamKit Developer Token (앱에서 Shazam 1순위 인식용)
+// 1) SHAZAM_DEVELOPER_TOKEN 있으면 그대로 반환 (수동 갱신 시)
+// 2) 없으면 SHAZAM_P8_CONTENT + SHAZAM_KEY_ID + SHAZAM_TEAM_ID 로 호출 시마다 생성 (만료 체크 불필요)
+let shazamTokenCache = { token: null, expiresAt: 0 };
+const SHAZAM_TOKEN_CACHE_MS = 60 * 60 * 1000; // 1시간 캐시
+
+function generateShazamToken() {
+  const jwt = require('jsonwebtoken');
+  const keyId = process.env.SHAZAM_KEY_ID || process.env.KEY_ID;
+  const teamId = process.env.SHAZAM_TEAM_ID || process.env.TEAM_ID;
+  let privateKey = process.env.SHAZAM_P8_CONTENT;
+  if (!privateKey && process.env.SHAZAM_P8_PATH) {
+    try {
+      privateKey = fs.readFileSync(process.env.SHAZAM_P8_PATH, 'utf8');
+    } catch (e) {
+      return null;
+    }
+  }
+  if (!privateKey || !keyId || !teamId) return null;
+  const now = Math.floor(Date.now() / 1000);
+  const expSec = Number(process.env.SHAZAM_TOKEN_EXPIRE_SEC) || 15777000; // 6개월
+  return jwt.sign(
+    { iss: teamId, iat: now, exp: now + expSec },
+    privateKey,
+    { algorithm: 'ES256', header: { alg: 'ES256', kid: keyId } }
+  );
+}
+
+app.get('/api/shazam-token', (req, res) => {
+  const manual = process.env.SHAZAM_DEVELOPER_TOKEN;
+  if (manual) {
+    return res.json({ token: manual });
+  }
+  const now = Date.now();
+  if (shazamTokenCache.token && shazamTokenCache.expiresAt > now) {
+    return res.json({ token: shazamTokenCache.token });
+  }
+  const token = generateShazamToken();
+  if (!token) {
+    return res.status(404).json({ error: 'Shazam token not configured. Set SHAZAM_DEVELOPER_TOKEN or SHAZAM_P8_CONTENT+KEY_ID+TEAM_ID.' });
+  }
+  shazamTokenCache = { token, expiresAt: now + SHAZAM_TOKEN_CACHE_MS };
+  res.json({ token });
 });
 
 // Health check
