@@ -18,6 +18,7 @@ import {
   AppState,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import AdBanner from '../components/AdBanner';
@@ -27,7 +28,9 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../locales/translations';
 import { searchVideos } from '../services/downloadService';
 import { addFavorite, removeFavorite, isFavorite, getFavorites } from '../services/database';
+import { fetchWithFallback } from '../config/api';
 import ACRCloudModule from '../modules/ACRCloudModule';
+import ShazamModule from '../modules/ShazamModule';
 import { 
   sendRecognitionNotification, 
   sendRecognitionFailedNotification,
@@ -64,6 +67,7 @@ export default function MusicRecognitionScreen({ navigation }) {
   // 내부 소리 모드 제거 - 주변 소리 모드만 사용
   const useInternalAudio = false;
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const circleAnims = useRef([0, 1, 2, 3, 4].map(() => ({ scale: new Animated.Value(0.6), opacity: new Animated.Value(0.4) }))).current;
   const recordingTimeoutRef = useRef(null);
   const appStateRef = useRef(AppState.currentState);
   const shouldContinueRecognitionRef = useRef(true); // 인식 계속 여부 플래그
@@ -125,6 +129,22 @@ export default function MusicRecognitionScreen({ navigation }) {
         } catch (initError) {
           console.warn('[MusicRecognitionScreen] ⚠️ ACRCloud initialization error (non-fatal):', initError.message);
           // 초기화 실패해도 앱은 계속 실행
+        }
+
+        // Shazam 1순위 사용 시: 서버에서 토큰 받아 초기화
+        if (ShazamModule?.isAvailable?.()) {
+          try {
+            const res = await fetchWithFallback('/api/shazam-token');
+            if (res.ok) {
+              const data = await res.json();
+              if (data?.token && ShazamModule.initialize) {
+                const ok = await ShazamModule.initialize(data.token);
+                console.log('[MusicRecognitionScreen] Shazam initialize:', ok ? '✅' : '⚠️');
+              }
+            }
+          } catch (shazamErr) {
+            console.warn('[MusicRecognitionScreen] Shazam token fetch/init failed (ACRCloud fallback):', shazamErr?.message);
+          }
         }
       } catch (error) {
         // ✅ 첫 설치 시 권한이 없어서 실패할 수 있으므로 에러를 조용히 처리
@@ -499,6 +519,36 @@ export default function MusicRecognitionScreen({ navigation }) {
     }
   }, [isRecognizing]);
 
+  // 샤잠 스타일 동심원 펄스 애니메이션
+  useEffect(() => {
+    if (!isRecognizing) {
+      circleAnims.forEach(({ scale, opacity }) => {
+        scale.setValue(0.6);
+        opacity.setValue(0);
+      });
+      return;
+    }
+    const anims = circleAnims.map(({ scale, opacity }, i) => {
+      const delay = i * 400;
+      return Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.parallel([
+            Animated.timing(scale, { toValue: 2.2, duration: 2000, useNativeDriver: true }),
+            Animated.timing(opacity, { toValue: 0, duration: 2000, useNativeDriver: true }),
+          ]),
+          Animated.parallel([
+            Animated.timing(scale, { toValue: 0.6, duration: 1, useNativeDriver: true }),
+            Animated.timing(opacity, { toValue: 0.4, duration: 1, useNativeDriver: true }),
+          ]),
+        ]),
+        { iterations: -1 }
+      );
+    });
+    anims.forEach(a => a.start());
+    return () => anims.forEach(a => a.stop());
+  }, [isRecognizing]);
+
   // 마이크 권한 확인 및 요청 (Android)
   const requestMicrophonePermission = async () => {
     if (Platform.OS !== 'android') {
@@ -710,7 +760,65 @@ export default function MusicRecognitionScreen({ navigation }) {
         }
       }
       
-      console.log('[MusicRecognitionScreen] Step 3: Checking ACRCloud initialization...');
+      console.log('[MusicRecognitionScreen] Step 3: Checking recognition engine (Shazam → ACRCloud 2-way fallback)...');
+
+      // 2중 폴백: Shazam (1순위) → ACRCloud (2순위)
+      if (Platform.OS === 'android' && ShazamModule?.isAvailable?.()) {
+        try {
+          console.log('[MusicRecognitionScreen] Step 3a: Trying Shazam first...');
+          if (appStateRef.current === 'active') setIsRecognizing(true);
+          let shazamSucceeded = false;
+          const handleShazamResult = (result) => {
+            if (shazamSucceeded) return;
+            shazamSucceeded = true;
+            if (recordingTimeoutRef.current) {
+              clearTimeout(recordingTimeoutRef.current);
+              recordingTimeoutRef.current = null;
+            }
+            const newResult = {
+              title: result?.title || '',
+              artist: result?.artist || '',
+              album: result?.album || '',
+            };
+            setIsRecognizing(false);
+            setRecognitionResult(newResult);
+            setRecognitionError(null);
+            if (ACRCloudModule?.stopRecognizing) ACRCloudModule.stopRecognizing().catch(() => {});
+            if (Platform.OS === 'android') {
+              try {
+                const { MusicRecognitionService } = NativeModules;
+                if (MusicRecognitionService) MusicRecognitionService.stopService();
+              } catch (_) {}
+            }
+            sendRecognitionNotification(newResult.title, newResult.artist, newResult);
+            if (result?.title) searchOnYouTube(result.title, result?.artist || '');
+          };
+
+          let resolveShazamWait = null;
+          const shazamWaitPromise = new Promise((r) => { resolveShazamWait = r; });
+          const handleShazamResultWithResolve = (result) => {
+            handleShazamResult(result);
+            if (typeof resolveShazamWait === 'function') resolveShazamWait();
+          };
+          const shazamListener = ShazamModule.addListener?.('onRecognitionResult', handleShazamResultWithResolve);
+          await ShazamModule.startRecognizing?.();
+          const timeoutId = setTimeout(() => { if (typeof resolveShazamWait === 'function') resolveShazamWait(); }, 15000);
+          await shazamWaitPromise;
+          clearTimeout(timeoutId);
+          shazamListener?.remove?.();
+          await ShazamModule.stopRecognizing?.().catch(() => {});
+
+          if (shazamSucceeded) {
+            console.log('[MusicRecognitionScreen] ✅ Shazam recognition succeeded, not using ACRCloud');
+            return;
+          }
+          console.log('[MusicRecognitionScreen] Step 3b: Shazam no result, falling back to ACRCloud...');
+        } catch (shazamError) {
+          console.log('[MusicRecognitionScreen] Shazam failed, using ACRCloud:', shazamError?.message);
+        }
+      } else {
+        console.log('[MusicRecognitionScreen] Shazam not available, using ACRCloud directly');
+      }
 
       // 이전 결과 초기화 (새 인식을 위해 - 샤잠처럼 매번 새로 시작)
       console.log('[MusicRecognitionScreen] 🔄 Clearing previous results for new recognition...');
@@ -847,8 +955,10 @@ export default function MusicRecognitionScreen({ navigation }) {
       if (Platform.OS === 'android' && ACRCloudModule) {
         // ACRCloud로 음악 인식 중지
         await ACRCloudModule.stopRecognizing();
-        console.log('[MusicRecognitionScreen] ✅ Recognition stopped');
-      } else {
+        console.log('[MusicRecognitionScreen] ✅ ACRCloud recognition stopped');
+      }
+      await ShazamModule?.stopRecognizing?.().catch(() => {});
+      if (Platform.OS !== 'android' || !ACRCloudModule) {
         // expo-av 녹음 중지
         if (recording) {
           await recording.stopAndUnloadAsync();
@@ -1009,29 +1119,50 @@ export default function MusicRecognitionScreen({ navigation }) {
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={true}
       >
-        {/* 인식 버튼 */}
+        {/* 인식 영역 - 샤잠 스타일 파란 그라데이션 + 동심원 */}
         <View style={styles.recognitionArea}>
-          <TouchableOpacity
-            style={[
-              styles.recognitionButton,
-              isRecognizing && styles.recognitionButtonActive,
-            ]}
-            onPress={isRecognizing ? stopRecognition : startRecognition}
-            disabled={loadingYoutube}
+          <LinearGradient
+            colors={['#0055A4', '#007AFF', '#0047AB']}
+            style={styles.recognitionGradient}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
           >
-            <Animated.View
-              style={[
-                styles.recognitionButtonInner,
-                { transform: [{ scale: pulseAnim }] },
-              ]}
-            >
-              <Ionicons
-                name={isRecognizing ? 'stop' : 'mic'}
-                size={64}
-                color="#fff"
+            {/* 동심원 펄스 (인식 중일 때만) */}
+            {circleAnims.map(({ scale, opacity }, i) => (
+              <Animated.View
+                key={i}
+                style={[
+                  styles.pulseCircle,
+                  {
+                    transform: [{ scale }],
+                    opacity,
+                  },
+                ]}
               />
-            </Animated.View>
-          </TouchableOpacity>
+            ))}
+            {/* 중앙 버튼 */}
+            <TouchableOpacity
+              style={styles.recognitionButton}
+              onPress={isRecognizing ? stopRecognition : startRecognition}
+              disabled={loadingYoutube}
+              activeOpacity={0.9}
+            >
+              <Animated.View
+                style={[
+                  styles.recognitionButtonInner,
+                  { transform: [{ scale: pulseAnim }] },
+                ]}
+              >
+                <View style={styles.recognitionIconCircle}>
+                  <Ionicons
+                    name={isRecognizing ? 'stop' : 'mic'}
+                    size={56}
+                    color="#fff"
+                  />
+                </View>
+              </Animated.View>
+            </TouchableOpacity>
+          </LinearGradient>
 
           <Text style={styles.recognitionText}>
             {isRecognizing
@@ -1039,13 +1170,10 @@ export default function MusicRecognitionScreen({ navigation }) {
               : t.musicRecognitionTapToStart}
           </Text>
 
-              {isRecognizing && (
+          {isRecognizing && (
             <View style={styles.recognitionHints}>
               <Text style={styles.recognitionHint}>
                 {t.musicRecognitionListeningHint}
-              </Text>
-              <Text style={styles.recognitionHint}>
-                {t.musicRecognitionHowToUse}
               </Text>
               <Text style={styles.recognitionHint}>
                 {t.musicRecognitionVolumeCheck}
@@ -1295,31 +1423,45 @@ const styles = StyleSheet.create({
   },
   recognitionArea: {
     alignItems: 'center',
-    marginTop: 40,
+    marginTop: 20,
     marginBottom: 40,
   },
-  recognitionButton: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#FF0000',
+  recognitionGradient: {
+    width: '100%',
+    minHeight: 320,
+    borderRadius: 24,
+    overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    marginBottom: 16,
   },
-  recognitionButtonActive: {
-    backgroundColor: '#cc0000',
+  pulseCircle: {
+    position: 'absolute',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.5)',
+    backgroundColor: 'transparent',
+  },
+  recognitionButton: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 8,
   },
   recognitionButtonInner: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  recognitionIconCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.5)',
   },
   recognitionText: {
     marginTop: 24,

@@ -1,0 +1,35 @@
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'host.exp.exponent'
+version = '1.0.0'
+
+android {
+  namespace "com.appdison76.shazam"
+  compileSdk 34
+  defaultConfig {
+    minSdk 23
+    targetSdk 34
+    versionCode 1
+    versionName "1.0.0"
+  }
+}
+
+dependencies {
+  implementation "androidx.annotation:annotation:1.2.0"
+  implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.0"
+
+  // ShazamKit Android - AAR가 libs/에 있으면 파일 경로로 직접 추가 (flatDir 대신)
+  def shazamAar = file("${project.projectDir}/libs/shazamkit-android-release.aar")
+  if (shazamAar.exists()) {
+    implementation files(shazamAar)
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'com.squareup.retrofit2:retrofit:2.11.0'
+    implementation 'com.squareup.retrofit2:converter-gson:2.11.0'
+  }
+}
