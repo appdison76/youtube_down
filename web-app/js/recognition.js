@@ -120,16 +120,33 @@ async function startRecognition() {
     }
     
     try {
-        // 마이크 권한 요청
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        
+        // 마이크 권한 요청 — 음악 인식 품질을 위한 고품질 설정
+        const audioConstraints = {
+            audio: {
+                sampleRate: { ideal: 44100 },      // 44.1kHz (음악 표준)
+                channelCount: 1,                   // 모노
+                echoCancellation: false,           // 음악 인식 시 에코 제거 비활성화 (원본 유지)
+                noiseSuppression: false,           // 노이즈 억제 비활성화 (음악 왜곡 방지)
+                autoGainControl: false,
+            },
+        };
+        const stream = await navigator.mediaDevices.getUserMedia(audioConstraints);
+
         // 권한 허용됨 - 플래그 리셋
         permissionDenied = false;
         recognitionStatus.textContent = '음악을 듣고 있습니다...';
-        
-        // 녹음 시작
+
+        // 녹음 시작 — 비트레이트 높여 품질 향상 (외부 스피커 인식 개선)
         audioChunks = [];
-        mediaRecorder = new MediaRecorder(stream);
+        const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+            ? 'audio/webm;codecs=opus'
+            : 'audio/webm';
+        const recorderOptions = { mimeType, audioBitsPerSecond: 128000 };
+        try {
+            mediaRecorder = new MediaRecorder(stream, recorderOptions);
+        } catch (e) {
+            mediaRecorder = new MediaRecorder(stream); // 미지원 시 기본값
+        }
         
         mediaRecorder.ondataavailable = (event) => {
             if (event.data.size > 0) {
