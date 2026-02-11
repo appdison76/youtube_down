@@ -7,6 +7,10 @@ plugins {
 group = 'host.exp.exponent'
 version = '1.0.0'
 
+repositories {
+  maven { url = uri("${project.projectDir}/localMaven") }
+}
+
 android {
   namespace "com.appdison76.shazam"
   compileSdk 34
@@ -22,10 +26,10 @@ dependencies {
   implementation "androidx.annotation:annotation:1.2.0"
   implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.0"
 
-  // ShazamKit Android - AAR가 libs/에 있으면 파일 경로로 직접 추가 (flatDir 대신)
+  // ShazamKit Android - localMaven으로 로컬 저장 (AAR 빌드 시 files() 의존성 오류 방지)
   def shazamAar = file("${project.projectDir}/libs/shazamkit-android-release.aar")
   if (shazamAar.exists()) {
-    implementation files(shazamAar)
+    implementation 'com.shazam:shazamkit:1.0.0'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0'
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'

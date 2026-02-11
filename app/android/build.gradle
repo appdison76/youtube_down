@@ -17,6 +17,8 @@ allprojects {
     google()
     mavenCentral()
     maven { url 'https://www.jitpack.io' }
+    // ShazamKit - expo-shazam-module 로컬 AAR (릴리즈 빌드용)
+    maven { url = uri("${rootProject.projectDir}/../packages/expo-shazam-module/android/localMaven") }
   }
 }
 
