@@ -1465,6 +1465,7 @@ app.post('/api/recognize', upload.single('audio'), async (req, res) => {
     if (code !== 0) {
       const message = (status && status.msg) || 'No result';
       if (code === 1001 || String(message).toLowerCase().includes('no result')) {
+        console.log('[Server] ACRCloud: no result (1001)');
         return res.status(404).json({ error: '음악을 찾을 수 없습니다.', code: 1001 });
       }
       return res.status(502).json({ error: '음악 인식에 실패했습니다.', code });
@@ -1472,6 +1473,7 @@ app.post('/api/recognize', upload.single('audio'), async (req, res) => {
 
     const metadata = result.metadata;
     if (!metadata || !metadata.music || !Array.isArray(metadata.music) || metadata.music.length === 0) {
+      console.log('[Server] ACRCloud: no result (1001)');
       return res.status(404).json({ error: '음악을 찾을 수 없습니다.', code: 1001 });
     }
 
@@ -1488,7 +1490,7 @@ app.post('/api/recognize', upload.single('audio'), async (req, res) => {
       artist: artistName,
       album: albumName,
     };
-    console.log('[Server] Recognize result:', body.title, '-', body.artist);
+    console.log('[Server] ACRCloud: success —', body.title, '-', body.artist);
     res.json(body);
   } catch (error) {
     console.error('[Server] Recognize error:', error);
