@@ -1435,10 +1435,12 @@ app.post('/api/recognize', upload.single('audio'), async (req, res) => {
     }
 
     // 1순위: Shazam (RapidAPI 키 있으면)
+    console.log('[Server] Trying Shazam RapidAPI...');
     const shazamResult = await tryShazamRapidApi(buffer);
     if (shazamResult) {
       return res.json(shazamResult);
     }
+    console.log('[Server] Shazam no result, trying ACRCloud...');
 
     // 2순위: ACRCloud
     let result;
