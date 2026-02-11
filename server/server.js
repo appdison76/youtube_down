@@ -1420,32 +1420,32 @@ app.post('/api/recognize', upload.single('audio'), async (req, res) => {
     if (!req.file || !req.file.buffer || req.file.buffer.length === 0) {
       return res.status(400).json({ error: '오디오 파일이 필요합니다.' });
     }
-    let buffer = req.file.buffer;
+    const rawBuffer = req.file.buffer;
     const mimetype = (req.file.mimetype || '').toLowerCase();
-    console.log('[Server] Recognize: received audio, size:', buffer.length, 'mimetype:', mimetype);
+    console.log('[Server] Recognize: received audio, size:', rawBuffer.length, 'mimetype:', mimetype);
 
-    // 브라우저는 보통 audio/webm 전송. WAV 변환 후 Shazam/ACRCloud 공통 사용
-    if (mimetype.includes('webm') || mimetype.includes('ogg')) {
-      try {
-        buffer = await convertToWavWithFfmpeg(buffer);
-        console.log('[Server] Recognize: converted to wav, size:', buffer.length);
-      } catch (e) {
-        console.warn('[Server] Recognize: ffmpeg conversion failed, trying raw buffer:', e?.message);
-      }
-    }
-
-    // 1순위: Shazam (RapidAPI 키 있으면)
+    // 1순위: Shazam — webm 직접 PCM 변환 (1단계, 품질 유지)
     console.log('[Server] Trying Shazam RapidAPI...');
-    const shazamResult = await tryShazamRapidApi(buffer);
+    const shazamResult = await tryShazamRapidApi(rawBuffer);
     if (shazamResult) {
       return res.json(shazamResult);
     }
     console.log('[Server] Shazam no result, trying ACRCloud...');
 
-    // 2순위: ACRCloud
+    // 2순위: ACRCloud — webm 미지원이므로 WAV 변환 후 전송
+    let acrBuffer = rawBuffer;
+    if (mimetype.includes('webm') || mimetype.includes('ogg')) {
+      try {
+        acrBuffer = await convertToWavWithFfmpeg(rawBuffer);
+        console.log('[Server] Recognize: converted to wav for ACRCloud, size:', acrBuffer.length);
+      } catch (e) {
+        console.warn('[Server] Recognize: ffmpeg conversion failed, trying raw buffer:', e?.message);
+      }
+    }
+
     let result;
     try {
-      result = await acr.identify(buffer);
+      result = await acr.identify(acrBuffer);
     } catch (acrError) {
       console.error('[Server] ACRCloud identify error:', acrError?.message || acrError);
       const msg = (acrError?.message || String(acrError)) || '';
