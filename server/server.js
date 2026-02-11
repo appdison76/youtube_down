@@ -10,6 +10,9 @@ const fs = require('fs');
 
 const execAsync = promisify(exec);
 
+// ffmpeg 경로 (Windows에서 PATH 미인식 시 .env에 FFMPEG_PATH 설정)
+const FFMPEG_CMD = process.env.FFMPEG_PATH || 'ffmpeg';
+
 // ACRCloud 음악 인식 (웹앱용, 앱과 동일한 프로젝트/키 사용)
 const ACRCLOUD_HOST = process.env.ACRCLOUD_HOST || 'identify-ap-southeast-1.acrcloud.com';
 const ACRCLOUD_ACCESS_KEY = process.env.ACRCLOUD_ACCESS_KEY || 'b01665eac8c9b3032f229e8cb9a3e702';
@@ -1338,7 +1341,7 @@ app.post('/api/search', async (req, res) => {
 // webm/ogg → wav 변환 (ffmpeg 있으면 사용, ACRCloud가 webm 미지원일 수 있음)
 function convertToWavWithFfmpeg(inputBuffer) {
   return new Promise((resolve, reject) => {
-    const ffmpeg = spawn('ffmpeg', [
+    const ffmpeg = spawn(FFMPEG_CMD, [
       '-i', 'pipe:0',
       '-vn', '-acodec', 'pcm_s16le', '-ar', '44100', '-ac', '1',
       '-f', 'wav', 'pipe:1',
@@ -1356,7 +1359,7 @@ function convertToWavWithFfmpeg(inputBuffer) {
 // raw PCM s16le 44.1kHz mono (Shazam RapidAPI용, 최대 ~500KB 사용)
 function convertToPcmS16le(inputBuffer) {
   return new Promise((resolve, reject) => {
-    const ffmpeg = spawn('ffmpeg', [
+    const ffmpeg = spawn(FFMPEG_CMD, [
       '-i', 'pipe:0',
       '-vn', '-acodec', 'pcm_s16le', '-ar', '44100', '-ac', '1',
       '-f', 's16le', 'pipe:1',
