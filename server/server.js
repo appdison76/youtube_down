@@ -1353,7 +1353,65 @@ function convertToWavWithFfmpeg(inputBuffer) {
   });
 }
 
-// 음악 인식 API (ACRCloud, 웹앱용 — 앱과 동일한 방식)
+// raw PCM s16le 44.1kHz mono (Shazam RapidAPI용, 최대 ~500KB 사용)
+function convertToPcmS16le(inputBuffer) {
+  return new Promise((resolve, reject) => {
+    const ffmpeg = spawn('ffmpeg', [
+      '-i', 'pipe:0',
+      '-vn', '-acodec', 'pcm_s16le', '-ar', '44100', '-ac', '1',
+      '-f', 's16le', 'pipe:1',
+    ], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const chunks = [];
+    ffmpeg.stdout.on('data', (chunk) => chunks.push(chunk));
+    ffmpeg.stdout.on('end', () => resolve(Buffer.concat(chunks)));
+    ffmpeg.on('error', reject);
+    ffmpeg.stderr.on('data', () => {});
+    ffmpeg.stdin.write(inputBuffer);
+    ffmpeg.stdin.end();
+  });
+}
+
+// Shazam RapidAPI 1순위 시도 (앱과 동일 2중화: Shazam → ACRCloud). RAPIDAPI_KEY 없으면 스킵.
+async function tryShazamRapidApi(audioBuffer) {
+  const apiKey = process.env.RAPIDAPI_KEY || process.env.SHAZAM_RAPIDAPI_KEY;
+  if (!apiKey) return null;
+  try {
+    const pcm = await convertToPcmS16le(audioBuffer);
+    const maxBytes = 500000;
+    const snippet = pcm.length > maxBytes ? pcm.subarray(0, maxBytes) : pcm;
+    const base64 = snippet.toString('base64');
+    const res = await fetch('https://shazam.p.rapidapi.com/songs/v2/detect', {
+      method: 'POST',
+      headers: {
+        'x-rapidapi-host': 'shazam.p.rapidapi.com',
+        'x-rapidapi-key': apiKey,
+        'content-type': 'text/plain',
+      },
+      body: base64,
+    });
+    if (!res.ok) {
+      console.warn('[Server] Shazam RapidAPI non-OK:', res.status);
+      return null;
+    }
+    const data = await res.json();
+    const track = data?.track || data?.matches?.[0]?.track;
+    const title = track?.title || track?.heading?.title || track?.heading?.subtitle;
+    const subtitle = track?.subtitle || track?.heading?.subtitle || track?.heading?.title;
+    if (!title) return null;
+    const body = {
+      title: String(title),
+      artist: subtitle ? String(subtitle) : '',
+      album: track?.sections?.[0]?.metadata?.[0]?.text || '',
+    };
+    console.log('[Server] Recognize (Shazam):', body.title, '-', body.artist);
+    return body;
+  } catch (e) {
+    console.warn('[Server] Shazam RapidAPI failed:', e?.message || e);
+    return null;
+  }
+}
+
+// 음악 인식 API (앱과 동일 2중화: Shazam 1순위 → ACRCloud 2순위)
 app.post('/api/recognize', upload.single('audio'), async (req, res) => {
   try {
     if (!req.file || !req.file.buffer || req.file.buffer.length === 0) {
@@ -1363,7 +1421,7 @@ app.post('/api/recognize', upload.single('audio'), async (req, res) => {
     const mimetype = (req.file.mimetype || '').toLowerCase();
     console.log('[Server] Recognize: received audio, size:', buffer.length, 'mimetype:', mimetype);
 
-    // 브라우저는 보통 audio/webm 전송. ACRCloud는 WAV/MP3 등 권장 → webm이면 ffmpeg로 wav 변환 시도
+    // 브라우저는 보통 audio/webm 전송. WAV 변환 후 Shazam/ACRCloud 공통 사용
     if (mimetype.includes('webm') || mimetype.includes('ogg')) {
       try {
         buffer = await convertToWavWithFfmpeg(buffer);
@@ -1373,6 +1431,13 @@ app.post('/api/recognize', upload.single('audio'), async (req, res) => {
       }
     }
 
+    // 1순위: Shazam (RapidAPI 키 있으면)
+    const shazamResult = await tryShazamRapidApi(buffer);
+    if (shazamResult) {
+      return res.json(shazamResult);
+    }
+
+    // 2순위: ACRCloud
     let result;
     try {
       result = await acr.identify(buffer);
