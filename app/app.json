@@ -39,7 +39,8 @@
       "config": {
         "audio": {
           "staysActiveInBackground": true
-        }
+        },
+        "googleMobileAdsAppId": "ca-app-pub-2041836899811349~3682958936"
       }
     },
     "web": {

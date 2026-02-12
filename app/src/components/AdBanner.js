@@ -137,9 +137,10 @@ export default function AdBanner({ style }) {
       </View>
     );
   } else {
-    // 구글 애드몹 (영어 등 다른 언어) - 테스트 ID 사용
+    // 구글 애드몹 (영어 등 다른 언어) - 개발/프로덕션 모두 실제 배너 단위 ID 사용
     // 쿠팡 광고와 비슷한 크기로 맞춤 (320x50)
     // 광고가 실패하면 아무것도 표시하지 않음
+    const BANNER_UNIT_ID = 'ca-app-pub-2041836899811349/9078755840';
     if (adFailed) {
       return null;
     }
@@ -148,7 +149,7 @@ export default function AdBanner({ style }) {
       <View style={[styles.container, styles.admobContainer, style]}>
         <View style={styles.admobWrapper}>
           <BannerAd
-            unitId={TestIds.BANNER}
+            unitId={BANNER_UNIT_ID}
             size={BannerAdSize.BANNER}
             requestOptions={{
               requestNonPersonalizedAdsOnly: true,
@@ -159,6 +160,12 @@ export default function AdBanner({ style }) {
               setAdLoaded(true);
             }}
             onAdFailedToLoad={(error) => {
+              const isNoFill = error?.code === 'error-code-no-fill' || String(error?.message || '').includes('no-fill');
+              if (isNoFill) {
+                if (__DEV__) console.log('[AdBanner] AdMob no-fill, hiding banner area');
+                setAdFailed(true);
+                return;
+              }
               console.error('[AdBanner] AdMob banner ad failed to load:', error);
               setAdFailed(true);
             }}
