@@ -107,8 +107,8 @@ export default function App() {
                 {
                   text: '업데이트',
                   onPress: () => {
-                    const updateUrl = versionInfo.updateUrl || 'https://melodysnap-app.mediacommercelab.com/web-app/install-page/';
-                    Linking.openURL(updateUrl).catch(err => {
+                    const updateUrl = versionInfo.updateUrl || Constants.expoConfig?.extra?.redirectUrl;
+                    if (updateUrl) Linking.openURL(updateUrl).catch(err => {
                       console.error('[App] Failed to open update URL:', err);
                     });
                   },
@@ -117,13 +117,15 @@ export default function App() {
               { cancelable: false }
             );
             
-            // 자동으로 설치 페이지로 리다이렉트
-            setTimeout(() => {
-              const updateUrl = versionInfo.updateUrl || 'https://melodysnap-app.mediacommercelab.com/web-app/install-page/';
-              Linking.openURL(updateUrl).catch(err => {
-                console.error('[App] Failed to open update URL:', err);
-              });
-            }, 1000);
+            // 자동으로 설치 페이지로 리다이렉트 (version.json updateUrl 우선, 없으면 extra.redirectUrl)
+            const redirectUrl = versionInfo.updateUrl || Constants.expoConfig?.extra?.redirectUrl;
+            if (redirectUrl) {
+              setTimeout(() => {
+                Linking.openURL(redirectUrl).catch(err => {
+                  console.error('[App] Failed to open update URL:', err);
+                });
+              }, 1000);
+            }
             
             setShouldRedirectToInstall(true);
           } else {
