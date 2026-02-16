@@ -89,7 +89,7 @@ function displayItems(items) {
                 if (!url) return;
                 try {
                     var base = await getDownloadBaseUrl();
-                    window.open(base + '/api/download/video?url=' + encodeURIComponent(url) + '&quality=highestvideo&title=' + encodeURIComponent(title), '_blank');
+                    window.open(base + '/api/download/video?url=' + encodeURIComponent(url) + '&quality=highestvideo&title=' + encodeURIComponent(title) + '&client=web-app', '_blank');
                 } catch (err) { console.error(err); alert('다운로드에 실패했습니다.'); }
             });
         });
@@ -101,7 +101,7 @@ function displayItems(items) {
                 if (!url) return;
                 try {
                     var base = await getDownloadBaseUrl();
-                    window.open(base + '/api/download/audio?url=' + encodeURIComponent(url) + '&quality=highestaudio&title=' + encodeURIComponent(title), '_blank');
+                    window.open(base + '/api/download/audio?url=' + encodeURIComponent(url) + '&quality=highestaudio&title=' + encodeURIComponent(title) + '&client=web-app', '_blank');
                 } catch (err) { console.error(err); alert('다운로드에 실패했습니다.'); }
             });
         });

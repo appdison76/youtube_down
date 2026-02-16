@@ -162,7 +162,7 @@ app.use(express.json());
 // 요청 ID + 클라이언트 식별 (AsyncLocalStorage로 이후 로그에 자동 반영)
 app.use((req, res, next) => {
   const reqId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  const client = req.get('X-Client') || 'unknown';
+  const client = req.get('X-Client') || req.query.client || 'unknown';
   req.reqId = reqId;
   req.client = client;
   const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || '-';
