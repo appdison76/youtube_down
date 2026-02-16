@@ -92,8 +92,8 @@ android {
         applicationId 'com.appdison76.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 25
-        versionName "1.2.5"
+        versionCode 26
+        versionName "1.2.6"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
@@ -128,7 +128,8 @@ android {
             def buildType = variant.buildType.name
             if (buildType == "release") {
                 def versionName = variant.versionName
-                def outputFileName = "melody-snap-${versionName}.apk"
+                def versionCode = variant.versionCode
+                def outputFileName = "app-release-${versionName}-${versionCode}.apk"
                 output.outputFileName = outputFileName
             }
             // debug 빌드는 기본 파일명 사용 (버전 표시 안 함)
