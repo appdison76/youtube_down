@@ -2,7 +2,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 import MediaStoreModule from '../modules/MediaStoreModule';
-import { getApiBaseUrl, getApiBaseUrls, fetchWithFallback } from '../config/api';
+import { getApiBaseUrl, getApiBaseUrls, fetchWithFallback, getApiRequestHeaders } from '../config/api';
 
 const DOWNLOAD_DIR = `${FileSystem.documentDirectory}downloads/`;
 const METADATA_DIR = `${FileSystem.documentDirectory}metadata/`;
@@ -579,7 +579,7 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
     // 백엔드 응답 사전 확인 (MINIMAL_DOWNLOAD_TEST 시 스킵)
     if (!MINIMAL_DOWNLOAD_TEST) {
       try {
-        const headResponse = await fetch(downloadUrl, { method: 'HEAD' });
+        const headResponse = await fetch(downloadUrl, { method: 'HEAD', headers: getApiRequestHeaders() });
         const contentLength = headResponse.headers.get('content-length');
         const contentType = headResponse.headers.get('content-type');
         
@@ -598,7 +598,7 @@ export const downloadVideo = async (videoUrl, videoTitle, onProgress, retryCount
         
         if (!contentType || !contentType.includes('video')) {
           // JSON 에러 응답일 수 있음
-          const testResponse = await fetch(downloadUrl);
+          const testResponse = await fetch(downloadUrl, { headers: getApiRequestHeaders() });
           const testContentType = testResponse.headers.get('content-type') || '';
           if (testContentType.includes('application/json')) {
             const errorData = await testResponse.json().catch(() => ({}));
@@ -1005,7 +1005,7 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
     // 백엔드 응답 사전 확인 (MINIMAL_DOWNLOAD_TEST 시 스킵)
     if (!MINIMAL_DOWNLOAD_TEST) {
       try {
-        const headResponse = await fetch(downloadUrl, { method: 'HEAD' });
+        const headResponse = await fetch(downloadUrl, { method: 'HEAD', headers: getApiRequestHeaders() });
         const contentLength = headResponse.headers.get('content-length');
         const contentType = headResponse.headers.get('content-type');
         console.log('[downloadService] Pre-check - Status:', headResponse.status);
@@ -1019,7 +1019,7 @@ export const downloadAudio = async (videoUrl, videoTitle, onProgress, retryCount
           throw new Error('백엔드 서버가 0 바이트 파일을 반환합니다. 해당 오디오를 다운로드할 수 없을 수 있습니다.');
         }
         if (!contentType || !contentType.includes('audio')) {
-          const testResponse = await fetch(downloadUrl);
+          const testResponse = await fetch(downloadUrl, { headers: getApiRequestHeaders() });
           const testContentType = testResponse.headers.get('content-type') || '';
           if (testContentType.includes('application/json')) {
             const errorData = await testResponse.json().catch(() => ({}));

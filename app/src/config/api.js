@@ -2,7 +2,12 @@
 // 서버 주소는 외부 config.json 파일에서 동적으로 로드합니다
 // 앱 재설치 없이 서버 주소 변경 가능
 
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
+
+/** API 요청 시 서버 로그용 클라이언트 식별 헤더 (PRO = install-page 배포판) */
+export const getApiRequestHeaders = () => ({
+  'X-Client': `MelodySnap-PRO-${Platform.OS === 'ios' ? 'iOS' : 'Android'}`,
+});
 
 // 외부 설정 파일 URL (version.json과 동일한 위치)
 const CONFIG_URL = 'https://melodysnap-app.mediacommercelab.com/web-app/install-page/config.json';
@@ -140,7 +145,8 @@ export const fetchWithFallback = async (path, init = {}) => {
     const base = baseUrls[i].replace(/\/$/, '');
     const url = base + (path.startsWith('/') ? path : '/' + path);
     try {
-      const res = await fetch(url, init);
+      const headers = { ...getApiRequestHeaders(), ...(init.headers || {}) };
+      const res = await fetch(url, { ...init, headers });
       if (res.ok) {
         if (i > 0) {
           console.log('[API Config] ✅ Fallback succeeded with URL #' + (i + 1), base);

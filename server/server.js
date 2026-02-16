@@ -1,5 +1,6 @@
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
+const { AsyncLocalStorage } = require('async_hooks');
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
@@ -9,6 +10,25 @@ const { promisify } = require('util');
 const fs = require('fs');
 
 const execAsync = promisify(exec);
+
+// 서버 식별 (Railway 여부)
+const SERVER_NAME = process.env.RAILWAY_ENV || process.env.RAILWAY_SERVICE_NAME ? 'railway' : 'local';
+const asyncLocalStorage = new AsyncLocalStorage();
+
+// 로그 접두사: [시간] [reqId] [SERVER=x] [client=y]
+function logPrefix() {
+  const ts = new Date().toISOString().replace('T', ' ').slice(0, 23);
+  const store = asyncLocalStorage.getStore();
+  const reqId = store?.reqId || '-';
+  const client = store?.client || '-';
+  return `[${ts}] [${reqId}] [SERVER=${SERVER_NAME}] [client=${client}]`;
+}
+const _log = console.log;
+const _error = console.error;
+const _warn = console.warn;
+console.log = (...args) => _log(logPrefix(), ...args);
+console.error = (...args) => _error(logPrefix(), ...args);
+console.warn = (...args) => _warn(logPrefix(), ...args);
 
 // ffmpeg 경로 (Windows에서 PATH 미인식 시 .env에 FFMPEG_PATH 설정)
 const FFMPEG_CMD = process.env.FFMPEG_PATH || 'ffmpeg';
@@ -130,20 +150,26 @@ const contentDispositionAttachment = (title, ext, defaultName) => {
   return 'attachment; filename="' + asciiName + '"; filename*=UTF-8\'\'' + encodeURIComponent(utf8Name);
 };
 
-// 미들웨어 — 브라우저(다른 도메인/로컬)에서 API 호출 허용
+// 미들웨어 — 브라우저(다른 도메인/로컬)에서 API 호출 허용 (X-Client 로그용)
 app.use(cors({
-  origin: true,           // 요청한 Origin 그대로 허용 (GitHub Pages, localhost 등)
+  origin: true,
   methods: ['GET', 'POST', 'HEAD', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Client'],
   credentials: false,
 }));
 app.use(express.json());
 
-// 접속 시마다 로그 (터널/외부 접속 확인용)
+// 요청 ID + 클라이언트 식별 (AsyncLocalStorage로 이후 로그에 자동 반영)
 app.use((req, res, next) => {
+  const reqId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const client = req.get('X-Client') || 'unknown';
+  req.reqId = reqId;
+  req.client = client;
   const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || '-';
-  console.log('[Server] ' + req.method + ' ' + req.path + ' ' + ip);
-  next();
+  asyncLocalStorage.run({ reqId, client }, () => {
+    console.log('[Server] ' + req.method + ' ' + req.path + ' ' + ip);
+    next();
+  });
 });
 
 // 브라우저가 자동 요청하는 favicon → 204로 응답 (404 로그 방지)

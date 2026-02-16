@@ -44,6 +44,8 @@ async function getApiBaseUrls() {
   return primary === DEFAULT_RAILWAY ? [DEFAULT_PRIMARY, DEFAULT_RAILWAY] : [primary, DEFAULT_RAILWAY];
 }
 
+const WEB_CLIENT_HEADERS = { 'X-Client': 'web-app' };
+
 async function fetchWithFallback(path, init = {}) {
   const baseUrls = await getApiBaseUrls();
   let lastError = null;
@@ -51,7 +53,8 @@ async function fetchWithFallback(path, init = {}) {
     const base = baseUrls[i].replace(/\/$/, '');
     const url = base + (path.startsWith('/') ? path : '/' + path);
     try {
-      const res = await fetch(url, init);
+      const headers = { ...WEB_CLIENT_HEADERS, ...(init.headers || {}) };
+      const res = await fetch(url, { ...init, headers });
       if (res.ok) {
         if (i > 0) console.log('[web-app API] Fallback succeeded with URL #' + (i + 1), base);
         return res;
@@ -132,7 +135,7 @@ async function probeWorkingBaseUrl() {
     const controller = new AbortController();
     const t = setTimeout(function () { controller.abort(); }, PROBE_TIMEOUT_MS);
     try {
-      const res = await fetch(base + '/api/search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', signal: controller.signal });
+      const res = await fetch(base + '/api/search', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Client': 'web-app' }, body: '{}', signal: controller.signal });
       clearTimeout(t);
       return base;
     } catch (_) {
@@ -196,7 +199,7 @@ async function downloadVideoWithFallback(videoUrl, suggestedFileName = 'video.mp
     const base = baseUrls[i].replace(/\/$/, '');
     const url = base + '/api/download/video?url=' + encodeURIComponent(videoUrl) + '&quality=highestvideo';
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, { headers: { 'X-Client': 'web-app' } });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const blob = await res.blob();
       if (!(await isLikelyMediaResponse(res, blob))) throw new Error('Invalid response (e.g. ngrok error page)');
@@ -223,7 +226,7 @@ async function downloadAudioWithFallback(videoUrl, suggestedFileName = 'audio.m4
     const base = baseUrls[i].replace(/\/$/, '');
     const url = base + '/api/download/audio?url=' + encodeURIComponent(videoUrl) + '&quality=highestaudio';
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, { headers: { 'X-Client': 'web-app' } });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const blob = await res.blob();
       if (!(await isLikelyMediaResponse(res, blob))) throw new Error('Invalid response (e.g. ngrok error page)');
