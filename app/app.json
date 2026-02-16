@@ -2,7 +2,7 @@
   "expo": {
     "name": "MelodySnap",
     "slug": "app",
-    "version": "1.2.6",
+    "version": "1.2.7",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -19,7 +19,7 @@
       }
     },
     "android": {
-      "versionCode": 26,
+      "versionCode": 27,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -35,7 +35,7 @@
         "READ_MEDIA_VIDEO",
         "READ_MEDIA_AUDIO"
       ],
-      "package": "com.appdison76.app",
+      "package": "com.appdison76.app.pro",
       "config": {
         "audio": {
           "staysActiveInBackground": true

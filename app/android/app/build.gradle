@@ -87,13 +87,13 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.appdison76.app'
+    namespace 'com.appdison76.app.pro'
     defaultConfig {
-        applicationId 'com.appdison76.app'
+        applicationId 'com.appdison76.app.pro'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 26
-        versionName "1.2.6"
+        versionCode 27
+        versionName "1.2.7"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
@@ -117,22 +117,8 @@ android {
             shrinkResources enableShrinkResources.toBoolean()
             minifyEnabled enableMinifyInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
-            def enablePngCrunchInRelease = findProperty('android.enablePngCrunchInReleaseBuilds') ?: 'false'
+            def enablePngCrunchInRelease = findProperty('android.enablePngCrunchInReleaseBuilds') ?: 'true'
             crunchPngs enablePngCrunchInRelease.toBoolean()
-        }
-    }
-    
-    // APK 파일명에 버전 포함 (릴리즈 빌드만)
-    applicationVariants.all { variant ->
-        variant.outputs.all { output ->
-            def buildType = variant.buildType.name
-            if (buildType == "release") {
-                def versionName = variant.versionName
-                def versionCode = variant.versionCode
-                def outputFileName = "app-release-${versionName}-${versionCode}.apk"
-                output.outputFileName = outputFileName
-            }
-            // debug 빌드는 기본 파일명 사용 (버전 표시 안 함)
         }
     }
     packagingOptions {
@@ -143,8 +129,17 @@ android {
     }
     androidResources {
         ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'
-        // AAPT2 오류 방지: 리소스 컴파일 실패 시 경고만 표시
-        failOnMissingConfigEntry = false
+    }
+    // APK 파일명에 버전 포함 (릴리즈 빌드만)
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            def buildType = variant.buildType.name
+            if (buildType == "release") {
+                def versionName = variant.versionName
+                def versionCode = variant.versionCode
+                output.outputFileName = "app-release-${versionName}-${versionCode}.apk"
+            }
+        }
     }
 }
 
@@ -171,7 +166,12 @@ android {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
-    implementation("androidx.media:media:1.6.0")
+
+    // ShazamKit AAR - 라이브러리 모듈에서는 로컬 .aar 미지원이라 앱에서만 추가
+    def shazamAar = file("${rootDir.getParentFile()}/packages/expo-shazam-module/android/libs/shazamkit-android-release.aar")
+    if (shazamAar.exists()) {
+        implementation files(shazamAar)
+    }
 
     def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true";
     def isWebpEnabled = (findProperty('expo.webp.enabled') ?: "") == "true";
