@@ -3,6 +3,7 @@ package com.appdison76.app.pro
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 
 import com.appdison76.shareurl.ShareUrlHolder
 import com.appdison76.shareurl.ShareUrlModule
@@ -29,18 +30,20 @@ class MainActivity : ReactActivity() {
   private fun handleShareIntent(intent: Intent?) {
     if (intent?.action != Intent.ACTION_SEND) return
     val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim() ?: return
+    Log.d("ShareIntent", "EXTRA_TEXT raw: [$text]")
     if (text.isEmpty()) return
     val url = extractUrl(text) ?: return
+    Log.d("ShareIntent", "extractUrl result: [$url]")
     ShareUrlHolder.pendingUrl = url
     ShareUrlModule.notifySharedUrl(url)
   }
 
   private fun extractUrl(text: String): String? {
-    if (text.contains("youtube") || text.contains("youtu.be")) {
-      val regex = Regex("(https?://[^\\s]+)")
-      return regex.find(text)?.value?.takeIf { it.contains("youtube") || it.contains("youtu.be") }
-    }
-    return null
+    // URL만 골라내기 (공백·괄호·따옴표 등 앞뒤 텍스트 무시)
+    val urlPattern = Regex("(https?://[a-zA-Z0-9\\-._~:/?#\\[\\]@!$&'()*+,;=]+)")
+    val match = urlPattern.find(text) ?: return null
+    val url = match.value
+    return url.takeIf { url.contains("youtube") || url.contains("youtu.be") }
   }
 
   /**

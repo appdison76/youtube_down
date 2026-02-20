@@ -92,6 +92,7 @@ export default function AppNavigator({ initialUrl }) {
   const lastTimestamp = React.useRef(null);
 
   React.useEffect(() => {
+    console.log('[AppNavigator] effect', { isReady, initialUrl: initialUrl ? `${String(initialUrl).slice(0, 50)}...` : initialUrl });
     if (isReady && initialUrl) {
       // URL과 타임스탬프 추출
       const urlParts = initialUrl.split('?t=');
@@ -159,12 +160,17 @@ export default function AppNavigator({ initialUrl }) {
             console.log('[AppNavigator] 잘린 URL 복구:', urlToNavigate);
           }
           
-          // 불필요한 파라미터 제거 (v= 파라미터는 유지)
-          const urlMatch = urlToNavigate.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s?]+)/);
-          if (urlMatch) {
-            const videoId = urlMatch[1].split('?')[0].split('&')[0]; // ?si= 같은 파라미터 제거
+          // 불필요한 파라미터 제거 (watch, youtu.be, live 모두 처리)
+          const watchMatch = urlToNavigate.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s?]+)/);
+          const liveMatch = urlToNavigate.match(/youtube\.com\/live\/([^&\s?]+)/);
+          if (watchMatch) {
+            const videoId = watchMatch[1].split('?')[0].split('&')[0];
             urlToNavigate = `https://www.youtube.com/watch?v=${videoId}`;
-            console.log('[AppNavigator] 정규화된 URL:', urlToNavigate);
+            console.log('[AppNavigator] 정규화된 URL (watch):', urlToNavigate);
+          } else if (liveMatch) {
+            const liveId = liveMatch[1].split('?')[0].split('&')[0];
+            urlToNavigate = `https://www.youtube.com/live/${liveId}`;
+            console.log('[AppNavigator] 정규화된 URL (live):', urlToNavigate);
           }
           
           // 강제로 네비게이션 (항상 새로운 파라미터로 업데이트)

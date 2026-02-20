@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Platform, Linking, NativeEventEmitter, NativeModules, AppState, Alert, PermissionsAndroid } from 'react-native';
+import { requireOptionalNativeModule } from 'expo-modules-core';
 import AppNavigator from './src/navigation/AppNavigator';
 import { initDatabase } from './src/services/database';
 import { LanguageProvider } from './src/contexts/LanguageContext';
@@ -29,9 +30,29 @@ const isValidYouTubeUrl = (url) => {
   return url.includes('youtube.com') || url.includes('youtu.be');
 };
 
+// 공유 URL 정규화: ?si=, &si= 제거 (다운스트림 호환용)
+const normalizeYouTubeShareUrl = (url) => {
+  if (!url || typeof url !== 'string') return url;
+  try {
+    const u = new URL(url);
+    u.searchParams.delete('si');
+    return u.toString();
+  } catch {
+    return url;
+  }
+};
+
 export default function App() {
   const [initialUrl, setInitialUrl] = useState(null);
   const [shouldRedirectToInstall, setShouldRedirectToInstall] = useState(false);
+
+  // ShareUrlModule 등록 여부 진단 (Expo는 requireOptionalNativeModule으로 로드)
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      const ShareUrlMod = requireOptionalNativeModule('ShareUrlModule');
+      console.log('[App] ShareUrlModule present?', !!ShareUrlMod);
+    }
+  }, []);
 
   // 데이터베이스 초기화
   useEffect(() => {
@@ -202,17 +223,30 @@ export default function App() {
 
     // 공유하기로 들어온 URL: ShareUrlModule (intent는 Linking으로 안 넘어오는 경우가 많음)
     const applyShareUrl = (url) => {
+      console.log('[App] applyShareUrl called', url ? `${url.slice(0, 60)}...` : url);
       if (!url || !isValidYouTubeUrl(url)) return;
+      const normalized = normalizeYouTubeShareUrl(url);
+      console.log('[App] setInitialUrl (normalized)', normalized ? `${normalized.slice(0, 60)}...` : normalized);
       setInitialUrl(null);
-      setTimeout(() => setInitialUrl(`${url}?t=${Date.now()}`), 100);
+      setTimeout(() => setInitialUrl(`${normalized}?t=${Date.now()}`), 100);
     };
     let shareSubscription = null;
-    if (Platform.OS === 'android' && NativeModules.ShareUrlModule) {
-      const eventEmitter = new NativeEventEmitter(NativeModules.ShareUrlModule);
+    const ShareUrlModule = Platform.OS === 'android' ? requireOptionalNativeModule('ShareUrlModule') : null;
+    if (ShareUrlModule) {
+      console.log('[App] ShareUrlModule available');
+      const eventEmitter = new NativeEventEmitter(ShareUrlModule);
       shareSubscription = eventEmitter.addListener('onSharedUrl', (event) => {
         if (event?.url) applyShareUrl(event.url);
       });
-      NativeModules.ShareUrlModule.getInitialShareUrl?.().then(applyShareUrl).catch(() => {});
+      const initialPromise = ShareUrlModule.getInitialShareUrl?.();
+      Promise.resolve(initialPromise != null ? initialPromise : null)
+        .then((url) => {
+          console.log('[App] getInitialShareUrl result', url ? `${String(url).slice(0, 60)}...` : url);
+          applyShareUrl(url);
+        })
+        .catch((err) => console.warn('[App] getInitialShareUrl error', err));
+    } else {
+      console.log('[App] ShareUrlModule not available (android=', Platform.OS === 'android', ')');
     }
 
     // AppState 변경 감지 (앱이 포그라운드로 올 때)
@@ -240,8 +274,10 @@ export default function App() {
               }
             })
             .catch(() => {});
-          if (Platform.OS === 'android' && NativeModules.ShareUrlModule?.getInitialShareUrl) {
-            NativeModules.ShareUrlModule.getInitialShareUrl()
+          const ShareUrlMod = Platform.OS === 'android' ? requireOptionalNativeModule('ShareUrlModule') : null;
+          if (ShareUrlMod?.getInitialShareUrl) {
+            const p = ShareUrlMod.getInitialShareUrl();
+            Promise.resolve(p != null ? p : null)
               .then((url) => {
                 if (url && url !== lastProcessedUrl && isValidYouTubeUrl(url)) {
                   lastProcessedUrl = url;
