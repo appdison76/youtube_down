@@ -209,6 +209,23 @@ export const getPins = async () => {
   }
 };
 
+// 가져오기용: 기존 ID로 핀 삽입
+export const insertPin = async (pinId, pinName, createdAt) => {
+  try {
+    const database = await getDatabase();
+    if (!database) throw new Error('Database not initialized');
+    const ts = createdAt ?? Math.floor(Date.now() / 1000);
+    await database.runAsync(
+      'INSERT OR REPLACE INTO pins (pin_id, pin_name, created_at) VALUES (?, ?, ?)',
+      [pinId, pinName, ts]
+    );
+    return pinId;
+  } catch (error) {
+    console.error('[Database] Error inserting pin:', error);
+    throw error;
+  }
+};
+
 // 핀 생성
 export const createPin = async (pinName) => {
   try {

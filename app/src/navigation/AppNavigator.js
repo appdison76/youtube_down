@@ -8,6 +8,7 @@ import FavoritesScreen from '../screens/FavoritesScreen';
 import DownloadsScreen from '../screens/DownloadsScreen';
 import VideoSearchScreen from '../screens/VideoSearchScreen';
 import MusicRecognitionScreen from '../screens/MusicRecognitionScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../locales/translations';
 
@@ -204,6 +205,10 @@ export default function AppNavigator({ initialUrl }) {
         <Stack.Screen 
           name="Main" 
           component={MainTabs}
+        />
+        <Stack.Screen 
+          name="Settings" 
+          component={SettingsScreen}
         />
       </Stack.Navigator>
     </NavigationContainer>
