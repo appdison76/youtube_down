@@ -34,6 +34,7 @@
     "expo-media-store-module": "file:./packages/expo-media-store-module",
     "expo-notifications": "~0.32.16",
     "expo-sharing": "^14.0.8",
+    "expo-share-url-module": "file:./packages/expo-share-url-module",
     "expo-shazam-module": "file:./packages/expo-shazam-module",
     "expo-sqlite": "^16.0.10",
     "expo-status-bar": "~3.0.9",

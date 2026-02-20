@@ -12,6 +12,7 @@ const localPackages = [
   'expo-acrcloud-module',
   'expo-media-session-module',
   'expo-media-store-module',
+  'expo-share-url-module',
   'expo-shazam-module',
 ];
 

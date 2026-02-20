@@ -1,8 +1,11 @@
 package com.appdison76.app.pro
 
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 
+import com.appdison76.shareurl.ShareUrlHolder
+import com.appdison76.shareurl.ShareUrlModule
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
@@ -12,11 +15,32 @@ import expo.modules.ReactActivityDelegateWrapper
 
 class MainActivity : ReactActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
-    // Set the theme to AppTheme BEFORE onCreate to support
-    // coloring the background, status bar, and navigation bar.
-    // This is required for expo-splash-screen.
-    setTheme(R.style.AppTheme);
+    setTheme(R.style.AppTheme)
     super.onCreate(null)
+    handleShareIntent(intent)
+  }
+
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+    handleShareIntent(intent)
+  }
+
+  private fun handleShareIntent(intent: Intent?) {
+    if (intent?.action != Intent.ACTION_SEND) return
+    val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim() ?: return
+    if (text.isEmpty()) return
+    val url = extractUrl(text) ?: return
+    ShareUrlHolder.pendingUrl = url
+    ShareUrlModule.notifySharedUrl(url)
+  }
+
+  private fun extractUrl(text: String): String? {
+    if (text.contains("youtube") || text.contains("youtu.be")) {
+      val regex = Regex("(https?://[^\\s]+)")
+      return regex.find(text)?.value?.takeIf { it.contains("youtube") || it.contains("youtu.be") }
+    }
+    return null
   }
 
   /**

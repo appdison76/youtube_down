@@ -34,6 +34,12 @@
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="exp+app"/>
       </intent-filter>
+      <!-- 공유하기(Share) 시 앱 목록에 표시 (melody_snap과 동일) -->
+      <intent-filter>
+        <action android:name="android.intent.action.SEND"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+        <data android:mimeType="text/plain"/>
+      </intent-filter>
     </activity>
   </application>
 </manifest>

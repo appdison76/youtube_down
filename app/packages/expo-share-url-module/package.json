@@ -1,0 +1,8 @@
+{
+  "name": "expo-share-url-module",
+  "version": "1.0.0",
+  "description": "Expo module for receiving shared URL (Android SEND intent)",
+  "main": "index.js",
+  "peerDependencies": { "expo": "*" },
+  "dependencies": { "expo-modules-core": "*" }
+}

@@ -92,8 +92,8 @@ android {
         applicationId 'com.appdison76.app.pro'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 27
-        versionName "1.2.7"
+        versionCode 28
+        versionName "1.2.8"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
@@ -166,6 +166,9 @@ android {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+    if (findProject(':expo-share-url-module') != null) {
+        implementation project(':expo-share-url-module')
+    }
 
     // ShazamKit AAR - 라이브러리 모듈에서는 로컬 .aar 미지원이라 앱에서만 추가
     def shazamAar = file("${rootDir.getParentFile()}/packages/expo-shazam-module/android/libs/shazamkit-android-release.aar")

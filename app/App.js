@@ -200,20 +200,19 @@ export default function App() {
       }
     });
 
-    // Native Module을 통해 MainActivity에서 직접 전달받은 URL 처리
+    // 공유하기로 들어온 URL: ShareUrlModule (intent는 Linking으로 안 넘어오는 경우가 많음)
+    const applyShareUrl = (url) => {
+      if (!url || !isValidYouTubeUrl(url)) return;
+      setInitialUrl(null);
+      setTimeout(() => setInitialUrl(`${url}?t=${Date.now()}`), 100);
+    };
     let shareSubscription = null;
     if (Platform.OS === 'android' && NativeModules.ShareUrlModule) {
       const eventEmitter = new NativeEventEmitter(NativeModules.ShareUrlModule);
       shareSubscription = eventEmitter.addListener('onSharedUrl', (event) => {
-        if (event && event.url) {
-          console.log('[App] Received URL from ShareUrlModule:', event.url);
-          // 이전 URL을 초기화한 후 새 URL 설정 (강제 업데이트)
-          setInitialUrl(null);
-          setTimeout(() => {
-            setInitialUrl(`${event.url}?t=${Date.now()}`);
-          }, 100);
-        }
+        if (event?.url) applyShareUrl(event.url);
       });
+      NativeModules.ShareUrlModule.getInitialShareUrl?.().then(applyShareUrl).catch(() => {});
     }
 
     // AppState 변경 감지 (앱이 포그라운드로 올 때)
@@ -240,9 +239,18 @@ export default function App() {
                 console.log('[App] Ignoring non-YouTube URL when app became active:', url);
               }
             })
-            .catch((error) => {
-              console.error('[App] Error checking URL on app state change:', error);
-            });
+            .catch(() => {});
+          if (Platform.OS === 'android' && NativeModules.ShareUrlModule?.getInitialShareUrl) {
+            NativeModules.ShareUrlModule.getInitialShareUrl()
+              .then((url) => {
+                if (url && url !== lastProcessedUrl && isValidYouTubeUrl(url)) {
+                  lastProcessedUrl = url;
+                  setInitialUrl(null);
+                  setTimeout(() => setInitialUrl(`${url}?t=${Date.now()}`), 100);
+                }
+              })
+              .catch(() => {});
+          }
         }, 300);
       }
     });
