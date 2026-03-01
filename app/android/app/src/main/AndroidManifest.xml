@@ -41,5 +41,10 @@
         <data android:mimeType="text/plain"/>
       </intent-filter>
     </activity>
+    <receiver android:name=".MediaButtonReceiver" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.MEDIA_BUTTON"/>
+      </intent-filter>
+    </receiver>
   </application>
 </manifest>
