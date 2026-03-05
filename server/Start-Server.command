@@ -1,4 +1,4 @@
 #!/bin/bash
-# 바탕화면에 이 파일을 복사한 뒤 더블클릭해서 실행 (맥)
-# 프로젝트가 ~/youtube_down 가 아니면 아래 경로를 수정하세요.
-exec ~/youtube_down/server/start-server-cloudflare.sh
+# 맥: 이 파일에 대해 '별칭 만들기' → 바탕화면에 별칭 두고 더블클릭해서 실행
+cd "$(dirname "$0")"
+./start-server-cloudflare.sh
