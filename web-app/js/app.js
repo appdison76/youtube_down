@@ -1,5 +1,12 @@
-// from_app=1 이면 앱에서 연 것. 영상/음악 다운로드 버튼 대신 재생 버튼 1개만 표시 (심사용). 심사 끝나면 이 플래그 로직만 제거하면 됨.
-window.__FROM_APP__ = (new URLSearchParams(location.search).get('from_app') === '1');
+/**
+ * true(평상시): URL에 from_app=1이면 재생만 UI (앱에서 연 경우, 심사 대응).
+ * false: 앱에서 열어도 영상/음악 다운로드 UI (이 파일만 false로 바꾸면 됨).
+ */
+const FROM_APP_PLAY_ONLY_MODE = false;
+
+window.__FROM_APP__ =
+  FROM_APP_PLAY_ONLY_MODE &&
+  (new URLSearchParams(location.search).get('from_app') === '1');
 
 // 앱 메인 로직 - 페이지 전환 (스크립트가 body 맨 아래 로드되므로 DOM은 이미 준비된 경우가 많음)
 function initApp() {
