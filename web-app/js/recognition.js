@@ -281,13 +281,20 @@ async function startRecognition() {
     }
 }
 
+/** snippet 썸네일 URL (medium → default, Serper/비정형 응답 대비) */
+function snippetThumbUrl(snippet) {
+    if (!snippet || !snippet.thumbnails) return '';
+    const m = snippet.thumbnails.medium || snippet.thumbnails.default;
+    return m && m.url ? m.url : '';
+}
+
 // 인식 후 YouTube 검색 결과 렌더링 (앱과 동일: 카드 클릭=재생, 찜 ☆/★, 영상=빨강/음악=초록)
 async function renderRecognitionYouTubeResults(items) {
     if (!recognitionYoutubeResults || !items || items.length === 0) return;
     recognitionYoutubeResults.innerHTML = items.map(item => {
         const videoId = item.id && item.id.videoId ? item.id.videoId : item.id;
         if (!videoId) return '';
-        const thumb = item.snippet && item.snippet.thumbnails ? (item.snippet.thumbnails.medium || item.snippet.thumbnails.default).url : '';
+        const thumb = snippetThumbUrl(item.snippet);
         const title = (item.snippet && item.snippet.title) || '';
         const channel = (item.snippet && item.snippet.channelTitle) || '';
         const url = `https://www.youtube.com/watch?v=${videoId}`;
