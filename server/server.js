@@ -1262,101 +1262,268 @@ const getTodayDate = () => {
   return kstTime.toISOString().split('T')[0]; // YYYY-MM-DD
 };
 
+/** YouTube watch/shorts URL에서 videoId 추출 */
+function extractYouTubeVideoIdFromLink(link) {
+  if (!link || typeof link !== 'string') return null;
+  try {
+    const u = new URL(link);
+    const host = u.hostname.replace(/^www\./, '');
+    if (host === 'youtu.be') {
+      const id = u.pathname.replace(/^\//, '').split('/')[0];
+      return id && /^[a-zA-Z0-9_-]{6,}$/.test(id) ? id : null;
+    }
+    if (host.includes('youtube.com')) {
+      if (u.pathname === '/watch') {
+        const v = u.searchParams.get('v');
+        return v && /^[a-zA-Z0-9_-]{6,}$/.test(v) ? v : null;
+      }
+      const shorts = u.pathname.match(/^\/shorts\/([a-zA-Z0-9_-]+)/);
+      if (shorts) return shorts[1];
+    }
+  } catch (_) {
+    return null;
+  }
+  return null;
+}
+
+/** Serper 동영상 결과 한 건 → YouTube Data API v3 search item 형태 */
+function serperRowToYoutubeSearchItem(row) {
+  const link = row.link || row.url;
+  const videoId = extractYouTubeVideoIdFromLink(link);
+  if (!videoId) return null;
+  const title = row.title || '';
+  const channelTitle = row.channel || row.source || row.channelTitle || '';
+  const description = row.snippet || row.description || '';
+  let publishedAt = new Date().toISOString();
+  if (row.date) {
+    const d = new Date(row.date);
+    if (!Number.isNaN(d.getTime())) publishedAt = d.toISOString();
+  }
+  const thumb =
+    row.imageUrl ||
+    row.thumbnailUrl ||
+    row.thumbnail ||
+    `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+  return {
+    kind: 'youtube#searchResult',
+    etag: '',
+    id: { kind: 'youtube#video', videoId },
+    snippet: {
+      publishedAt,
+      channelId: row.channelId || '',
+      title,
+      description,
+      channelTitle,
+      thumbnails: {
+        default: { url: thumb },
+        medium: { url: thumb },
+        high: { url: thumb },
+      },
+    },
+  };
+}
+
+/** Serper rows → YouTube searchListResponse 호환 JSON */
+function buildYoutubeSearchListFromSerperRows(rows, maxResults) {
+  const cap = Math.min(Math.max(1, Number(maxResults) || 20), 50);
+  const items = [];
+  for (const row of rows || []) {
+    const it = serperRowToYoutubeSearchItem(row);
+    if (it) items.push(it);
+    if (items.length >= cap) break;
+  }
+  return {
+    kind: 'youtube#searchListResponse',
+    etag: '',
+    items,
+    pageInfo: { totalResults: items.length, resultsPerPage: items.length },
+  };
+}
+
+function isYoutubeQuotaOrBlockedError(httpStatus, errorMessage) {
+  if (httpStatus === 403 || httpStatus === 429) return true;
+  const m = String(errorMessage || '').toLowerCase();
+  return (
+    m.includes('quota') ||
+    m.includes('quota exceeded') ||
+    m.includes('daily limit') ||
+    m.includes('exceeded')
+  );
+}
+
+/**
+ * Serper Google Videos API → YouTube searchListResponse 형태.
+ * /videos 404 시 google.serper.dev/search + type:videos 시도.
+ */
+async function fetchSerperAsYoutubeSearchList(q, maxResults, serperApiKey) {
+  const num = Math.min(Math.max(1, Number(maxResults) || 20), 100);
+  const body = { q: q.trim(), num };
+  const gl = (process.env.SERPER_GL || '').trim();
+  const hl = (process.env.SERPER_HL || '').trim();
+  if (gl) body.gl = gl;
+  if (hl) body.hl = hl;
+
+  const post = (url, json) =>
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'X-API-KEY': serperApiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(json),
+    });
+
+  let res = await post('https://google.serper.dev/videos', body);
+  let data = await res.json().catch(() => ({}));
+
+  if (res.status === 404) {
+    res = await post('https://google.serper.dev/search', { ...body, type: 'videos' });
+    data = await res.json().catch(() => ({}));
+  }
+
+  if (!res.ok) {
+    const msg =
+      data.message ||
+      data.error ||
+      (typeof data === 'string' ? data : JSON.stringify(data)).slice(0, 400);
+    return { ok: false, status: res.status, message: msg || 'Serper 요청 실패' };
+  }
+
+  let rows = Array.isArray(data.videos) ? data.videos : [];
+  if (rows.length === 0 && Array.isArray(data.organic)) {
+    rows = data.organic.filter(
+      (o) => o.link && /youtube\.com\/(watch\?|shorts\/)|youtu\.be\//.test(o.link)
+    );
+  }
+
+  const payload = buildYoutubeSearchListFromSerperRows(rows, maxResults);
+  if (!payload.items.length) {
+    return { ok: false, status: 502, message: 'Serper 결과에 유튜브 영상이 없습니다.' };
+  }
+  return { ok: true, payload };
+}
+
 app.post('/api/search', async (req, res) => {
   try {
     const { q, maxResults = 20 } = req.body;
-    
+
     if (!q || q.trim() === '') {
       return res.status(400).json({ error: '검색어가 필요합니다.' });
     }
 
     const searchKey = `${q.toLowerCase().trim()}_${maxResults}`;
-    
-    // 캐시 확인 (메모리) - 캐시 히트면 제한 체크 안 함
+
     const cached = searchCache.get(searchKey);
-    if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
       console.log('[Server] Cache hit for:', q);
       return res.json(cached.data);
     }
 
-    // 캐시 미스 → API 호출 필요 → 일일 제한 체크
     const clientIP = getClientIP(req);
-    const today = getTodayDate(); // 한국 시간 기준 오늘 날짜
+    const today = getTodayDate();
     const limitData = dailyLimitMap.get(clientIP);
 
     if (limitData) {
-      // 날짜가 바뀌었으면 리셋 (한국 시간 기준 자정에 자동 리셋)
       if (limitData.date !== today) {
         dailyLimitMap.set(clientIP, { count: 1, date: today });
         console.log('[Server] Daily limit reset for IP:', clientIP, 'Date:', today);
       } else {
-        // 오늘 제한 초과 체크
         if (limitData.count >= DAILY_LIMIT) {
           console.log('[Server] Daily limit exceeded for IP:', clientIP, 'Count:', limitData.count);
-          return res.status(429).json({ 
+          return res.status(429).json({
             error: 'DAILY_LIMIT_EXCEEDED',
-            message: '오늘의 검색 요청 횟수가 모두 소진되었습니다. 다운로드 화면을 이용하여 유튜브 영상을 가져오기하세요.'
+            message:
+              '오늘의 검색 요청 횟수가 모두 소진되었습니다. 다운로드 화면을 이용하여 유튜브 영상을 가져오기하세요.',
           });
         }
-        // 카운트 증가
         limitData.count++;
       }
     } else {
-      // 첫 요청
       dailyLimitMap.set(clientIP, { count: 1, date: today });
     }
 
-    // YouTube Data API 호출
-    const apiKey = process.env.YOUTUBE_API_KEY;
-    if (!apiKey) {
-      console.error('[Server] YouTube API key not set');
+    const youtubeApiKey = process.env.YOUTUBE_API_KEY;
+    const serperApiKey = process.env.SERPER_API_KEY || '';
+    const n = Math.min(Number(maxResults) || 20, 50);
+
+    const quotaExceededResponse = () =>
+      res.status(429).json({
+        error: 'DAILY_LIMIT_EXCEEDED',
+        message:
+          '오늘의 검색 요청 횟수가 모두 소진되었습니다. 다운로드 화면을 이용하여 유튜브 영상을 가져오기하세요. (코드: 88)',
+      });
+
+    let data;
+    let searchSource = 'youtube';
+
+    if (youtubeApiKey) {
+      console.log(
+        '[Server] Searching YouTube for:',
+        q,
+        'IP:',
+        clientIP,
+        'Count:',
+        dailyLimitMap.get(clientIP).count
+      );
+      const ytUrl =
+        `https://www.googleapis.com/youtube/v3/search?` +
+        `part=snippet&type=video&q=${encodeURIComponent(q.trim())}&` +
+        `maxResults=${n}&key=${youtubeApiKey}`;
+      const response = await fetch(ytUrl);
+      const errorBody = await response.json().catch(() => ({}));
+      const errorMessage = errorBody.error?.message || errorBody.message || '';
+
+      if (response.ok) {
+        data = errorBody;
+        searchSource = 'youtube';
+      } else {
+        console.error('[Server] YouTube API error status:', response.status);
+        console.error('[Server] YouTube API error body:', JSON.stringify(errorBody, null, 2));
+        if (isYoutubeQuotaOrBlockedError(response.status, errorMessage) && serperApiKey) {
+          console.log('[Server] YouTube blocked/quota; trying Serper fallback');
+          const sr = await fetchSerperAsYoutubeSearchList(q, n, serperApiKey);
+          if (sr.ok) {
+            data = sr.payload;
+            searchSource = 'serper';
+          } else {
+            console.error('[Server] Serper fallback failed:', sr.status, sr.message);
+            return quotaExceededResponse();
+          }
+        } else if (isYoutubeQuotaOrBlockedError(response.status, errorMessage)) {
+          return quotaExceededResponse();
+        } else {
+          return res.status(response.status).json({
+            error: errorMessage || '검색에 실패했습니다.',
+          });
+        }
+      }
+    } else if (serperApiKey) {
+      console.log('[Server] YOUTUBE_API_KEY unset; Serper-only search');
+      const sr = await fetchSerperAsYoutubeSearchList(q, n, serperApiKey);
+      if (!sr.ok) {
+        console.error('[Server] Serper search failed:', sr.status, sr.message);
+        return res.status(sr.status >= 400 && sr.status < 600 ? sr.status : 502).json({
+          error: sr.message || '검색에 실패했습니다.',
+        });
+      }
+      data = sr.payload;
+      searchSource = 'serper';
+    } else {
+      console.error('[Server] Neither YOUTUBE_API_KEY nor SERPER_API_KEY is set');
       return res.status(500).json({ error: 'YouTube API 키가 설정되지 않았습니다.' });
     }
 
-    console.log('[Server] Searching YouTube for:', q, 'IP:', clientIP, 'Count:', dailyLimitMap.get(clientIP).count);
-    const response = await fetch(
-      `https://www.googleapis.com/youtube/v3/search?` +
-      `part=snippet&type=video&q=${encodeURIComponent(q.trim())}&` +
-      `maxResults=${Math.min(maxResults, 50)}&key=${apiKey}`
-    );
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      console.error('[Server] YouTube API error status:', response.status);
-      console.error('[Server] YouTube API error body:', JSON.stringify(error, null, 2));
-      const errorMessage = error.error?.message || error.message || '검색에 실패했습니다.';
-      console.error('[Server] YouTube API error message:', errorMessage);
-      
-      // YouTube API 할당량 초과 감지
-      if (errorMessage.includes('quota') || errorMessage.includes('Quota exceeded') || errorMessage.includes('Daily Limit') || response.status === 403) {
-        console.error('[Server] YouTube API quota exceeded - using code 88');
-        return res.status(429).json({ 
-          error: 'DAILY_LIMIT_EXCEEDED',
-          message: '오늘의 검색 요청 횟수가 모두 소진되었습니다. 다운로드 화면을 이용하여 유튜브 영상을 가져오기하세요. (코드: 88)'
-        });
-      }
-      
-      return res.status(response.status).json({ 
-        error: errorMessage
-      });
-    }
-
-    const data = await response.json();
-    
-    // 캐시 저장
     searchCache.set(searchKey, {
-      data: data,
-      timestamp: Date.now()
+      data,
+      timestamp: Date.now(),
     });
 
-    // 캐시 크기 제한 (메모리 관리)
     if (searchCache.size > MAX_CACHE_SIZE) {
-      // 가장 오래된 항목 제거 (FIFO)
       const firstKey = searchCache.keys().next().value;
       searchCache.delete(firstKey);
     }
 
-    console.log('[Server] Search completed, cache size:', searchCache.size);
+    console.log('[Server] Search completed, source:', searchSource, 'cache size:', searchCache.size);
     res.json(data);
   } catch (error) {
     console.error('[Server] Search error:', error);
