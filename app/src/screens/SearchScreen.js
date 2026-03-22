@@ -29,6 +29,7 @@ import { downloadVideo, downloadAudio, resumeDownload, shareDownloadedFile, save
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as FileSystem from 'expo-file-system/legacy';
 import MediaStoreModule from '../modules/MediaStoreModule';
+import * as Clipboard from 'expo-clipboard';
 
 // 썸네일 이미지 컴포넌트 (영상 URL 실패 시 캐시로 폴백)
 const ThumbnailImage = ({ sourceUri, cacheUri, style }) => {
@@ -568,6 +569,26 @@ export default function SearchScreen({ navigation, route }) {
     if (query.trim() === '') return;
     handleSearchWithUrl(query);
   };
+
+  const handlePasteFromClipboard = useCallback(async () => {
+    try {
+      const text = await Clipboard.getStringAsync();
+      const trimmed = (text || '').trim();
+      if (!trimmed) {
+        Alert.alert(t.notice || t.error, t.importClipboardEmpty || '클립보드가 비어 있습니다.');
+        return;
+      }
+      setQuery(trimmed);
+      if (/(youtube\.com|youtu\.be)/i.test(trimmed)) {
+        setTimeout(() => handleSearchWithUrl(trimmed), 50);
+      } else {
+        textInputRef.current?.focus();
+      }
+    } catch (e) {
+      console.warn('[SearchScreen] clipboard', e);
+      Alert.alert(t.error, t.importClipboardError || '클립보드를 읽을 수 없습니다.');
+    }
+  }, [handleSearchWithUrl, t]);
 
   const handleAddFavorite = async (item) => {
     try {
@@ -1684,7 +1705,15 @@ export default function SearchScreen({ navigation, route }) {
 
       <View style={styles.searchSection}>
         <View style={styles.inputContainer}>
-          <Ionicons name="link" size={20} color="#999" style={styles.linkIcon} />
+          <TouchableOpacity
+            onPress={handlePasteFromClipboard}
+            hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+            style={styles.linkIconButton}
+            accessibilityRole="button"
+            accessibilityLabel={t.importTapToPasteHint || t.orCopyVideoUrl || '클립보드에서 URL 붙여넣기'}
+          >
+            <Ionicons name="link" size={20} color="#999" />
+          </TouchableOpacity>
           <TextInput
             ref={textInputRef}
             style={styles.searchInput}
@@ -1790,12 +1819,14 @@ export default function SearchScreen({ navigation, route }) {
                   <Text style={styles.emptyText}>{t.shareFromVideoApp}</Text>
                   <Ionicons name="arrow-redo-outline" size={18} color="#333" style={{ marginLeft: 6 }} />
                 </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                  <Text style={styles.emptySubText}>
-                    {t.orCopyVideoUrl}
-                  </Text>
-                  <Ionicons name="copy-outline" size={16} color="#666" style={{ marginLeft: 6 }} />
-                </View>
+                <TouchableOpacity onPress={handlePasteFromClipboard} activeOpacity={0.7}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={styles.emptySubText}>
+                      {t.importTapToPasteHint || t.orCopyVideoUrl}
+                    </Text>
+                    <Ionicons name="copy-outline" size={16} color="#666" style={{ marginLeft: 6 }} />
+                  </View>
+                </TouchableOpacity>
               </View>
             }
             contentContainerStyle={results.length === 0 ? styles.listContentEmpty : styles.listContent}
@@ -1910,8 +1941,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     minHeight: 48,
   },
-  linkIcon: {
+  linkIconButton: {
     marginRight: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 4,
   },
   searchInput: {
     flex: 1,
