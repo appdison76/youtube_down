@@ -1059,8 +1059,8 @@ export default function MusicRecognitionScreen({ navigation }) {
           title: item.title,
           url: `https://www.youtube.com/watch?v=${item.id}`,
           thumbnail: item.thumbnail,
-          author: item.channelTitle,
-          authorUrl: item.channelId ? `https://www.youtube.com/channel/${item.channelId}` : '',
+          author: item.author,
+          authorUrl: item.authorUrl || '',
         });
         setFavorites(prev => new Set(prev).add(item.id));
         console.log('[MusicRecognitionScreen] Favorite added:', item.id);
@@ -1294,7 +1294,7 @@ export default function MusicRecognitionScreen({ navigation }) {
                       {item.title}
                     </Text>
                     <Text style={styles.youtubeResultChannel} numberOfLines={1}>
-                      {item.channelTitle}
+                      {item.author}
                     </Text>
                     <View style={styles.youtubeResultActions}>
                       <TouchableOpacity 
