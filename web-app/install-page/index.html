@@ -169,10 +169,18 @@
 
         .download-btn-play-sub {
             display: block;
-            margin-top: 6px;
+            margin-top: 8px;
             font-size: 13px;
             font-weight: 500;
             color: #5f6368;
+        }
+
+        /* Google Play 공식 배지 (play.google.com 정적 호스트, 별도 다운로드 불필요) */
+        .google-play-badge {
+            display: block;
+            height: 60px;
+            width: auto;
+            margin: 0 auto;
         }
 
         .download-btn {
@@ -742,9 +750,17 @@
                            class="download-btn-play download-track"
                            id="downloadBtnPlay"
                            data-download-kind="play"
-                           target="_blank" rel="noopener">
-                            Google Play에서 받기
-                            <span class="download-btn-play-sub">공식 스토어 · 일반 버전 (Melody Snap)</span>
+                           target="_blank" rel="noopener"
+                           title="Google Play에서 Melody Snap 받기">
+                            <img
+                                class="google-play-badge"
+                                src="https://play.google.com/intl/ko_kr/badges/static/images/badges/ko_badge_web_generic.png"
+                                alt="Google Play에서 다운로드하기"
+                                width="180"
+                                height="53"
+                                loading="lazy"
+                                decoding="async" />
+                            <span class="download-btn-play-sub">일반 버전 (Melody Snap)</span>
                         </a>
                     </div>
                     <div class="download-info">
