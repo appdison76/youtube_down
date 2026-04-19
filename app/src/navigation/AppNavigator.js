@@ -11,6 +11,7 @@ import MusicRecognitionScreen from '../screens/MusicRecognitionScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../locales/translations';
+import { normalizeYoutubeNavigationUrl } from '../utils/youtubeShare';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -151,28 +152,8 @@ export default function AppNavigator({ initialUrl }) {
             }
           }
           
-          // 잘린 URL 복구 시도
-          if (urlToNavigate.startsWith(':om/') || urlToNavigate.startsWith('om/') || urlToNavigate.startsWith('be.com/')) {
-            if (urlToNavigate.startsWith('be.com/')) {
-              urlToNavigate = `https://www.youtu${urlToNavigate}`;
-            } else {
-              urlToNavigate = `https://www.youtub${urlToNavigate}`;
-            }
-            console.log('[AppNavigator] 잘린 URL 복구:', urlToNavigate);
-          }
-          
-          // 불필요한 파라미터 제거 (watch, youtu.be, live 모두 처리)
-          const watchMatch = urlToNavigate.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s?]+)/);
-          const liveMatch = urlToNavigate.match(/youtube\.com\/live\/([^&\s?]+)/);
-          if (watchMatch) {
-            const videoId = watchMatch[1].split('?')[0].split('&')[0];
-            urlToNavigate = `https://www.youtube.com/watch?v=${videoId}`;
-            console.log('[AppNavigator] 정규화된 URL (watch):', urlToNavigate);
-          } else if (liveMatch) {
-            const liveId = liveMatch[1].split('?')[0].split('&')[0];
-            urlToNavigate = `https://www.youtube.com/live/${liveId}`;
-            console.log('[AppNavigator] 정규화된 URL (live):', urlToNavigate);
-          }
+          urlToNavigate = normalizeYoutubeNavigationUrl(urlToNavigate);
+          console.log('[AppNavigator] 정규화된 URL:', urlToNavigate);
           
           // 강제로 네비게이션 (항상 새로운 파라미터로 업데이트)
           const newTimestamp = Date.now();

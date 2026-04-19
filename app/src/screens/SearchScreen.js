@@ -30,6 +30,7 @@ import * as IntentLauncher from 'expo-intent-launcher';
 import * as FileSystem from 'expo-file-system/legacy';
 import MediaStoreModule from '../modules/MediaStoreModule';
 import * as Clipboard from 'expo-clipboard';
+import { normalizeYoutubeNavigationUrl } from '../utils/youtubeShare';
 
 // 썸네일 이미지 컴포넌트 (영상 URL 실패 시 캐시로 폴백)
 const ThumbnailImage = ({ sourceUri, cacheUri, style }) => {
@@ -340,47 +341,8 @@ export default function SearchScreen({ navigation, route }) {
       setLoading(false);
     }
     
-    // URL 정리 (공백 제거 및 정규화)
-    sharedUrl = sharedUrl.trim();
-    
-    // exp+app:// 스킴에서 실제 URL 추출
-    if (sharedUrl.startsWith('exp+app://') || sharedUrl.startsWith('exp://')) {
-      try {
-        const urlObj = new URL(sharedUrl);
-        const urlParam = urlObj.searchParams.get('url');
-        if (urlParam) {
-          sharedUrl = decodeURIComponent(urlParam);
-          console.log('[SearchScreen] Extracted URL from exp+app://:', sharedUrl);
-        }
-      } catch (e) {
-        console.warn('[SearchScreen] Failed to parse exp+app:// URL:', e);
-        // exp+app://?url= 형식에서 직접 추출 시도
-        const urlMatch = sharedUrl.match(/[?&]url=([^&]+)/);
-        if (urlMatch) {
-          sharedUrl = decodeURIComponent(urlMatch[1]);
-          console.log('[SearchScreen] Extracted URL using regex:', sharedUrl);
-        }
-      }
-    }
-    
-    // URL이 잘못된 형식인 경우 수정
-    if (sharedUrl.startsWith(':om/') || sharedUrl.startsWith('om/') || sharedUrl.startsWith('be.com/')) {
-      // 잘린 URL 복구 시도
-      if (sharedUrl.startsWith('be.com/')) {
-        sharedUrl = `https://www.youtu${sharedUrl}`;
-      } else {
-        sharedUrl = `https://www.youtub${sharedUrl}`;
-      }
-      console.log('[SearchScreen] 잘린 URL 복구:', sharedUrl);
-    }
-    
-    // 정규화된 영상 URL로 변환
-    const urlMatch = sharedUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s?]+)/);
-    if (urlMatch) {
-      const videoId = urlMatch[1].split('?')[0].split('&')[0]; // ?si= 같은 파라미터 제거
-      sharedUrl = `https://www.youtube.com/watch?v=${videoId}`;
-      console.log('[SearchScreen] 정규화된 URL:', sharedUrl);
-    }
+    sharedUrl = normalizeYoutubeNavigationUrl(sharedUrl.trim());
+    console.log('[SearchScreen] 정규화된 URL (공유/딥링크):', sharedUrl);
     
     // 입력창에 전체 URL 설정 (기존 URL 덮어쓰기)
     setQuery(sharedUrl);
@@ -481,15 +443,21 @@ export default function SearchScreen({ navigation, route }) {
     if (cleanUrl.startsWith(':om/') || cleanUrl.startsWith('om/')) {
       cleanUrl = `https://www.youtub${cleanUrl}`;
     }
+    if (cleanUrl.startsWith('be.com/')) {
+      cleanUrl = `https://www.youtu${cleanUrl}`;
+    }
+    cleanUrl = normalizeYoutubeNavigationUrl(cleanUrl);
     
     console.log('[SearchScreen] Searching for URL:', cleanUrl);
     
-    // URL에서 비디오 ID 추출 (다양한 형식 지원)
+    // URL에서 비디오 ID 추출 (watch / youtu.be / shorts 정규화 후 + 라이브)
     let videoId = null;
     const patterns = [
       /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s?]+)/,
       /youtube\.com\/watch\?.*v=([^&\s?]+)/,
       /youtu\.be\/([^&\s?]+)/,
+      /youtube\.com\/shorts\/([^&\s/?]+)/,
+      /youtube\.com\/live\/([^&\s?]+)/,
     ];
     
     for (const pattern of patterns) {

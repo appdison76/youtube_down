@@ -3,6 +3,7 @@ import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 import MediaStoreModule from '../modules/MediaStoreModule';
 import { getApiBaseUrl, getApiBaseUrls, fetchWithFallback, getApiRequestHeaders } from '../config/api';
+import { normalizeYoutubeNavigationUrl } from '../utils/youtubeShare';
 
 const DOWNLOAD_DIR = `${FileSystem.documentDirectory}downloads/`;
 const METADATA_DIR = `${FileSystem.documentDirectory}metadata/`;
@@ -266,7 +267,8 @@ export const cleanupIncompleteFiles = async () => {
 // 비디오 정보 가져오기 (oEmbed API 사용)
 export const getVideoInfo = async (url) => {
   try {
-    const oEmbedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+    const resolvedUrl = normalizeYoutubeNavigationUrl((url || '').trim());
+    const oEmbedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(resolvedUrl)}&format=json`;
     const response = await fetch(oEmbedUrl);
     
     if (!response.ok) {
@@ -275,14 +277,13 @@ export const getVideoInfo = async (url) => {
     
     const data = await response.json();
     
-    // URL에서 비디오 ID 추출
-    const videoIdMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s?]+)/);
+    const videoIdMatch = resolvedUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s?]+)/);
     const videoId = videoIdMatch ? videoIdMatch[1].split('?')[0].split('&')[0] : null;
     
     return {
           id: videoId,
       title: data.title || 'Video',
-      url: url,
+      url: resolvedUrl,
       thumbnail: data.thumbnail_url || (videoId ? `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg` : ''),
           author: data.author_name || '',
           authorUrl: data.author_url || '',
