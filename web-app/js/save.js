@@ -7,6 +7,97 @@ const videoInfo = document.getElementById('video-info');
 let currentVideoUrl = null;
 let currentVideoId = null;
 
+/** 공유 문장·따옴표·ZWSP 제거 (모바일 복사 대응) */
+function sanitizePaste(raw) {
+    return String(raw || '')
+        .trim()
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')
+        .replace(/[\u201C\u201D\u2018\u2019]/g, "'");
+}
+
+/** 본문에 URL+설명이 섞인 경우 https 링크 후보 나열 (앱 MainActivity와 동일 취지) */
+function extractHttpsCandidates(s) {
+    var out = [];
+    var re = /https?:\/\/[^\s<>"'()]+/gi;
+    var m;
+    while ((m = re.exec(s)) !== null) {
+        var part = m[0].replace(/[),.;:}\]>]+$/g, '');
+        out.push(part);
+    }
+    if (out.length === 0 && s.length > 0) {
+        out.push(s);
+    }
+    return out;
+}
+
+/** 한 줄 URL → watch?v= 표준화 (m.youtube·로케일·shorts·live) */
+function parseYoutubeUrlSingle(raw) {
+    var u = (raw || '').trim();
+    if (!u) return null;
+
+    if (/^[a-zA-Z0-9_-]{10,}$/.test(u)) {
+        return {
+            videoId: u,
+            canonicalUrl: 'https://www.youtube.com/watch?v=' + u,
+        };
+    }
+    if (/^youtu\.be\//i.test(u) && !/^https?:\/\//i.test(u)) u = 'https://' + u;
+    else if (/^www\.(youtube\.com|youtu\.be)/i.test(u) && !/^https?:\/\//i.test(u)) u = 'https://' + u;
+    else if (/^youtube\.com/i.test(u) && !/^https?:\/\//i.test(u)) u = 'https://' + u;
+    if (u.startsWith(':om/') || u.startsWith('om/')) u = 'https://www.youtub' + u;
+    if (u.startsWith('be.com/')) u = 'https://www.youtu' + u;
+
+    var shorts = u.match(
+        /(?:m\.)?youtube\.com(?:\/[a-z]{2}(?:-[a-zA-Z]{2})?)?\/shorts\/([^&\s/?#]+)/i
+    );
+    if (shorts) {
+        var sid = shorts[1].split('?')[0].split('&')[0];
+        return { videoId: sid, canonicalUrl: 'https://www.youtube.com/watch?v=' + sid };
+    }
+    var liveM = u.match(
+        /(?:m\.)?youtube\.com(?:\/[a-z]{2}(?:-[a-zA-Z]{2})?)?\/live\/([^&\s?#]+)/i
+    );
+    if (liveM) {
+        var lid = liveM[1].split('?')[0].split('&')[0];
+        return { videoId: lid, canonicalUrl: 'https://www.youtube.com/watch?v=' + lid };
+    }
+    var watchM = u.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/i);
+    if (watchM) {
+        var vid = watchM[1].split('?')[0].split('&')[0];
+        return { videoId: vid, canonicalUrl: 'https://www.youtube.com/watch?v=' + vid };
+    }
+    var watchAlt = u.match(/youtube\.com\/watch\?[^#]*v=([a-zA-Z0-9_-]+)/i);
+    if (watchAlt) {
+        var vid2 = watchAlt[1].split('?')[0].split('&')[0];
+        return { videoId: vid2, canonicalUrl: 'https://www.youtube.com/watch?v=' + vid2 };
+    }
+    return null;
+}
+
+/** sanitize + 후보 순회 — 앱과 같은 의도 */
+function parseYoutubeUrlForSave(raw) {
+    var cleaned = sanitizePaste(raw);
+    if (!cleaned) return null;
+
+    var candidates = extractHttpsCandidates(cleaned);
+    var seen = Object.create(null);
+    var tryList = [];
+    for (var i = 0; i < candidates.length; i++) {
+        var c = candidates[i];
+        if (!seen[c]) {
+            seen[c] = true;
+            tryList.push(c);
+        }
+    }
+    if (!seen[cleaned]) tryList.push(cleaned);
+
+    for (var j = 0; j < tryList.length; j++) {
+        var parsed = parseYoutubeUrlSingle(tryList[j]);
+        if (parsed) return parsed;
+    }
+    return null;
+}
+
 function updateUrlClearVisibility() {
     urlClearBtn.style.display = urlInput.value.trim() ? 'flex' : 'none';
 }
@@ -36,14 +127,15 @@ async function handleUrlSubmit() {
     const url = urlInput.value.trim();
     if (!url) return;
 
-    const videoIdMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/);
-    if (!videoIdMatch) {
+    const parsed = parseYoutubeUrlForSave(url);
+    if (!parsed) {
         alert('올바른 YouTube URL을 입력해주세요.');
         return;
     }
 
-    currentVideoId = videoIdMatch[1];
-    currentVideoUrl = `https://www.youtube.com/watch?v=${currentVideoId}`;
+    currentVideoId = parsed.videoId;
+    currentVideoUrl = parsed.canonicalUrl;
+    urlInput.value = parsed.canonicalUrl;
 
     videoInfo.style.display = 'none';
     videoInfo.innerHTML = '';
@@ -176,16 +268,9 @@ async function handleUrlSubmit() {
 // 찜하기에서 "다운로드로 이동" 시 URL 셋팅 후 가져오기 (library.js에서 호출)
 window.setDownloadUrlAndFetch = function (url) {
     if (!url || !urlInput) return;
-    // 짧은 주소(youtu.be/xxx)나 ID만 있어도 동작하도록 정규화
     var u = String(url).trim();
-    if (/^[a-zA-Z0-9_-]{10,}$/.test(u)) {
-        u = 'https://www.youtube.com/watch?v=' + u;
-    } else if (/^youtu\.be\//i.test(u) && !/^https?:\/\//i.test(u)) {
-        u = 'https://' + u;
-    } else if (/^www\./i.test(u) && !/^https?:\/\//i.test(u)) {
-        u = 'https://' + u;
-    }
-    urlInput.value = u;
+    var parsed = parseYoutubeUrlForSave(u);
+    urlInput.value = parsed ? parsed.canonicalUrl : u;
     updateUrlClearVisibility();
     setTimeout(function () { handleUrlSubmit(); }, 0);
 };
