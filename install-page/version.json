@@ -1,8 +1,8 @@
 {
-  "version": "1.3.2",
-  "minVersion": "1.3.2",
+  "version": "1.3.3",
+  "minVersion": "1.3.3",
   "forceUpdate": true,
   "message": "새로운 버전이 있습니다. 업데이트가 필요합니다.",
   "updateUrl": "https://melodysnap-app.mediacommercelab.com/web-app/install-page/",
-  "build": 2
+  "build": 3
 }
