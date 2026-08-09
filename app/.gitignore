@@ -12,6 +12,7 @@ npm-debug.*
 web-build/
 
 # Build folders (경로 길이 문제 방지)
+**/.gradle/
 **/build/
 **/.transforms/
 app/packages/**/android/build/
